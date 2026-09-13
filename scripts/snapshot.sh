@@ -41,11 +41,12 @@ git tag -f "$TAG" >/dev/null 2>&1 || true
 echo "── [2/6] тег $TAG"
 
 echo "── [3/6] зеркалирование в sait_copy_1…"
+# ВАЖНО: якоря с ведущим «/» — иначе исключение «upload» зацепит src/app/api/upload
 rsync -a --delete \
-  --exclude=node_modules --exclude=.next --exclude=sait_copy_1 \
-  --exclude=download --exclude=upload --exclude=tool-results \
-  --exclude=dev.log --exclude=skills --exclude=examples --exclude=mini-services \
-  --exclude=.git \
+  --exclude=/node_modules --exclude=/.next --exclude=/sait_copy_1 \
+  --exclude=/download --exclude=/upload --exclude=/tool-results \
+  --exclude=/dev.log --exclude=/skills --exclude=/examples --exclude=/mini-services \
+  --exclude=/.git \
   ./ sait_copy_1/ >/dev/null
 # .git копируем отдельно БЕЗ --delete (история только растёт)
 mkdir -p sait_copy_1/.git
@@ -54,11 +55,12 @@ echo "        $(du -sh sait_copy_1 | cut -f1)"
 
 SNAP="download/snapshots/snap-${SEQ_PADDED}-v1.5-${LABEL}-${STAMP}.tar.gz"
 echo "── [4/6] tar-снапшот → $SNAP"
+# ВАЖНО: «./NAME» — якорь к корню архива; «NAME» без якоря выкинет и src/app/api/upload!
 tar -czf "$SNAP" \
-  --exclude=node_modules --exclude=.next --exclude=sait_copy_1 \
-  --exclude=download --exclude=upload --exclude=tool-results \
-  --exclude=dev.log --exclude=skills --exclude=examples --exclude=mini-services \
-  --exclude="*.log" \
+  --exclude=./node_modules --exclude=./.next --exclude=./sait_copy_1 \
+  --exclude=./download --exclude=./upload --exclude=./tool-results \
+  --exclude=./dev.log --exclude=./skills --exclude=./examples --exclude=./mini-services \
+  --exclude="./server.log" \
   . 2>/dev/null
 SIZE=$(du -sh "$SNAP" | cut -f1)
 echo "        $SIZE"
