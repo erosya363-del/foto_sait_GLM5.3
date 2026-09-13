@@ -1,0 +1,308 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { usePortal } from "@/lib/store";
+import { cn } from "@/lib/utils";
+
+type SearchResp = {
+  popular: string[];
+  fabrics: Array<{ id: string; name: string; swatchUrl: string | null; count: number }>;
+  variants: Array<{
+    id: string;
+    categoryName: string;
+    modelName: string;
+    variantName: string | null;
+    materialName: string | null;
+    sizeName: string | null;
+    tags: string[];
+    photo: { url: string; thumbUrl: string } | null;
+    photoCount: number;
+  }>;
+};
+
+const PHRASES = [
+  "Поиск: ткань, модель, «sky»…",
+  "«казанова» найдёт Casanova",
+  "«угловой» — все угловые диваны",
+  "«160×200» — поиск по размеру",
+];
+
+/** Печатающийся плейсхолдер: фраза вводится, пауза, стирается, следующая */
+function useTypewriter(active: boolean) {
+  const [text, setText] = useState("");
+  const ref = useRef({ phrase: 0, pos: 0, deleting: false });
+
+  useEffect(() => {
+    if (!active) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const st = ref.current;
+      const phrase = PHRASES[st.phrase % PHRASES.length];
+      if (!st.deleting) {
+        st.pos++;
+        if (st.pos > phrase.length) {
+          st.deleting = true;
+          timer = setTimeout(tick, 2000);
+          setText(phrase);
+          return;
+        }
+      } else {
+        st.pos--;
+        if (st.pos <= 0) {
+          st.deleting = false;
+          st.phrase++;
+          st.pos = 0;
+          timer = setTimeout(tick, 500);
+          setText("");
+          return;
+        }
+      }
+      setText(phrase.slice(0, st.pos));
+      timer = setTimeout(tick, st.deleting ? 22 : 55);
+    };
+    timer = setTimeout(tick, 400);
+    return () => clearTimeout(timer);
+  }, [active]);
+
+  return text;
+}
+
+/**
+ * Фиксированный единый поиск. Анти-джиттер:
+ *  — дропдаун всегда один DOM-узел, секции внутри не анимируются по отдельности;
+ *  — фон дропдауна полностью непрозрачный (никаких «призраков»);
+ *  — результат печати применяется только по Enter/выбору (ввод не трогает страницу).
+ */
+export function SearchBar() {
+  const [value, setValue] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const focused = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const searchOpen = usePortal((s) => s.searchOpen);
+  const setSearchOpen = usePortal((s) => s.setSearchOpen);
+  const searchQuery = usePortal((s) => s.searchQuery);
+  const applySearch = usePortal((s) => s.applySearch);
+
+  // Debounce печати → запрос
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value.trim()), 220);
+    return () => clearTimeout(t);
+  }, [value]);
+
+  const { data, isFetching } = useQuery<SearchResp>({
+    queryKey: ["search", debounced],
+    queryFn: async () => {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(debounced)}`);
+      if (!r.ok) throw new Error("search failed");
+      return r.json();
+    },
+    enabled: searchOpen,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
+  });
+
+  // Печатающийся плейсхолдер — только при пустом вводе
+  const typed = useTypewriter(value === "");
+
+  // Клик мимо — закрыть дропдаун
+  useEffect(() => {
+    if (!searchOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setSearchOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [searchOpen, setSearchOpen]);
+
+  const commit = (q: string | null) => {
+    applySearch(q);
+    setSearchOpen(false);
+    setValue(q ?? "");
+    inputRef.current?.blur();
+  };
+
+  const hasDropdown = searchOpen;
+  const q = data?.popular ? undefined : undefined;
+  void q;
+
+  return (
+    <div ref={wrapRef} className="relative">
+      {/* Поле с анимированным градиентным бордером */}
+      <div className={cn("search-frame", (searchOpen || isFetching) && "search-frame--live")}>
+        <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-muted-foreground" />
+        <input
+          ref={inputRef}
+          id="global-search"
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            if (!searchOpen) setSearchOpen(true);
+          }}
+          onFocus={() => setSearchOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commit(value.trim() || null);
+            } else if (e.key === "Escape" && searchOpen) {
+              e.stopPropagation();
+              setSearchOpen(false);
+              inputRef.current?.blur();
+            }
+          }}
+          placeholder={typed}
+          aria-label="Единый поиск: ткань, модель, размер"
+          enterKeyHint="search"
+          autoComplete="off"
+          // 16px на мобильных — iOS не зумит поле
+          className="h-11 w-full rounded-[14px] bg-secondary/60 pl-10 pr-10 text-[16px] font-medium text-foreground outline-none placeholder:text-muted-foreground/80 sm:text-[14px]"
+        />
+        {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
+        {!(value || searchQuery) && !searchOpen && (
+          <kbd className="pointer-events-none absolute right-3 top-1/2 z-[1] hidden -translate-y-1/2 items-center rounded-md border border-border bg-secondary px-1.5 py-0.5 font-sans text-[11px] font-bold text-muted-foreground sm:block" aria-hidden>
+            /
+          </kbd>
+        )}
+        {(value || searchQuery) && (
+          <button
+            type="button"
+            aria-label="Очистить поиск"
+            onClick={() => {
+              setValue("");
+              if (searchQuery) commit(null);
+              inputRef.current?.focus();
+            }}
+            className="absolute right-2.5 top-1/2 z-[1] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* Дропдаун: непрозрачный, без внутренней анимации секций */}
+      {hasDropdown && (
+        <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 max-h-[min(62dvh,480px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-background p-2.5 shadow-2xl shadow-black/25">
+          {!debounced && (
+            <>
+              <p className="px-1.5 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                Популярные запросы
+              </p>
+              <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
+                {(data?.popular ?? ["Трентон", "Магни", "Локо", "sky", "casanova", "угловой", "акция", "160×200"]).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => commit(p)}
+                    className="rounded-full border border-border bg-secondary px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 transition-colors hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {debounced && (data?.fabrics?.length ?? 0) > 0 && (
+            <>
+              <p className="px-1.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                Ткани
+              </p>
+              <div className="mb-1.5 flex flex-col">
+                {data!.fabrics.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => commit(f.name)}
+                    className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-secondary"
+                  >
+                    {f.swatchUrl ? (
+                      <img src={f.swatchUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                    ) : (
+                      <span className="h-8 w-8 shrink-0 rounded-lg bg-muted" />
+                    )}
+                    <span className="flex-1 truncate text-[13.5px] font-semibold">{f.name}</span>
+                    <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-bold text-muted-foreground">
+                      {f.count} вар.
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {debounced && (data?.variants?.length ?? 0) > 0 && (
+            <>
+              <p className="px-1.5 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                Каталог фото
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {data!.variants.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => {
+                      applySearch(null);
+                      setSearchOpen(false);
+                      usePortal.getState().openProduct(v.id, "catalog");
+                      setValue("");
+                      inputRef.current?.blur();
+                    }}
+                    className="group overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-[color:var(--brand)]"
+                  >
+                    {/* Фиксированная пропорция — фото не налезает на текст */}
+                    <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
+                      {v.photo && (
+                        <img
+                          src={v.photo.thumbUrl}
+                          alt={v.modelName}
+                          loading="lazy"
+                          onLoad={(e) => e.currentTarget.classList.add("is-loaded")}
+                          className="img-fade h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                      )}
+                    </div>
+                    <div className="px-2 py-1.5">
+                      <p className="truncate text-[12.5px] font-bold leading-tight">{v.modelName}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        {[v.materialName, v.sizeName].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {debounced && !isFetching && (data?.variants?.length ?? 0) === 0 && (data?.fabrics?.length ?? 0) === 0 && (
+            /* Единственный пустой стейт на весь дропдаун — дубля не бывает */
+            <div className="flex flex-col items-center gap-1.5 px-4 py-8 text-center">
+              <Search size={22} className="text-muted-foreground/60" />
+              <p className="text-[14px] font-bold">Ничего не найдено</p>
+              <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                Работает транслит: «ральф», «скай», «казанова». Попробуйте другой запрос.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Применённый поиск — обычный блок в потоке (без наложения на контент) */}
+      {searchQuery && !searchOpen && (
+        <div className="flex items-center gap-2 px-0.5 pt-2">
+          <span className="truncate text-[12.5px] text-muted-foreground">
+            Поиск: <span className="font-bold text-foreground">«{searchQuery}»</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => commit(null)}
+            className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+          >
+            сбросить
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Остатки (склад Обухово) ────────────────────────────────────────────────
+
+model StockItem {
+  id              String   @id @default(cuid())
+  name            String
+  qty             Int      @default(0)
+  category        String
+  size            String?
+  feature         String?
+  modifiedDate    String?
+  series          String?
+  warehouse       String   @default("Обухово")
+  hasSale         Boolean  @default(false)
+  oldPrice        Float?
+  finalPrice      Float?
+  discountPercent Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([category])
+  @@index([name])
+  @@index([warehouse])
+}
+
+// ─── Справочники (создаёт админ) ────────────────────────────────────────────
+
+model Category {
+  id        String           @id @default(cuid())
+  name      String           @unique
+  icon      String?
+  sortOrder Int              @default(0)
+  active    Boolean          @default(true)
+  models    Model[]
+  variants  ProductVariant[]
+
+  @@map("categories")
+}
+
+model Model {
+  id         String   @id @default(cuid())
+  name       String
+  latin      String?
+  sortOrder  Int      @default(0)
+  active     Boolean  @default(true)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  variants   ProductVariant[]
+
+  @@unique([name, categoryId])
+  @@map("models")
+}
+
+model Material {
+  id        String           @id @default(cuid())
+  name      String
+  type      String           @default("Ткань")
+  swatchUrl String?
+  active    Boolean          @default(true)
+  variants  ProductVariant[]
+
+  @@map("materials")
+}
+
+model Size {
+  id       String           @id @default(cuid())
+  name     String
+  active   Boolean          @default(true)
+  variants ProductVariant[]
+
+  @@map("sizes")
+}
+
+model Tag {
+  id       String              @id @default(cuid())
+  name     String
+  active   Boolean             @default(true)
+  variants ProductVariantTag[]
+
+  @@map("tags")
+}
+
+// ─── Каталог фото ───────────────────────────────────────────────────────────
+
+model ProductVariant {
+  id          String            @id @default(cuid())
+  categoryId  String
+  category    Category          @relation(fields: [categoryId], references: [id])
+  modelId     String
+  model       Model             @relation(fields: [modelId], references: [id])
+  materialId  String?
+  material    Material?         @relation(fields: [materialId], references: [id])
+  sizeId      String?
+  size        Size?             @relation(fields: [sizeId], references: [id])
+  variantName String?
+  description String?
+  active      Boolean           @default(true)
+  photos      Photo[]
+  tags        ProductVariantTag[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@map("product_variants")
+}
+
+model ProductVariantTag {
+  variantId String
+  tagId     String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  tag       Tag            @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, tagId])
+  @@map("product_variant_tags")
+}
+
+model Photo {
+  id        String         @id @default(cuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  url       String
+  thumbUrl  String
+  comment   String?
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+
+  @@index([variantId])
+  @@map("photos")
+}

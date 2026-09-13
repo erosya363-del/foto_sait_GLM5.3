@@ -1,0 +1,24 @@
+{
+  "name": "Склад мебели · Askona",
+  "short_name": "Склад мебели",
+  "description": "Единый товарный портал Askona: фотокаталог продукции и складские остатки (Обухово и Владимир)",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#10161a",
+  "theme_color": "#10161a",
+  "icons": [
+    {
+      "src": "/logo-askona.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-askona.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
