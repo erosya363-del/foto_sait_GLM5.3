@@ -50,7 +50,7 @@ const prodCrumbs = await page.getByText("Каталог", { exact: true }).count
 ok("крошки в товаре есть", prodCrumbs > 0);
 
 console.log("── 3. Повторный тап «Каталог» = мгновенный верх (Шаг 2) ──");
-const catNav = page.locator('nav.bottom-nav button:has-text("Каталог")');
+const catNav = page.locator('nav.pill-nav button:has-text("Каталог")');
 await catNav.click();
 await page.waitForTimeout(400);
 const scrollY = await page.evaluate(() => window.scrollY);
@@ -109,7 +109,7 @@ await page.waitForTimeout(700);
 ok("прыжок: товар закрыт, уровень моделей", await page.locator("main button:has-text('Магни')").first().isVisible());
 
 console.log("── 10. Поиск: крошки + NEW ──");
-await page.locator('nav.bottom-nav button:has-text("Каталог")').click();
+await page.locator('nav.pill-nav button:has-text("Каталог")').click();
 await page.waitForTimeout(300);
 await page.fill("#global-search", "sky");
 await page.press("#global-search", "Enter");
@@ -120,7 +120,7 @@ const searchNew = await page.locator("main span:has-text('NEW')").count();
 ok("NEW-бейджи в поиске", searchNew > 0);
 
 console.log("── 11. Склад: пружинный сегмент-контрол (Шаг 1) ──");
-await page.locator('nav.bottom-nav button:has-text("Остатки")').click();
+await page.locator('nav.pill-nav button:has-text("Остатки")').click();
 await page.waitForTimeout(900);
 const seg = page.locator('[role="tablist"][aria-label="Склад"]');
 ok("сегмент-контрол складов виден", await seg.isVisible());

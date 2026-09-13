@@ -450,7 +450,7 @@ export function Portal() {
       </div>
 
       {/* Контент */}
-      <main className="relative z-10 pb-[calc(76px+env(safe-area-inset-bottom))] lg:ml-[248px] lg:pb-10">
+      <main className="relative z-10 pb-[calc(108px+env(safe-area-inset-bottom))] lg:ml-[248px] lg:pb-10">
         <div className="mx-auto w-full max-w-[1240px] px-4 pt-4 sm:px-6 lg:pt-6">
           <AnimatePresence mode="wait">
             <motion.div
@@ -476,26 +476,33 @@ export function Portal() {
         </div>
       </main>
 
-      {/* Нижняя навигация — мобильные */}
-      <nav
-        className="bottom-nav fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 px-2 lg:hidden"
-        aria-label="Нижняя навигация"
-      >
-        {NAV.map(({ key, short, Icon }) => {
-          const on = view === key && !productId;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={(e) => (key === "catalog" ? goCatalog(e.currentTarget) : usePortal.getState().setView(key))}
-              className={cn("nav-tap flex flex-col items-center justify-center gap-1 py-2", on && "is-on")}
-              aria-current={on ? "page" : undefined}
-            >
-              <Icon size={21} strokeWidth={2.1} />
-              <span className="text-[10px] font-semibold">{short}</span>
-            </button>
-          );
-        })}
+      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass, как в iOS 26).
+          «Линза» активного пункта перетекает между вкладками (layoutId). */}
+      <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
+        <div className="pill-shell">
+          {NAV.map(({ key, short, Icon }) => {
+            const on = view === key && !productId;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={(e) => (key === "catalog" ? goCatalog(e.currentTarget) : usePortal.getState().setView(key))}
+                className={cn("pill-item", on && "is-on")}
+                aria-current={on ? "page" : undefined}
+              >
+                {on && (
+                  <motion.span
+                    layoutId="nav-lens"
+                    className="nav-lens"
+                    transition={{ type: "spring", stiffness: 480, damping: 36 }}
+                  />
+                )}
+                <Icon size={21} strokeWidth={2.1} />
+                <span className="text-[10px] font-semibold">{short}</span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
       <PhotoViewer />

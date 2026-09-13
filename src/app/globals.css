@@ -544,31 +544,92 @@ body {
   transform: scale(1.06);
 }
 
-/* ─── Нижняя мобильная навигация ─────────────────────────────────────────── */
-.bottom-nav {
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
-  background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(26px) saturate(1.6);
-  backdrop-filter: blur(26px) saturate(1.6);
-  border-top: 1px solid var(--border);
-  transition: transform 0.28s ease, opacity 0.22s ease;
+/* ─── Нижняя мобильная навигация: плавающая «пилюля» (Liquid Glass, iOS 26) ──
+   Плёнка-обёртка не ловит клики мимо капсулы; капсула парит над контентом
+   и над плоской кромкой фикса v3 (.fx-skirt) — как «домашняя зона» в iOS. */
+.pill-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 40;
+  padding: 0 14px;
+  pointer-events: none;
+  transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.22s ease;
 }
-/* Клавиатура открыта (iOS/Android) — нижняя панель уезжает, контент не дёргается */
-.kb-open .bottom-nav {
-  transform: translateY(110%);
+/* Клавиатура открыта (iOS/Android) — пилюля уезжает вниз, контент не дёргается */
+.kb-open .pill-nav {
+  transform: translateY(170%);
   opacity: 0;
   pointer-events: none;
 }
-.nav-tap {
+.pill-shell {
+  pointer-events: auto;
+  display: flex;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 440px;
+  height: 64px;
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(28px) saturate(1.7);
+  backdrop-filter: blur(28px) saturate(1.7);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 18px 44px -14px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.pill-item {
   position: relative;
-  transition: color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   min-height: 44px;
   min-width: 44px;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  transition: color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.nav-tap:active {
+.pill-item:active {
   transform: scale(0.92);
 }
-/* Шаг 2: пульс капсулы при повторном тапе «Каталог» (мгновенный возврат наверх) */
+/* «Линза» активного пункта — стеклянная капсула, перетекающая между вкладками
+   (framer-motion layoutId в portal.tsx двигает именно этот элемент) */
+.nav-lens {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 999px;
+  background: rgba(var(--brand-rgb), 0.14);
+  border: 1px solid rgba(var(--brand-rgb), 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 6px 18px -6px rgba(var(--brand-rgb), 0.5);
+}
+.pill-item.is-on {
+  color: var(--brand-strong);
+}
+.pill-item.is-on svg {
+  filter: drop-shadow(0 4px 10px rgba(var(--brand-rgb), 0.55));
+}
+.light .pill-shell {
+  box-shadow:
+    0 16px 40px -16px rgba(23, 42, 51, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+.light .nav-lens {
+  background: rgba(var(--brand-rgb), 0.12);
+  border-color: rgba(var(--brand-rgb), 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 6px 16px -8px rgba(var(--brand-rgb), 0.42);
+}
+/* Шаг 2: пульс пункта при повторном тапе «Каталог» (мгновенный возврат наверх) */
 .nav-pulse {
   animation: nav-pulse 0.62s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -577,25 +638,6 @@ body {
   35% { transform: scale(1.16); }
   70% { transform: scale(0.97); }
   100% { transform: scale(1); }
-}
-.nav-tap.is-on {
-  color: var(--brand);
-  transform: translateY(-2px);
-}
-.nav-tap.is-on svg {
-  filter: drop-shadow(0 4px 10px rgba(var(--brand-rgb), 0.55));
-}
-.nav-tap.is-on::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  left: 50%;
-  translate: -50% 0;
-  width: 26px;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--brand), #6fe6e2);
-  box-shadow: 0 0 12px rgba(var(--brand-rgb), 0.8);
 }
 
 /* ─── Сайдбар (десктоп) ──────────────────────────────────────────────────── */
@@ -889,7 +931,7 @@ label {
 .fab-top {
   position: fixed;
   right: 14px;
-  bottom: calc(84px + env(safe-area-inset-bottom));
+  bottom: calc(118px + env(safe-area-inset-bottom));
   z-index: 45;
   display: grid;
   place-items: center;
