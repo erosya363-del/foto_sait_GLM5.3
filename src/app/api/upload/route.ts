@@ -4,6 +4,7 @@ import path from "path";
 import { mkdir, writeFile } from "fs/promises";
 import sharp from "sharp";
 import { db } from "@/lib/db";
+import { UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -134,12 +135,13 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Обработка и сохранение изображений ───────────────────────────
-  const optDir = publicDir("uploads", "optimized");
-  const thumbDir = publicDir("uploads", "thumbs");
+  // АБСОЛЮТНЫЕ пути проекта (cwd у standalone = .next/standalone — см. paths.ts)
+  const optDir = UPLOADS_OPT_DIR;
+  const thumbDir = UPLOADS_THUMB_DIR;
   await mkdir(optDir, { recursive: true });
   await mkdir(thumbDir, { recursive: true });
 
-  const agg = await db.photo.aggregate({ where: { variantId: v.id }, _max: { sortOrder: true } });
+  const agg = await db.photo.aggregate({ where: { variantId: v.id, deletedAt: null }, _max: { sortOrder: true } });
   const sortOrder = (agg._max.sortOrder ?? -1) + 1;
 
   const processed: Array<{ url: string; thumbUrl: string }> = [];

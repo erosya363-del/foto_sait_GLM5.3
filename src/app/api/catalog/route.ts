@@ -51,13 +51,13 @@ export async function GET(req: NextRequest) {
     // Шаг 4: лента новых фото за 7 дней (фото-уровень, свежие первыми)
     const fresh = new Date(Date.now() - WEEK_MS);
     const photos = await db.photo.findMany({
-      where: { createdAt: { gte: fresh }, variant: { active: true } },
+      where: { deletedAt: null, createdAt: { gte: fresh }, variant: { active: true } },
       orderBy: { createdAt: "desc" },
       take: 14,
       include: { variant: { include: { model: true, category: true } } },
     });
     const total = await db.photo.count({
-      where: { createdAt: { gte: fresh }, variant: { active: true } },
+      where: { deletedAt: null, createdAt: { gte: fresh }, variant: { active: true } },
     });
     return NextResponse.json({
       total,
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     // Шаг 4: все ткани (материалы с вариантами) — карточки с превью и счётчиками
     const rows = await db.productVariant.findMany({
       where: { active: true, materialId: { not: null } },
-      include: { material: true, photos: { orderBy: { sortOrder: "asc" } } },
+      include: { material: true, photos: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } } },
       orderBy: { createdAt: "asc" },
     });
     const map = new Map<
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
       where: {
         active: true,
         model: { categoryId: cat.id },
-        OR: [{ createdAt: { gte: week } }, { photos: { some: { createdAt: { gte: week } } } }],
+        OR: [{ createdAt: { gte: week } }, { photos: { some: { createdAt: { gte: week }, deletedAt: null } } }],
       },
       select: { modelId: true },
     });
@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
       material: true,
       size: true,
       tags: { include: { tag: true } },
-      photos: { orderBy: { sortOrder: "asc" } },
+      photos: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
     },
     orderBy: { createdAt: "asc" },
   });

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power, Check, X, Images, Trash2 } from "lucide-react";
+import { Plus, Power, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Dictionaries } from "@/lib/portal";
+import { ProductManager } from "@/components/admin-product-manager";
+import { PhotoBank } from "@/components/admin-photobank";
 import {
   Tabs,
   TabsContent,
@@ -268,189 +270,6 @@ function DictManager({
   );
 }
 
-function PhotoBank() {
-  const qc = useQueryClient();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const { data: d } = useQuery<Dictionaries>({
-    queryKey: ["dictionaries"],
-    queryFn: async () => {
-      const r = await fetch("/api/dictionaries");
-      if (!r.ok) throw new Error("Ошибка загрузки справочников");
-      return r.json();
-    },
-  });
-
-  const { data: photos } = useQuery({
-    queryKey: ["photobank"],
-    queryFn: async () => {
-      const r = await fetch("/api/catalog");
-      const j = await r.json();
-      const out: Array<{ id: string; url: string; variant: string }> = [];
-      for (const it of j.items as Array<{ id: string; modelName: string; photos: Array<{ id: string; url: string }> }>) {
-        for (const p of it.photos) out.push({ id: p.id, url: p.url, variant: it.modelName });
-      }
-      return out;
-    },
-  });
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  /** Возвращает данные удалённых фото — для кнопки «Вернуть» */
-  async function removeSelected(): Promise<Array<Record<string, string>>> {
-    const removed: Array<Record<string, string>> = [];
-    for (const id of selected) {
-      try {
-        const r = await fetch(`/api/admin?photoId=${id}`, { method: "DELETE" });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || "Не удалось удалить фото");
-        removed.push(j.photo);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Не удалось удалить фото");
-      }
-    }
-    qc.invalidateQueries({ queryKey: ["photobank"] });
-    qc.invalidateQueries({ queryKey: ["catalog"] });
-    return removed;
-  }
-
-  async function onConfirmDelete() {
-    const ids = [...selected];
-    const n = ids.length;
-    setSelected(new Set());
-    setConfirmOpen(false);
-    const removed = await removeSelected();
-    if (removed.length === 0) return;
-    toast.success(n === 1 ? "Фото удалено" : `Удалено фото: ${removed.length}`, {
-      description: "Действие можно отменить",
-      duration: 8000,
-      action: {
-        label: "Вернуть",
-        onClick: async () => {
-          let back = 0;
-          for (const p of removed) {
-            try {
-              const res = await fetch("/api/admin", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ entity: "photo", action: "restorePhoto", ...p }),
-              });
-              if (!res.ok) throw new Error("Не удалось вернуть фото");
-              back++;
-            } catch {
-              /* пропускаем — частичный откат */
-            }
-          }
-          qc.invalidateQueries({ queryKey: ["photobank"] });
-          qc.invalidateQueries({ queryKey: ["catalog"] });
-          if (back > 0) toast.success(back === 1 ? "Фото возвращено" : `Возвращено фото: ${back}`);
-        },
-      },
-    });
-  }
-
-  const selCount = selected.size;
-
-  return (
-    <div>
-      <p className="mb-3 flex items-center gap-2 text-[12.5px] text-muted-foreground">
-        <Images size={14} />
-        Всего фото: {photos?.length ?? 0} · вариантов каталога: {d?.models.length ?? 0} моделей
-        <span className="text-border">·</span>
-        Нажмите на фото, чтобы выбрать
-      </p>
-
-      <div className="grid max-h-[54dvh] grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-4 lg:grid-cols-5">
-        {(photos ?? []).map((p) => {
-          const on = selected.has(p.id);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => toggle(p.id)}
-              aria-pressed={on}
-              className={cn(
-                "group relative overflow-hidden rounded-xl border-2 transition-all",
-                on ? "border-[color:var(--brand)] shadow-lg shadow-[rgba(var(--brand-rgb),0.25)]" : "border-transparent hover:border-border"
-              )}
-            >
-              <img src={p.url} alt={p.variant} loading="lazy" className="aspect-[4/3] w-full object-cover" />
-              {/* Галка выбора — единственный способ пометить фото */}
-              <span
-                className={cn(
-                  "absolute left-2 top-2 grid h-6 w-6 place-items-center rounded-full border-2 transition-all",
-                  on
-                    ? "border-transparent bg-[color:var(--brand)] text-white"
-                    : "border-white/70 bg-black/30 text-transparent backdrop-blur-sm"
-                )}
-              >
-                <Check size={13} strokeWidth={3} />
-              </span>
-              <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pb-1.5 pt-4 text-left text-[10.5px] font-bold text-white">
-                {p.variant}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Панель действий над выбранным — удаление только отсюда */}
-      {selCount > 0 && (
-        <div className="sticky bottom-2 mt-3 flex items-center gap-2 rounded-2xl border border-border bg-background/95 px-3 py-2.5 shadow-xl backdrop-blur">
-          <span className="flex-1 text-[12.5px] font-semibold">
-            Выбрано: <span className="text-[color:var(--brand)]">{selCount}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setSelected(new Set())}
-            className="rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Снять
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-[rgba(251,113,133,0.92)] px-3.5 py-1.5 text-[12.5px] font-bold text-white transition-transform hover:scale-[1.03]"
-          >
-            <Trash2 size={13} strokeWidth={2.5} />
-            Удалить
-          </button>
-        </div>
-      )}
-
-      {/* Подтверждение удаления */}
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent className="rounded-2xl border-border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-display">
-              Удалить фото: {selCount}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Случайно нажатое фото не удалится — сначала нужно его выбрать. После удаления можно вернуть кнопкой «Вернуть» в уведомлении.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Отмена</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={onConfirmDelete}
-              className="rounded-xl bg-[rgba(251,113,133,0.92)] text-white hover:bg-[rgba(251,113,133,1)]"
-            >
-              Удалить
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
-
 export function AdminView() {
   return (
     <div className="flex flex-col gap-4">
@@ -459,12 +278,18 @@ export function AdminView() {
           Админ<span className="gradient-text">-панель</span>
         </h1>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          Всё, что выбирает пользователь, сначала создаёт администратор
+          Товар за минуту: создать, загрузить фото, при ошибке — вернуть из корзины
         </p>
       </div>
 
-      <Tabs defaultValue="category" className="rise rise-1">
+      <Tabs defaultValue="product" className="rise rise-1">
         <TabsList className="flex w-full flex-wrap gap-1 rounded-2xl border border-border bg-secondary p-1 sm:w-auto">
+          <TabsTrigger
+            value="product"
+            className="rounded-xl px-3 py-1.5 text-[12.5px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+          >
+            Товар
+          </TabsTrigger>
           {TABS.map((t) => (
             <TabsTrigger
               key={t.key}
@@ -481,6 +306,9 @@ export function AdminView() {
             Фото
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="product" className="mt-4">
+          <ProductManager />
+        </TabsContent>
         {TABS.map((t) => (
           <TabsContent key={t.key} value={t.key} className="mt-4">
             <DictManager entity={t.key} withCategory={t.key === "model"} />

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         model: true,
         size: true,
         material: true,
-        photos: { orderBy: { sortOrder: "asc" } },
+        photos: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
       },
     }),
   ]);

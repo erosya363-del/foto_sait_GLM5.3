@@ -67,3 +67,6 @@ download/sait_copy_1.tar.gz
 /upload/
 scripts/*.png
 /tool-results/
+
+# Загруженные пользователями файлы — рантайм-контент (в git не храним, в снапшотах есть)
+/public/uploads/

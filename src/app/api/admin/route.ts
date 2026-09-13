@@ -1,12 +1,109 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { purgePhotoFiles } from "@/lib/photo-fs";
 
 export const dynamic = "force-dynamic";
 
+/** Шаг 5: сколько дней фото хранится в корзине до автоочистки */
+const TRASH_DAYS = 30;
+const TRASH_MS = TRASH_DAYS * 24 * 3600 * 1000;
+
 /**
- * POST /api/admin — управление справочниками.
- * body: { entity: 'category'|'model'|'material'|'size'|'tag', action: 'create'|'rename'|'toggle', ... }
- * Физического удаления нет — только active = false (мягкое скрытие).
+ * АВТООЧИСТКА корзины: фото старше 30 дней в корзине удаляются ФИЗИЧЕСКИ
+ * (файлы с диска + строка в БД). Вызывается при обращениях к админ-API.
+ */
+async function autoPurgeTrash(): Promise<number> {
+  const cutoff = new Date(Date.now() - TRASH_MS);
+  const stale = await db.photo.findMany({ where: { deletedAt: { lt: cutoff, not: null } } });
+  for (const p of stale) {
+    await purgePhotoFiles(p.url, p.thumbUrl);
+    await db.photo.delete({ where: { id: p.id } }).catch(() => {});
+  }
+  return stale.length;
+}
+
+/**
+ * GET /api/admin — данные для админки:
+ *   ?view=trash     → содержимое корзины (фото + вариант + дней до автоочистки)
+ *   ?view=variants  → список товаров (вариантов) с счётчиком живых фото
+ */
+export async function GET(req: NextRequest) {
+  const view = req.nextUrl.searchParams.get("view") || "";
+  try {
+    if (view === "trash") {
+      const autoPurged = await autoPurgeTrash();
+      const rows = await db.photo.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: "desc" },
+        include: { variant: { include: { model: true, category: true, material: true } } },
+      });
+      return NextResponse.json({
+        autoPurged,
+        trashDays: TRASH_DAYS,
+        items: rows.map((p) => ({
+          id: p.id,
+          url: p.url,
+          thumbUrl: p.thumbUrl,
+          deletedAt: p.deletedAt,
+          daysLeft: Math.max(
+            0,
+            Math.ceil((TRASH_MS - (Date.now() - (p.deletedAt?.getTime() ?? Date.now()))) / 86400000)
+          ),
+          variantId: p.variantId,
+          variantLabel: [
+            p.variant.model.name,
+            p.variant.material?.name ?? p.variant.variantName ?? "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          categoryName: p.variant.category.name,
+        })),
+      });
+    }
+
+    if (view === "variants") {
+      const rows = await db.productVariant.findMany({
+        orderBy: { createdAt: "asc" },
+        include: {
+          category: true,
+          model: true,
+          material: true,
+          size: true,
+          _count: { select: { photos: { where: { deletedAt: null } } } },
+        },
+      });
+      return NextResponse.json({
+        items: rows.map((v) => ({
+          id: v.id,
+          label: [
+            v.model.name,
+            v.material?.name ?? v.variantName,
+            v.size?.name,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          categoryName: v.category.name,
+          variantName: v.variantName,
+          active: v.active,
+          photoCount: v._count.photos,
+          createdAt: v.createdAt,
+        })),
+      });
+    }
+
+    return NextResponse.json({ error: "Укажите view=trash или view=variants" }, { status: 400 });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+/**
+ * POST /api/admin — управление справочниками, корзиной и товарами.
+ * body: { entity, action, ... }
+ * Справочники: create/rename/toggle (физического удаления нет — только active)
+ * Корзина:     restoreFromTrash / purgePhoto / purgeTrash
+ * Товары:      quickCreateVariant / renameVariant / toggleVariant
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -17,6 +114,113 @@ export async function POST(req: NextRequest) {
   const id: string = String(body.id ?? "");
 
   try {
+    // ── Корзина: вернуть фото из корзины ─────────────────────────────
+    if (action === "restoreFromTrash") {
+      if (!id) return NextResponse.json({ error: "Нужен photoId" }, { status: 400 });
+      const photo = await db.photo.findUnique({ where: { id } });
+      if (!photo) return NextResponse.json({ error: "Фото не найдено" }, { status: 404 });
+      if (!photo.deletedAt) return NextResponse.json({ ok: true, note: "фото не в корзине" });
+      const restored = await db.photo.update({ where: { id }, data: { deletedAt: null } });
+      return NextResponse.json({ ok: true, id: restored.id });
+    }
+
+    // ── Корзина: удалить фото ФИЗИЧЕСКИ (файлы + строка) ─────────────
+    if (action === "purgePhoto") {
+      if (!id) return NextResponse.json({ error: "Нужен photoId" }, { status: 400 });
+      const photo = await db.photo.findUnique({ where: { id } });
+      if (!photo) return NextResponse.json({ error: "Фото не найдено" }, { status: 404 });
+      const filesRemoved = await purgePhotoFiles(photo.url, photo.thumbUrl);
+      await db.photo.delete({ where: { id } });
+      return NextResponse.json({ ok: true, filesRemoved });
+    }
+
+    // ── Корзина: очистить полностью (физически) ──────────────────────
+    if (action === "purgeTrash") {
+      const rows = await db.photo.findMany({ where: { deletedAt: { not: null } } });
+      let filesRemoved = 0;
+      for (const p of rows) {
+        if (await purgePhotoFiles(p.url, p.thumbUrl)) filesRemoved++;
+        await db.photo.delete({ where: { id: p.id } }).catch(() => {});
+      }
+      return NextResponse.json({ ok: true, purged: rows.length, filesRemoved });
+    }
+
+    // ── Товары: быстрое создание (категория/модель — на лету) ────────
+    if (action === "quickCreateVariant") {
+      // Категория: готовый id → проверяем; имя → найти или создать
+      let categoryId = String(body.categoryId ?? "");
+      const categoryName = String(body.categoryName ?? "").trim();
+      let createdCategory = false;
+      if (!categoryId && categoryName) {
+        const dup = await db.category.findFirst({ where: { name: categoryName } });
+        if (dup) categoryId = dup.id;
+        else {
+          const row = await db.category.create({ data: { name: categoryName } });
+          categoryId = row.id;
+          createdCategory = true;
+        }
+      }
+      if (!categoryId) return NextResponse.json({ error: "Выберите или введите категорию" }, { status: 400 });
+
+      let modelId = String(body.modelId ?? "");
+      const modelName = String(body.modelName ?? "").trim();
+      let createdModel = false;
+      if (!modelId && modelName) {
+        const dup = await db.model.findFirst({ where: { name: modelName, categoryId } });
+        if (dup) modelId = dup.id;
+        else {
+          const row = await db.model.create({ data: { name: modelName, categoryId } });
+          modelId = row.id;
+          createdModel = true;
+        }
+      }
+      if (!modelId) return NextResponse.json({ error: "Выберите или введите модель" }, { status: 400 });
+
+      const materialId = String(body.materialId ?? "") || null;
+      const sizeId = String(body.sizeId ?? "") || null;
+      const variantName = String(body.variantName ?? "").trim() || null;
+
+      // Дубликат варианта = та же категория+модель+материал+размер
+      const dup = await db.productVariant.findFirst({
+        where: { categoryId, modelId, materialId, sizeId },
+      });
+      if (dup) {
+        return NextResponse.json(
+          { error: "Такой товар уже есть — загрузите фото в него через «Загрузку»", variantId: dup.id },
+          { status: 409 }
+        );
+      }
+
+      const variant = await db.productVariant.create({
+        data: { categoryId, modelId, materialId, sizeId, variantName },
+      });
+      return NextResponse.json({
+        ok: true,
+        variantId: variant.id,
+        categoryId,
+        modelId,
+        createdCategory,
+        createdModel,
+      });
+    }
+
+    // ── Товары: переименовать вариант (подпись) ──────────────────────
+    if (action === "renameVariant") {
+      if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
+      const variantName = String(body.variantName ?? "").trim() || null;
+      await db.productVariant.update({ where: { id }, data: { variantName } });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Товары: скрыть/вернуть вариант ───────────────────────────────
+    if (action === "toggleVariant") {
+      if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
+      const active = Boolean(body.active);
+      await db.productVariant.update({ where: { id }, data: { active } });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Справочники: создание ────────────────────────────────────────
     if (action === "create") {
       if (!name) return NextResponse.json({ error: "Укажите название" }, { status: 400 });
       if (entity === "category") {
@@ -54,7 +258,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Восстановление случайно удалённого фото (для кнопки «Отменить» в уведомлении)
+    // ── Восстановление случайно удалённого фото (кнопка «Отменить») ──
     if (action === "restorePhoto") {
       const variantId = String(body.variantId ?? "");
       const url = String(body.url ?? "");
@@ -64,7 +268,10 @@ export async function POST(req: NextRequest) {
       }
       const variantExists = await db.productVariant.findFirst({ where: { id: variantId } });
       if (!variantExists) return NextResponse.json({ error: "Вариант товара не найден" }, { status: 404 });
-      const agg = await db.photo.aggregate({ where: { variantId }, _max: { sortOrder: true } });
+      const agg = await db.photo.aggregate({
+        where: { variantId, deletedAt: null },
+        _max: { sortOrder: true },
+      });
       const row = await db.photo.create({
         data: {
           variantId,
@@ -77,6 +284,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, id: row.id });
     }
 
+    // ── Справочники: переименование ──────────────────────────────────
     if (action === "rename") {
       if (!id || !name) return NextResponse.json({ error: "Нужны id и название" }, { status: 400 });
       if (entity === "category") await db.category.update({ where: { id }, data: { name } });
@@ -87,6 +295,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── Справочники: скрыть/вернуть ──────────────────────────────────
     if (action === "toggle") {
       if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
       const active = Boolean(body.active);
@@ -105,16 +314,21 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** DELETE /api/admin — удалить фото. Возвращает данные фото для возможного восстановления */
+/**
+ * DELETE /api/admin?photoId=X — удалить фото.
+ * Шаг 5: теперь это МЯГКОЕ удаление → корзина (deletedAt = now).
+ * Файлы остаются на диске до «Удалить навсегда» из корзины или автоочистки (30 дней).
+ * Ответ содержит данные фото — для совместимости со старым undo-тостом.
+ */
 export async function DELETE(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const photoId = sp.get("photoId");
   if (!photoId) return NextResponse.json({ error: "Нужен photoId" }, { status: 400 });
   const photo = await db.photo.findUnique({ where: { id: photoId } });
   if (!photo) return NextResponse.json({ error: "Фото не найдено" }, { status: 404 });
-  await db.photo.delete({ where: { id: photoId } });
+  await db.photo.update({ where: { id: photoId }, data: { deletedAt: new Date() } });
   return NextResponse.json({
     ok: true,
-    photo: { variantId: photo.variantId, url: photo.url, thumbUrl: photo.thumbUrl, comment: photo.comment },
+    photo: { id: photo.id, variantId: photo.variantId, url: photo.url, thumbUrl: photo.thumbUrl, comment: photo.comment },
   });
 }

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       material: true,
       size: true,
       tags: { include: { tag: true } },
-      photos: { orderBy: { sortOrder: "asc" } },
+      photos: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
     },
   });
 

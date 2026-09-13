@@ -130,7 +130,11 @@ model Photo {
   comment   String?
   sortOrder Int            @default(0)
   createdAt DateTime       @default(now())
+  // Шаг 5: корзина. deletedAt != null → фото в корзине (скрыто из каталога,
+  // хранится 30 дней, потом физическое удаление файлов + строки)
+  deletedAt DateTime?
 
   @@index([variantId])
+  @@index([deletedAt])
   @@map("photos")
 }

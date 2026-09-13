@@ -161,3 +161,30 @@ Stage Summary:
 - Шаг 4 готов: лента новинок за 7 дней + «Все ткани» (2 уровня) + NEW-бейджи везде; полная навигация и история
 - Инфраструктура: правило «сервер+тест одной командой»; бэкап после каждого шага; коммит после каждого шага
 - Пользователю: пересоздать ярлык PWA, проверить Шаг 4 + полосу; далее Шаг 5
+
+---
+Task ID: 14 (Защита от откатов + Шаг 5)
+Agent: main (Super Z)
+Task: Пользователь: «сделай защиту от отката, логи по работам, веди все изменения… После переходи далее» — система фиксации + Шаг 5 (админ: физическое удаление, корзина, лёгкое создание контента).
+
+Work Log:
+- ЗАЩИТА: созданы scripts/snapshot.sh (git commit+тег+зеркало sait_copy_1+tar в download/snapshots+копии docs в download/logs+INDEX) и scripts/restore_snapshot.sh; git почищен (196МБ→13МБ: выкинуты 114МБ tarball из истории, sait_copy_1-gitlink, skills/, upload-видео, старые скрины; пересоздан репозиторий начисто); CHANGELOG.md с журналом версий
+- Урок 1: gitignore «upload/» без якоря заблокировал src/app/api/upload → восстановил файл из 5dc9f47, добавил якоря «/» в .gitignore и snapshot.sh
+- Урок 2: pkill -f "standalone/server.js" не берёт next-server (переименование процесса), lsof слеп, fuser отсутствует → scripts/restart.sh убивает по pid из ss -tlnp; найден и убит забытый dev-сервер (с 20:51)
+- ВОССТАНОВЛЕНО ПОТЕРЯННОЕ: src/app/api/upload/route.ts (откаты съели файл — «Загрузка» была 404)
+- КРИТФИКС: standalone chdir в .next/standalone + кэш списка public на старте → загрузки писались в копию сборки, 404 до рестарта, стирались ребилдом. Фикс: src/lib/paths.ts (корень из DATABASE_URL), /uploads/[...path]/route.ts (раздача напрямую), абсолютные пути в upload/photo-fs. Доказано: upload → 200 сразу → ребилд → файл жив
+- ШАГ 5.1 КОРЗИНА: Photo.deletedAt (+индексы, db push); GET /api/admin?view=trash (daysLeft, autoPurged); DELETE = soft-delete; restoreFromTrash; автоочистка 30 дней при обращениях к админ-API; UI: «Фото» = «Активные | Корзина (N)», «Вернуть»/«Удалить навсегда»/«Очистить корзину», бейдж «N дн.»
+- ШАГ 5.2 ФИЗИЧЕСКОЕ УДАЛЕНИЕ: photo-fs.ts safeUnlink (только public/uploads, basename+traversal guard), сид-фото /catalog/ защищены; purgePhoto/purgeTrash
+- ШАГ 5.3 БЫСТРОЕ СОЗДАНИЕ: вкладка «Товар» (первая, default) — мастер (категория/модель из списка или на лету → ткань/размер/подпись → фото ≤10) + список товаров (фото-счётчик, rename подписи, скрыть/вернуть); API quickCreateVariant/renameVariant/toggleVariant/view=variants; дубликат = 409
+- deletedAt:null во всех чтениях фото (catalog items/fresh/fabrics/models+OR, search, stock, upload sortOrder)
+- Компоненты: admin-product-manager.tsx (новый), admin-photobank.tsx (новый), admin-view.tsx (облегчён)
+- E2E scripts/test-s5.mjs: 31/31 ✓ (создание/дубликат/upload/счётчики/rename/toggle/soft-delete/restore/purge/защита сида/purgeTrash/автоочистка через INTEGER-ms симуляцию/регресс 8 API/уборка); регресс test-s4.mjs: 32/32 ✓
+- Нюанс для тестов: Prisma хранит DateTime в SQLite как INTEGER unix-ms — ISO-текст в raw SQL ломает сравнение lt
+- Данные пересеяны в эталон (26 вариантов/52 фото/32 остатка) после зачистки тестовых артефактов
+- Фиксация: git commit + snapshot 003 «step5»; STATUS/CHANGELOG/worklog обновлены
+
+Stage Summary:
+- Система защиты от откатов работает: каждый шаг = commit+тег+снапшот в download/ (переживает откат песочницы); восстановление одной командой
+- Шаг 5 готов: корзина с автоочисткой 30 дней, физическое удаление с защитой сид-фото, мастер создания товара за 3 поля, управление вариантами
+- Найден и закрыт критичный баг уничтожения загрузок ребилдом (старые сессии теряли бы фото при каждой сборке)
+- Пользователю: пересоздать ярлык PWA; проверить Шаг 4 (лента/ткани/NEW) и Шаг 5 (админка: создать товар, удалить фото, корзина)
