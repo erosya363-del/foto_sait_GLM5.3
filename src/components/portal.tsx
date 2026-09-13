@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ArrowUp, Boxes, Images, UploadCloud, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck } from "lucide-react";
 import {
   usePortal, snapshot, dismissProduct, isPushSuppressed,
   type View, type Warehouse, type PortalSnapshot,
@@ -25,6 +25,12 @@ const NAV: Array<{ key: View; label: string; short: string; Icon: typeof Boxes }
   { key: "upload", label: "Загрузка", short: "Загрузка", Icon: UploadCloud },
   { key: "admin", label: "Админ", short: "Админ", Icon: ShieldCheck },
 ];
+
+/* «Жидкий» глитч-рябь (feTurbulence + feDisplacementMap) — только Chromium;
+   в остальных браузерах — плавный сквош линзы без фильтра. */
+const IS_CHROMIUM =
+  typeof navigator !== "undefined" &&
+  /Chrom(e|ium)|Edg\/|OPR\/|SamsungBrowser/.test(navigator.userAgent);
 
 const WAREHOUSES: Warehouse[] = ["Обухово", "Владимир"];
 
@@ -163,10 +169,9 @@ function useWowEffects() {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
-      const input = document.getElementById("global-search") as HTMLInputElement | null;
-      if (!input) return;
       e.preventDefault();
-      input.focus();
+      // Портал сам решит: сфокусировать панельный поиск или открыть подвесной
+      window.dispatchEvent(new CustomEvent("portal:search-open"));
     };
     document.addEventListener("keydown", onKey);
 
@@ -237,15 +242,134 @@ export function Portal() {
   const viewerPhotos = usePortal((s) => s.viewerPhotos);
   const savedScrollY = usePortal((s) => s.savedScrollY);
   const restored = usePortal((s) => s.restored);
+  const searchOpen = usePortal((s) => s.searchOpen);
+  const searchQuery = usePortal((s) => s.searchQuery);
   const title = useHeaderTitle();
   const searchVisible = view === "catalog" || view === "stock";
   useWowEffects();
 
-  // ── Восстановление после F5 + фиксация стартовой записи истории ──
+  /* ── Шапка/пилюля: реакция на скролл и касание ────────────────────── */
+  const [scrolled, setScrolled] = useState(false);
+  const [pillTouched, setPillTouched] = useState(false);
+  /* Подвесной поиск (открыт из кружка) */
+  const [searchFabOpen, setSearchFabOpen] = useState(false);
+  /* «Жидкий» переезд линзы — 480 мс после смены активного пункта */
+  const [liquid, setLiquid] = useState(false);
+
+  const searchLensOn = (searchOpen || searchFabOpen) && !productId;
+
   useEffect(() => {
     usePortal.getState().restore();
     window.history.replaceState(snapshot(), "");
   }, []);
+
+  // Скролл: сворачивает шапку (>6px), закрывает подвесной поиск при реальном листании
+  useEffect(() => {
+    let raf = 0;
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const y = window.scrollY;
+        setScrolled(y > 6);
+        if (Math.abs(y - lastY) > 30) {
+          lastY = y;
+          setSearchFabOpen((open) => {
+            if (open) usePortal.getState().setSearchOpen(false);
+            return false;
+          });
+        }
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
+  // Касание: пилюля становится активной до тапа в другое место
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const hit = (e.target as Element | null)?.closest?.(".pill-shell");
+      setPillTouched(Boolean(hit));
+    };
+    document.addEventListener("pointerdown", onDown, { passive: true });
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
+
+  // Жидкий эффект: запуск на смену активного пункта пилюли
+  const activeKey = productId ? `product:${productId}` : searchLensOn ? "search" : view;
+  const prevActiveKey = useRef(activeKey);
+  useEffect(() => {
+    if (prevActiveKey.current === activeKey) return;
+    prevActiveKey.current = activeKey;
+    setLiquid(true);
+    const t = window.setTimeout(() => setLiquid(false), 500);
+    return () => window.clearTimeout(t);
+  }, [activeKey]);
+
+  // rAF-анимация SVG-фильтра (feTurbulence/feDisplacementMap) за 480 мс — только Chromium
+  const turbRef = useRef<SVGFETurbulenceElement>(null);
+  const dispRef = useRef<SVGFEDisplacementMapElement>(null);
+  useEffect(() => {
+    if (!liquid || !IS_CHROMIUM) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const disp = dispRef.current;
+    const turb = turbRef.current;
+    if (!disp || !turb) return;
+    const start = performance.now();
+    const DUR = 480;
+    let raf = 0;
+    const frame = (now: number) => {
+      const p = Math.min(1, (now - start) / DUR);
+      const k = (1 - p) * (1 - p); // затухание 1→0
+      disp.setAttribute("scale", (17 * k).toFixed(2));
+      turb.setAttribute(
+        "baseFrequency",
+        `${(0.012 + 0.05 * k).toFixed(4)} ${(0.09 + 0.14 * k).toFixed(4)}`
+      );
+      if (p < 1) raf = requestAnimationFrame(frame);
+      else disp.setAttribute("scale", "0");
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [liquid]);
+
+  /* ── Поиск: из пилюли, из кружка или по «/» ─────────────────────── */
+  const openSearch = () => {
+    const s = usePortal.getState();
+    playTick();
+    haptic(12);
+    if (s.productId) dismissProduct();
+    if (s.view !== "catalog" && s.view !== "stock") s.setView("catalog");
+    if (scrolled) setSearchFabOpen(true);
+    window.setTimeout(
+      () => (document.getElementById("global-search") as HTMLInputElement | null)?.focus(),
+      scrolled ? 130 : 80
+    );
+  };
+
+  useEffect(() => {
+    const open = () => openSearch();
+    window.addEventListener("portal:search-open", open);
+    return () => window.removeEventListener("portal:search-open", open);
+  });
+
+  // Тап мимо подвесного поиска — закрыть его
+  useEffect(() => {
+    if (!searchFabOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.(".search-pop") || t?.closest?.(".search-fab")) return;
+      setSearchFabOpen(false);
+      usePortal.getState().setSearchOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [searchFabOpen]);
 
   // ── History API: каждый новый слой/раздел — отдельная запись ─────
   useEffect(() => {
@@ -323,6 +447,11 @@ export function Portal() {
       const s = usePortal.getState();
       // Верхние слои (просмотрщик, drawer фильтров, дропдаун поиска) закрывают себя сами
       if (s.viewerOpen || s.filtersOpen || s.searchOpen) return;
+      if (searchFabOpen) {
+        e.preventDefault();
+        setSearchFabOpen(false);
+        return;
+      }
       if (s.productId) {
         e.preventDefault();
         dismissProduct();
@@ -330,7 +459,7 @@ export function Portal() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [searchFabOpen]);
 
   return (
     <div className="relative min-h-dvh">
@@ -343,6 +472,16 @@ export function Portal() {
         {/* ФИКС ПОЛОСЫ v3: плоский низ — кромка всегда == фону html */}
         <span className="fx-skirt" />
       </div>
+
+      {/* SVG-фильтр жидкой ряби для пилюли (анимируется по rAF, только Chromium) */}
+      <svg aria-hidden focusable="false" width="0" height="0" style={{ position: "absolute", pointerEvents: "none" }}>
+        <defs>
+          <filter id="nav-liquid" x="-20%" y="-60%" width="140%" height="220%" colorInterpolationFilters="sRGB">
+            <feTurbulence ref={turbRef} type="fractalNoise" baseFrequency="0.012 0.09" numOctaves={2} seed={7} result="noise" />
+            <feDisplacementMap ref={dispRef} in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
+      </svg>
 
       {/* Плёночная фактура поверх контента (не перехватывает события) */}
       <div className="fx-vignette" aria-hidden />
@@ -406,8 +545,10 @@ export function Portal() {
         </div>
       </aside>
 
-      {/* Липкая шапка + панель поиска — мобильные и десктоп (в зоне контента) */}
-      <div className="sticky top-0 z-40 lg:ml-[248px]">
+      {/* Липкая шапка + панель поиска — мобильные и десктоп (в зоне контента).
+          При скролле шапка сворачивается: остаются «Назад» и тема (header-fade),
+          поиск сжимается и доступен из кружка (search-fab) ниже. */}
+      <div className={cn("sticky top-0 z-40 lg:ml-[248px]", scrolled && "header-collapsed")}>
         <header className="glass flex items-center gap-2 px-3 pb-2 pt-[max(10px,env(safe-area-inset-top))] sm:px-4">
           <div className="lg:hidden">
             <BackButton />
@@ -416,7 +557,7 @@ export function Portal() {
             type="button"
             onClick={() => goCatalog(usePortal.getState().productId != null ? null : undefined)}
             aria-label="На главную — Каталог фото"
-            className="shrink-0 max-[359px]:hidden"
+            className="header-fade shrink-0 max-[359px]:hidden"
           >
             <img
               src="/logo-askona.png"
@@ -425,7 +566,7 @@ export function Portal() {
               draggable={false}
             />
           </button>
-          <div className="flex min-w-0 flex-col items-start">
+          <div className="header-fade flex min-w-0 flex-col items-start">
             <span className="max-w-[46vw] truncate font-display text-[13px] font-bold leading-none sm:text-[14px]" title={title}>
               {title}
             </span>
@@ -441,9 +582,11 @@ export function Portal() {
         </header>
 
         {searchVisible && (
-          <div className="glass border-t border-border/60 px-3 pb-2.5 pt-2 sm:px-4">
-            <div className="mx-auto w-full max-w-[860px]">
-              <SearchBar />
+          <div className="search-collapse glass border-t border-border/60 px-3 sm:px-4">
+            <div>
+              <div className="mx-auto w-full max-w-[860px] pb-2.5 pt-2">
+                <SearchBar />
+              </div>
             </div>
           </div>
         )}
@@ -477,33 +620,90 @@ export function Portal() {
       </main>
 
       {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass, как в iOS 26).
-          «Линза» активного пункта перетекает между вкладками (layoutId). */}
+          «Линза» активного пункта перетекает между вкладками (layoutId, spring 430)
+          с жидким сквошем; 5-й пункт «Поиск» фокусирует поле и поднимает клавиатуру.
+          Реакция: листают — стекло прозрачнее (pill-dim); коснулись — плотнее (pill-active) до тапа мимо. */}
       <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
-        <div className="pill-shell">
+        <div
+          className={cn(
+            "pill-shell",
+            scrolled && !pillTouched && "pill-dim",
+            pillTouched && "pill-active",
+            liquid && IS_CHROMIUM && "is-liquid"
+          )}
+        >
           {NAV.map(({ key, short, Icon }) => {
-            const on = view === key && !productId;
+            const on = view === key && !productId && !searchLensOn;
             return (
               <button
                 key={key}
                 type="button"
-                onClick={(e) => (key === "catalog" ? goCatalog(e.currentTarget) : usePortal.getState().setView(key))}
+                onClick={(e) => {
+                  if (key === "catalog") goCatalog(e.currentTarget);
+                  else {
+                    usePortal.getState().setView(key);
+                    haptic(10);
+                  }
+                }}
                 className={cn("pill-item", on && "is-on")}
                 aria-current={on ? "page" : undefined}
               >
                 {on && (
                   <motion.span
                     layoutId="nav-lens"
-                    className="nav-lens"
-                    transition={{ type: "spring", stiffness: 480, damping: 36 }}
-                  />
+                    className={cn("nav-lens", liquid && "is-squash")}
+                    transition={{ type: "spring", stiffness: 430, damping: 36 }}
+                  >
+                    <span className="nav-lens-core" />
+                  </motion.span>
                 )}
                 <Icon size={21} strokeWidth={2.1} />
                 <span className="text-[10px] font-semibold">{short}</span>
               </button>
             );
           })}
+          {/* 5-й пункт «Поиск»: тап — фокус поля + клавиатура; пилюлю прячет .kb-open.
+              Линза стоит на «Поиске», пока поиск активен (дропдаун/подвесной). */}
+          <button
+            type="button"
+            onClick={openSearch}
+            className={cn("pill-item", searchLensOn && "is-on")}
+            aria-current={searchLensOn ? "page" : undefined}
+          >
+            {searchLensOn && (
+              <motion.span
+                layoutId="nav-lens"
+                className={cn("nav-lens", liquid && "is-squash")}
+                transition={{ type: "spring", stiffness: 430, damping: 36 }}
+              >
+                <span className="nav-lens-core" />
+              </motion.span>
+            )}
+            <Search size={21} strokeWidth={2.1} />
+            <span className="text-[10px] font-semibold">Поиск</span>
+          </button>
         </div>
       </nav>
+
+      {/* Кружок поиска — вместо свернувшейся панели при скролле (каталог/остатки) */}
+      {searchVisible && scrolled && !searchFabOpen && (
+        <button
+          type="button"
+          aria-label="Открыть поиск"
+          onClick={openSearch}
+          className={cn("search-fab lg:hidden", searchQuery && "has-query")}
+        >
+          <Search size={18} strokeWidth={2.3} />
+        </button>
+      )}
+
+      {/* Подвесной поиск — стеклянная карточка (не панель): открыт из кружка или по «/» при скролле.
+          Листание (>30px) сжимает обратно в кружок. */}
+      {searchVisible && searchFabOpen && (
+        <div className="search-pop lg:hidden">
+          <SearchBar />
+        </div>
+      )}
 
       <PhotoViewer />
     </div>

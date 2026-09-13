@@ -67,16 +67,40 @@ let mine = variants.find((v) => v.id === qc.json.variantId);
 check("вариант в списке с photoCount=2", mine?.photoCount === 2, JSON.stringify(mine));
 
 // ────────────────────────────────────────────────────────────────
-// 3. РЕДАКТИРОВАНИЕ ВАРИАНТА
+// 3. РЕДАКТИРОВАНИЕ + УДАЛЕНИЕ ТОВАРА (вместо «отключения»)
 // ────────────────────────────────────────────────────────────────
 const ren = await api({ action: "renameVariant", id: qc.json.variantId, variantName: "Обновлённая подпись" });
 check("renameVariant ok", ren.json.ok === true);
-const tog = await api({ action: "toggleVariant", id: qc.json.variantId, active: false });
+
+// Удаление товара: мягкое — товар исчезает, фото (2) уходят в корзину
+const delV = await api({ action: "deleteVariant", id: qc.json.variantId });
+check("deleteVariant ok, 2 фото → корзина", delV.json.ok === true && delV.json.photosToTrash === 2, JSON.stringify(delV.json));
+let variants2 = (await (await fetch(`${BASE}/api/admin?view=variants`)).json()).items;
+check("удалённый товар исчез из админки", !variants2.some((v) => v.id === qc.json.variantId));
 let catalog = await (await fetch(`${BASE}/api/catalog`)).json();
-check("скрытый вариант исчез из каталога", !catalog.items.some((i) => i.id === qc.json.variantId));
-await api({ action: "toggleVariant", id: qc.json.variantId, active: true });
+check("удалённый товар исчез из каталога", !catalog.items.some((i) => i.id === qc.json.variantId));
+
+// Возврат: восстановление любого фото из корзины оживляет товар
+let trash0 = (await (await fetch(`${BASE}/api/admin?view=trash`)).json()).items.filter((p) => p.variantId === qc.json.variantId);
+check("оба фото товара в корзине", trash0.length === 2, `got ${trash0.length}`);
+const rev = await api({ action: "restoreFromTrash", id: trash0[0].id });
+check("возврат фото оживил товар (variantRevived)", rev.json.ok === true && rev.json.variantRevived === true, JSON.stringify(rev.json));
+variants2 = (await (await fetch(`${BASE}/api/admin?view=variants`)).json()).items;
+check("товар вернулся в админку", variants2.some((v) => v.id === qc.json.variantId));
 catalog = await (await fetch(`${BASE}/api/catalog`)).json();
-check("возврат варианта в каталог", catalog.items.some((i) => i.id === qc.json.variantId));
+check("товар в каталоге с 1 фото", catalog.items.find((i) => i.id === qc.json.variantId)?.photos.length === 1);
+
+// ────────────────────────────────────────────────────────────────
+// 3b. СПРАВОЧНИКИ: УДАЛЕНИЕ вместо отключения + защита занятых
+// ────────────────────────────────────────────────────────────────
+const delCatBusy = await api({ entity: "category", action: "delete", id: qc.json.categoryId });
+check("категория в товарах → 409 с числом", delCatBusy.status === 409 && /товар/.test(delCatBusy.json.error), JSON.stringify(delCatBusy.json));
+const t1 = await api({ entity: "tag", action: "create", name: `ТестПризнак-${uniq}` });
+const delTag = await api({ entity: "tag", action: "delete", id: t1.json.id });
+check("свободный признак удаляется", delTag.json.ok === true, JSON.stringify(delTag.json));
+const m1 = await api({ entity: "material", action: "create", name: `ТестТкань-${uniq}`, type: "Ткань" });
+const delMat = await api({ entity: "material", action: "delete", id: m1.json.id });
+check("свободная ткань удаляется", delMat.json.ok === true, JSON.stringify(delMat.json));
 
 // ────────────────────────────────────────────────────────────────
 // 4. КОРЗИНА: мягкое удаление → возврат

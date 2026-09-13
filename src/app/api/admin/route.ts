@@ -10,7 +10,9 @@ const TRASH_MS = TRASH_DAYS * 24 * 3600 * 1000;
 
 /**
  * АВТООЧИСТКА корзины: фото старше 30 дней в корзине удаляются ФИЗИЧЕСКИ
- * (файлы с диска + строка в БД). Вызывается при обращениях к админ-API.
+ * (файлы с диска + строка в БД). Товары, удалённые >30 дней назад и у которых
+ * не осталось живых фото, тоже стираются физически (фото-файлы + строки + сам товар).
+ * Вызывается при обращениях к админ-API.
  */
 async function autoPurgeTrash(): Promise<number> {
   const cutoff = new Date(Date.now() - TRASH_MS);
@@ -19,7 +21,20 @@ async function autoPurgeTrash(): Promise<number> {
     await purgePhotoFiles(p.url, p.thumbUrl);
     await db.photo.delete({ where: { id: p.id } }).catch(() => {});
   }
-  return stale.length;
+  let purgedVariants = 0;
+  const staleVariants = await db.productVariant.findMany({
+    where: { deletedAt: { lt: cutoff, not: null } },
+    include: { photos: true },
+  });
+  for (const v of staleVariants) {
+    for (const p of v.photos) {
+      await purgePhotoFiles(p.url, p.thumbUrl).catch(() => {});
+      await db.photo.delete({ where: { id: p.id } }).catch(() => {});
+    }
+    await db.productVariant.delete({ where: { id: v.id } }).catch(() => {});
+    purgedVariants++;
+  }
+  return stale.length + purgedVariants;
 }
 
 /**
@@ -63,6 +78,7 @@ export async function GET(req: NextRequest) {
 
     if (view === "variants") {
       const rows = await db.productVariant.findMany({
+        where: { deletedAt: null },
         orderBy: { createdAt: "asc" },
         include: {
           category: true,
@@ -101,9 +117,9 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/admin — управление справочниками, корзиной и товарами.
  * body: { entity, action, ... }
- * Справочники: create/rename/toggle (физического удаления нет — только active)
+ * Справочники: create/rename/delete (занятое в товарах — отказ 409)
  * Корзина:     restoreFromTrash / purgePhoto / purgeTrash
- * Товары:      quickCreateVariant / renameVariant / toggleVariant
+ * Товары:      quickCreateVariant / renameVariant / deleteVariant (мягкое)
  */
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
@@ -114,14 +130,22 @@ export async function POST(req: NextRequest) {
   const id: string = String(body.id ?? "");
 
   try {
-    // ── Корзина: вернуть фото из корзины ─────────────────────────────
+    // ── Корзина: вернуть фото из корзины (и оживить удалённый товар) ──
     if (action === "restoreFromTrash") {
       if (!id) return NextResponse.json({ error: "Нужен photoId" }, { status: 400 });
       const photo = await db.photo.findUnique({ where: { id } });
       if (!photo) return NextResponse.json({ error: "Фото не найдено" }, { status: 404 });
       if (!photo.deletedAt) return NextResponse.json({ ok: true, note: "фото не в корзине" });
       const restored = await db.photo.update({ where: { id }, data: { deletedAt: null } });
-      return NextResponse.json({ ok: true, id: restored.id });
+      // Если товар был удалён (все фото в корзине) — возврат любого фото оживляет товар
+      const variant = await db.productVariant.findUnique({ where: { id: photo.variantId } });
+      if (variant?.deletedAt) {
+        await db.productVariant.update({
+          where: { id: variant.id },
+          data: { deletedAt: null, active: true },
+        });
+      }
+      return NextResponse.json({ ok: true, id: restored.id, variantRevived: Boolean(variant?.deletedAt) });
     }
 
     // ── Корзина: удалить фото ФИЗИЧЕСКИ (файлы + строка) ─────────────
@@ -202,6 +226,59 @@ export async function POST(req: NextRequest) {
         createdCategory,
         createdModel,
       });
+    }
+
+    // ── Товары: УДАЛИТЬ (мягко): исчезает из админки и каталога, фото — в корзину.
+    // Вернуть: «Вернуть» любого фото из корзины оживляет товар. Через 30 дней — физическая чистка.
+    if (action === "deleteVariant") {
+      if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
+      const variant = await db.productVariant.findUnique({ where: { id } });
+      if (!variant) return NextResponse.json({ error: "Товар не найден" }, { status: 404 });
+      const now = new Date();
+      const trashed = await db.photo.updateMany({
+        where: { variantId: id, deletedAt: null },
+        data: { deletedAt: now },
+      });
+      await db.productVariant.update({
+        where: { id },
+        data: { deletedAt: now, active: false },
+      });
+      return NextResponse.json({ ok: true, photosToTrash: trashed.count });
+    }
+
+    // ── Справочники: УДАЛИТЬ (вместо отключения). Занято в товарах — отказ с числом. ──
+    if (action === "delete") {
+      if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
+      if (entity === "category") {
+        const used = await db.productVariant.count({ where: { categoryId: id } });
+        if (used) return NextResponse.json({ error: `Используется в ${used} товарах — сначала удалите их` }, { status: 409 });
+        await db.category.delete({ where: { id } });
+        return NextResponse.json({ ok: true });
+      }
+      if (entity === "model") {
+        const used = await db.productVariant.count({ where: { modelId: id } });
+        if (used) return NextResponse.json({ error: `Используется в ${used} товарах — сначала удалите их` }, { status: 409 });
+        await db.model.delete({ where: { id } });
+        return NextResponse.json({ ok: true });
+      }
+      if (entity === "material") {
+        const used = await db.productVariant.count({ where: { materialId: id } });
+        if (used) return NextResponse.json({ error: `Используется в ${used} товарах — сначала удалите их` }, { status: 409 });
+        await db.material.delete({ where: { id } });
+        return NextResponse.json({ ok: true });
+      }
+      if (entity === "size") {
+        const used = await db.productVariant.count({ where: { sizeId: id } });
+        if (used) return NextResponse.json({ error: `Используется в ${used} товарах — сначала удалите их` }, { status: 409 });
+        await db.size.delete({ where: { id } });
+        return NextResponse.json({ ok: true });
+      }
+      if (entity === "tag") {
+        const used = await db.productVariantTag.count({ where: { tagId: id } });
+        if (used) return NextResponse.json({ error: `Признак навешан на ${used} товарах — сначала снимите` }, { status: 409 });
+        await db.tag.delete({ where: { id } });
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // ── Товары: переименовать вариант (подпись) ──────────────────────

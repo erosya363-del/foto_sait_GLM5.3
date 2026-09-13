@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ImagePlus, Package, Power, Plus, X } from "lucide-react";
+import { Check, ImagePlus, Package, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Dictionaries } from "@/lib/portal";
@@ -18,9 +18,10 @@ import {
 } from "@/components/ui/alert-dialog";
 
 /**
- * Шаг 5: «Товар» — лёгкое создание и контроль контента.
+ * «Товары» — лёгкое создание и контроль контента.
  * Верхняя карточка: мастер создания (категория → модель → ткань/размер → фото).
- * Ниже: список всех товаров с счётчиком фото, скрытием и переименованием.
+ * Ниже: список всех товаров: переименование подписи + УДАЛЕНИЕ (мягкое:
+ * товар исчезает, фото — в корзину; «Вернуть» из корзины оживляет товар).
  */
 
 async function api(body: Record<string, unknown>) {
@@ -44,9 +45,10 @@ type VariantRowData = {
   createdAt: string;
 };
 
-/** Строка товара: переименование подписи + скрытие/возврат */
+/** Строка товара: переименование подписи + удаление (мягкое) с подтверждением */
 function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [draft, setDraft] = useState(v.variantName ?? "");
 
   async function save() {
@@ -60,10 +62,14 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
     }
   }
 
-  async function toggle() {
+  async function remove() {
     try {
-      await api({ action: "toggleVariant", id: v.id, active: !v.active });
-      toast.success(v.active ? "Товар скрыт из каталога" : "Товар возвращён в каталог");
+      const r = (await api({ action: "deleteVariant", id: v.id })) as { photosToTrash: number };
+      toast.success("Товар удалён", {
+        description: r.photosToTrash > 0
+          ? `Фото (${r.photosToTrash}) — в корзине, можно вернуть`
+          : undefined,
+      });
       onChanged();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Ошибка");
@@ -71,61 +77,89 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
   }
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-all duration-300 hover:border-[rgba(var(--brand-rgb),0.35)]",
-        !v.active && "opacity-50"
-      )}
-    >
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[rgba(var(--brand-rgb),0.12)] text-[color:var(--brand)]">
-        <Package size={16} strokeWidth={2.2} />
+    <>
+      <div
+        className={cn(
+          "flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-all duration-300 hover:border-[rgba(var(--brand-rgb),0.35)]",
+          !v.active && "opacity-50"
+        )}
+      >
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[rgba(var(--brand-rgb),0.12)] text-[color:var(--brand)]">
+          <Package size={16} strokeWidth={2.2} />
+        </div>
+        {editing ? (
+          <>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="field flex-1 py-1.5 text-[13px]"
+              placeholder="Подпись варианта (напр. «Угловой»)"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+                if (e.key === "Escape") setEditing(false);
+              }}
+            />
+            <button type="button" onClick={save} aria-label="Сохранить" className="grid h-8 w-8 place-items-center rounded-lg bg-[rgba(var(--brand-rgb),0.15)] text-[color:var(--brand)] transition-transform hover:scale-110">
+              <Check size={14} strokeWidth={2.6} />
+            </button>
+            <button type="button" onClick={() => setEditing(false)} aria-label="Отмена" className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-muted-foreground">
+              <X size={14} strokeWidth={2.4} />
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={() => { setDraft(v.variantName ?? ""); setEditing(true); }} className="min-w-0 flex-1 text-left" title="Нажмите, чтобы изменить подпись">
+              <p className="truncate text-[13.5px] font-semibold">{v.label}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {v.categoryName} · фото: <span className={cn(v.photoCount === 0 && "font-bold text-[#fb7185]")}>{v.photoCount}</span>
+                {v.variantName && <span className="text-border"> · </span>}{v.variantName}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setDraft(v.variantName ?? ""); setEditing(true); }}
+              aria-label="Переименовать"
+              title="Переименовать"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:text-[color:var(--brand)]"
+            >
+              <Pencil size={13} strokeWidth={2.4} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              aria-label="Удалить товар"
+              title="Удалить (фото — в корзину)"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:border-[rgba(251,113,133,0.4)] hover:bg-[rgba(251,113,133,0.12)] hover:text-[#fb7185]"
+            >
+              <Trash2 size={13} strokeWidth={2.4} />
+            </button>
+          </>
+        )}
       </div>
-      {editing ? (
-        <>
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className="field flex-1 py-1.5 text-[13px]"
-            placeholder="Подпись варианта (напр. «Угловой»)"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Enter") save();
-              if (e.key === "Escape") setEditing(false);
-            }}
-          />
-          <button type="button" onClick={save} aria-label="Сохранить" className="grid h-8 w-8 place-items-center rounded-lg bg-[rgba(var(--brand-rgb),0.15)] text-[color:var(--brand)] transition-transform hover:scale-110">
-            <Check size={14} strokeWidth={2.6} />
-          </button>
-          <button type="button" onClick={() => setEditing(false)} aria-label="Отмена" className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-muted-foreground">
-            <X size={14} strokeWidth={2.4} />
-          </button>
-        </>
-      ) : (
-        <>
-          <button type="button" onClick={() => { setDraft(v.variantName ?? ""); setEditing(true); }} className="min-w-0 flex-1 text-left" title="Нажмите, чтобы изменить подпись">
-            <p className="truncate text-[13.5px] font-semibold">{v.label}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {v.categoryName} · фото: <span className={cn(v.photoCount === 0 && "font-bold text-[#fb7185]")}>{v.photoCount}</span>
-              {v.variantName && <span className="text-border"> · </span>}{v.variantName}
-            </p>
-          </button>
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={v.active ? "Скрыть" : "Вернуть"}
-            title={v.active ? "Скрыть из каталога" : "Вернуть в каталог"}
-            className={cn(
-              "grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition-all",
-              v.active
-                ? "border-transparent bg-secondary text-muted-foreground hover:text-[#fb7185]"
-                : "border-[rgba(var(--brand-rgb),0.4)] text-[color:var(--brand)]"
-            )}
-          >
-            <Power size={13} strokeWidth={2.4} />
-          </button>
-        </>
-      )}
-    </div>
+
+      {/* Подтверждение удаления: товар исчезнет, фото уйдут в корзину (возврат — из корзины) */}
+      <AlertDialog open={confirming} onOpenChange={(o) => !o && setConfirming(false)}>
+        <AlertDialogContent className="rounded-2xl border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">Удалить «{v.label}»?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Товар исчезнет из каталога и админки. Фото ({v.photoCount}) уйдут в корзину и хранятся 30 дней:
+              «Фото» → «Корзина» → «Вернуть» оживит товар целиком.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setConfirming(false); remove(); }}
+              className="rounded-xl bg-[#fb7185] text-white hover:bg-[#f43f5e]"
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

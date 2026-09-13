@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power, Check, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Dictionaries } from "@/lib/portal";
@@ -46,31 +46,31 @@ async function api(body: Record<string, unknown>) {
   return j;
 }
 
+/**
+ * Строка справочника: переименование (карандаш/тап по названию) +
+ * УДАЛЕНИЕ с подтверждением (вместо прежнего «отключения»).
+ * Занято в товарах — сервер откажет и покажет, сколько товаров мешают.
+ */
 function Row({
   id,
   name,
   sub,
-  active,
+  entity,
   onRename,
-  onToggle,
+  onDelete,
 }: {
   id: string;
   name: string;
   sub?: string;
-  active: boolean;
+  entity: Entity;
   onRename: (id: string, name: string) => void;
-  onToggle: (id: string, active: boolean) => void;
+  onDelete: (id: string, name: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
 
   return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-all duration-300 hover:border-[rgba(var(--brand-rgb),0.35)]",
-        !active && "opacity-50"
-      )}
-    >
+    <div className="group flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-all duration-300 hover:border-[rgba(var(--brand-rgb),0.35)]">
       {editing ? (
         <>
           <input
@@ -110,7 +110,10 @@ function Row({
         <>
           <button
             type="button"
-            onClick={() => setEditing(true)}
+            onClick={() => {
+              setDraft(name);
+              setEditing(true);
+            }}
             className="min-w-0 flex-1 text-left"
             title="Нажмите, чтобы переименовать"
           >
@@ -119,17 +122,24 @@ function Row({
           </button>
           <button
             type="button"
-            onClick={() => onToggle(id, !active)}
-            aria-label={active ? "Скрыть" : "Вернуть"}
-            title={active ? "Скрыть" : "Вернуть"}
-            className={cn(
-              "grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition-all",
-              active
-                ? "border-transparent bg-secondary text-muted-foreground hover:text-[#fb7185]"
-                : "border-[rgba(var(--brand-rgb),0.4)] text-[color:var(--brand)]"
-            )}
+            onClick={() => {
+              setDraft(name);
+              setEditing(true);
+            }}
+            aria-label="Переименовать"
+            title="Переименовать"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:text-[color:var(--brand)]"
           >
-            <Power size={13} strokeWidth={2.4} />
+            <Pencil size={13} strokeWidth={2.4} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(id, name)}
+            aria-label="Удалить"
+            title="Удалить"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:border-[rgba(251,113,133,0.4)] hover:bg-[rgba(251,113,133,0.12)] hover:text-[#fb7185]"
+          >
+            <Trash2 size={13} strokeWidth={2.4} />
           </button>
         </>
       )}
@@ -157,17 +167,18 @@ function DictManager({
   const [categoryId, setCategoryId] = useState("");
   const [materialType, setMaterialType] = useState("Ткань");
   const [pending, setPending] = useState<string | null>(null); // подтверждение создания
+  const [deleting, setDeleting] = useState<null | { id: string; name: string }>(null);
 
   const rows =
     entity === "category"
-      ? (d?.categories ?? []).map((c) => ({ id: c.id, name: c.name, sub: undefined as string | undefined, active: c.active }))
+      ? (d?.categories ?? []).map((c) => ({ id: c.id, name: c.name, sub: undefined as string | undefined }))
       : entity === "model"
-        ? (d?.models ?? []).map((m) => ({ id: m.id, name: m.name, sub: m.categoryName, active: m.active }))
+        ? (d?.models ?? []).map((m) => ({ id: m.id, name: m.name, sub: m.categoryName }))
         : entity === "material"
-          ? (d?.materials ?? []).map((m) => ({ id: m.id, name: m.name, sub: m.type, active: m.active }))
+          ? (d?.materials ?? []).map((m) => ({ id: m.id, name: m.name, sub: m.type }))
           : entity === "size"
-            ? (d?.sizes ?? []).map((s) => ({ id: s.id, name: s.name, sub: undefined, active: s.active }))
-            : (d?.tags ?? []).map((t) => ({ id: t.id, name: t.name, sub: "общий", active: t.active }));
+            ? (d?.sizes ?? []).map((s) => ({ id: s.id, name: s.name, sub: undefined }))
+            : (d?.tags ?? []).map((t) => ({ id: t.id, name: t.name, sub: "общий" }));
 
   async function create() {
     if (!name.trim()) return toast.error("Введите название");
@@ -201,14 +212,17 @@ function DictManager({
     }
   }
 
-  async function toggle(id: string, active: boolean) {
+  async function remove(id: string, delName: string) {
     try {
-      await api({ entity, action: "toggle", id, active });
+      await api({ entity, action: "delete", id });
+      toast.success(`«${delName}» удалено`);
       qc.invalidateQueries({ queryKey: ["dictionaries"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Ошибка");
     }
   }
+
+  const entityLabel = TABS.find((t) => t.key === entity)?.label.toLowerCase() ?? "";
 
   return (
     <div className="flex flex-col gap-3">
@@ -248,7 +262,7 @@ function DictManager({
         <AlertDialogContent className="rounded-2xl border-border">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">
-              Добавить {TABS.find((t) => t.key === entity)?.label.toLowerCase().replace(/ы$/, "у")} «{pending}»?
+              Добавить «{pending}»?
             </AlertDialogTitle>
             <AlertDialogDescription>
               Проверьте написание. Если такое уже есть — сервер сообщит о дубликате.
@@ -261,11 +275,86 @@ function DictManager({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Подтверждение удаления справочника */}
+      <AlertDialog open={deleting != null} onOpenChange={(v) => !v && setDeleting(null)}>
+        <AlertDialogContent className="rounded-2xl border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">
+              Удалить «{deleting?.name}»?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {entityLabel.slice(0, -1) === "категори"
+                ? "Категория удалится навсегда. Если она используется в товарах — сервер откажет и подскажет, сколько товаров мешают."
+                : "Запись удалится навсегда. Если используется в товарах — сервер откажет и подскажет, сколько товаров мешают."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const target = deleting;
+                setDeleting(null);
+                if (target) remove(target.id, target.name);
+              }}
+              className="rounded-xl bg-[#fb7185] text-white hover:bg-[#f43f5e]"
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="grid max-h-[52dvh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((r) => (
-          <Row key={r.id} id={r.id} name={r.name} sub={r.sub} active={r.active} onRename={rename} onToggle={toggle} />
+          <Row
+            key={r.id}
+            id={r.id}
+            name={r.name}
+            sub={r.sub}
+            entity={entity}
+            onRename={rename}
+            onDelete={(id, delName) => setDeleting({ id, name: delName })}
+          />
+        ))}
+        {rows.length === 0 && (
+          <p className="col-span-full py-6 text-center text-[12.5px] text-muted-foreground">
+            Пока пусто — создайте первую запись выше
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Справочники: сегмент-переключатель типа + менеджер выбранного типа */
+function DictionariesSection() {
+  const [entity, setEntity] = useState<Entity>("category");
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        className="flex gap-1 overflow-x-auto rounded-2xl border border-border bg-secondary p-1"
+        role="tablist"
+        aria-label="Тип справочника"
+      >
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={entity === t.key}
+            onClick={() => setEntity(t.key)}
+            className={cn(
+              "whitespace-nowrap rounded-xl px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
+              entity === t.key
+                ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--accent-foreground)]"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
+      <DictManager key={entity} entity={entity} withCategory={entity === "model"} />
     </div>
   );
 }
@@ -278,42 +367,38 @@ export function AdminView() {
           Админ<span className="gradient-text">-панель</span>
         </h1>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          Товар за минуту: создать, загрузить фото, при ошибке — вернуть из корзины
+          Товары, справочники и фото: создание, переименование, удаление с корзиной
         </p>
       </div>
 
-      <Tabs defaultValue="product" className="rise rise-1">
-        <TabsList className="flex w-full flex-wrap gap-1 rounded-2xl border border-border bg-secondary p-1 sm:w-auto">
+      {/* Три крупных раздела вместо семи мелких вкладок */}
+      <Tabs defaultValue="products" className="rise rise-1">
+        <TabsList className="flex w-full gap-1 rounded-2xl border border-border bg-secondary p-1 sm:w-auto">
           <TabsTrigger
-            value="product"
-            className="rounded-xl px-3 py-1.5 text-[12.5px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+            value="products"
+            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
           >
-            Товар
+            Товары
           </TabsTrigger>
-          {TABS.map((t) => (
-            <TabsTrigger
-              key={t.key}
-              value={t.key}
-              className="rounded-xl px-3 py-1.5 text-[12.5px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
-            >
-              {t.label}
-            </TabsTrigger>
-          ))}
+          <TabsTrigger
+            value="dicts"
+            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+          >
+            Справочники
+          </TabsTrigger>
           <TabsTrigger
             value="photos"
-            className="rounded-xl px-3 py-1.5 text-[12.5px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
           >
             Фото
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="product" className="mt-4">
+        <TabsContent value="products" className="mt-4">
           <ProductManager />
         </TabsContent>
-        {TABS.map((t) => (
-          <TabsContent key={t.key} value={t.key} className="mt-4">
-            <DictManager entity={t.key} withCategory={t.key === "model"} />
-          </TabsContent>
-        ))}
+        <TabsContent value="dicts" className="mt-4">
+          <DictionariesSection />
+        </TabsContent>
         <TabsContent value="photos" className="mt-4">
           <PhotoBank />
         </TabsContent>

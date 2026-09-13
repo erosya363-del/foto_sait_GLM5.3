@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * Короткий «tick» через Web Audio — отклик на повторный тап «Каталог».
- * iOS не разрешает navigator.vibrate — звук + визуальный пульс вместо него.
- * AudioContext создаётся лениво и переиспользуется (первое создание — в жесте тапа).
+ * Короткий «tick» через Web Audio — звуковой отклик навигации.
+ * Вибрация: navigator.vibrate вызывается ВСЕГДА на всех телефонах, где API
+ * существует (Android/Chrome — вибрирует; iOS Safari/PWA API не даёт и молча
+ * пропустит — там отклик дают tick + пульс). AudioContext ленивый, в жесте тапа.
  */
 let ctx: AudioContext | null = null;
 
@@ -38,7 +39,7 @@ export function playTick() {
   }
 }
 
-/** Вибрация там, где она есть (Android); iOS молча пропустит. */
+/** Вибрация на всех телефонах, где есть navigator.vibrate (iOS игнорирует молча). */
 export function haptic(ms = 12) {
   if (typeof navigator === "undefined") return;
   try {

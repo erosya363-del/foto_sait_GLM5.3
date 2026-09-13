@@ -107,6 +107,9 @@ model ProductVariant {
   tags        ProductVariantTag[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
+  // Мягкое удаление товара: удалён из админки → фото уходят в корзину;
+  // вернуть можно восстановлением любого фото из корзины; через 30 дней — физическая чистка
+  deletedAt   DateTime?
 
   @@map("product_variants")
 }
