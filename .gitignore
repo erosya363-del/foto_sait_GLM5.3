@@ -55,15 +55,15 @@ server.log
 download/sait_copy_1.tar.gz
 
 # Бэкап-копия проекта (не должна попадать в git — защита через снапшоты)
-sait_copy_1/
+/sait_copy_1/
 # Снапшоты и выгрузки
-download/snapshots/
-download/logs/
+/download/snapshots/
+/download/logs/
 
 # Системные и пользовательские зоны (не часть проекта)
-skills/
-examples/
-mini-services/
-upload/
+/skills/
+/examples/
+/mini-services/
+/upload/
 scripts/*.png
-tool-results/
+/tool-results/
