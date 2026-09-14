@@ -75,3 +75,11 @@ scripts/*.png
 /sait_copy_2/
 sait_copy_2
 /download/sait_copy_2.tar.gz
+
+# Бэкап-копия проекта (в git не кладём саму папку — только tar.gz в public/)
+/sait_copy_1/
+sait_copy_1
+/sait_copy_2/
+sait_copy_2
+/download/sait_copy_1.tar.gz
+/download/sait_copy_2.tar.gz

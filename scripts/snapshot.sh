@@ -43,7 +43,7 @@ echo "── [2/6] тег $TAG"
 echo "── [3/6] зеркалирование в sait_copy_1…"
 # ВАЖНО: якоря с ведущим «/» — иначе исключение «upload» зацепит src/app/api/upload
 rsync -a --delete \
-  --exclude=/node_modules --exclude=/.next --exclude=/sait_copy_1 \
+  --exclude=/node_modules --exclude=/.next --exclude=/sait_copy_1 --exclude=/sait_copy_2 --exclude=/public/sait_copy_2.tar.gz \
   --exclude=/download --exclude=/upload --exclude=/tool-results \
   --exclude=/dev.log --exclude=/skills --exclude=/examples --exclude=/mini-services \
   --exclude=/.git \
@@ -57,7 +57,7 @@ SNAP="download/snapshots/snap-${SEQ_PADDED}-v1.5-${LABEL}-${STAMP}.tar.gz"
 echo "── [4/6] tar-снапшот → $SNAP"
 # ВАЖНО: «./NAME» — якорь к корню архива; «NAME» без якоря выкинет и src/app/api/upload!
 tar -czf "$SNAP" \
-  --exclude=./node_modules --exclude=./.next --exclude=./sait_copy_1 \
+  --exclude=./node_modules --exclude=./.next --exclude=./sait_copy_1 --exclude=./sait_copy_2 --exclude=./public/sait_copy_2.tar.gz \
   --exclude=./download --exclude=./upload --exclude=./tool-results \
   --exclude=./dev.log --exclude=./skills --exclude=./examples --exclude=./mini-services \
   --exclude="./server.log" \
