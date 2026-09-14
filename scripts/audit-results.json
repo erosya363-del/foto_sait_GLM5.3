@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-14T19:45:37.407Z",
+  "startedAt": "2026-09-14T20:36:34.302Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -50,13 +50,13 @@
           {
             "btn": "Скопировать название",
             "by": "BUTTON.pill-item",
-            "pos": "287,730",
+            "pos": "287,731",
             "floating": "pill-item"
           },
           {
             "btn": "2",
             "by": "SPAN.text-[10px] font-semibold",
-            "pos": "337,730",
+            "pos": "337,731",
             "floating": "pill-item"
           }
         ],
@@ -324,7 +324,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu1nl4230007szz8mdc0psds\",\"uploaded\":2,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu1pemwy000tszvfpuyumarw\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {

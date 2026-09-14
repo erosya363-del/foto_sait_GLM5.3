@@ -194,6 +194,17 @@ function LevelCategories() {
           Категория → модель → ткань и название. Или используйте{" "}
           <span className="font-bold text-foreground">единый поиск</span> — «sky» покажет все фото этой ткани.
         </div>
+        {data && (data.categories ?? []).length === 0 && (
+          <div className="glass col-span-full flex flex-col items-center gap-3 rounded-3xl px-6 py-14 text-center">
+            <span className="empty-live grid h-14 w-14 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+              <SwatchBook size={26} />
+            </span>
+            <p className="font-display text-base font-bold">В каталоге пока нет фото</p>
+            <p className="text-[13px] text-muted-foreground">
+              Категории появятся сразу после первой загрузки.
+            </p>
+          </div>
+        )}
         {(data?.categories ?? []).map((c, i) => (
           <button
             key={c.id}
@@ -254,6 +265,17 @@ function LevelModels({ category }: { category: string }) {
   return (
     <div className="flex flex-col gap-2.5">
       <Breadcrumbs crumbs={crumbs} />
+      {data && (data.models ?? []).length === 0 && (
+        <div className="glass flex flex-col items-center gap-3 rounded-3xl px-6 py-14 text-center">
+          <span className="empty-live grid h-14 w-14 place-items-center rounded-2xl bg-secondary text-muted-foreground">
+            <SwatchBook size={26} />
+          </span>
+          <p className="font-display text-base font-bold">Фото пока не добавлены</p>
+          <p className="text-[13px] text-muted-foreground">
+            Модели появятся здесь сразу после загрузки первых фото.
+          </p>
+        </div>
+      )}
       {(data?.models ?? []).map((m, i) => (
         <button
           key={m.id}
@@ -642,9 +664,12 @@ function SearchResults({ query }: { query: string }) {
           ))}
         </div>
       )}
-      <p className="text-[13px] text-muted-foreground">
-        Найдено вариантов: <span className="font-bold text-foreground">{n}</span> — нажмите, чтобы открыть фото
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[13px] text-muted-foreground">
+          Найдено вариантов: <span className="font-bold text-foreground">{n}</span> — нажмите, чтобы открыть фото
+        </p>
+        <ModeSwitch />
+      </div>
       <VariantsGrid items={data!.variants} mode={mode} />
     </div>
   );

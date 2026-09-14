@@ -276,7 +276,12 @@ const results = { sections: {}, viewports: {}, back: {}, offline: null, upload: 
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
     const page = await ctx.newPage();
     await page.goto(BASE, { waitUntil: "networkidle" }).catch(() => {});
-    await page.waitForTimeout(1600);
+    // новый контекст = холодная загрузка → BootSplash показывается по дизайну.
+    // Ждём его исчезновения (до 5с), иначе детектор перекрытий ловит сплэш как P0.
+    await page
+      .waitForSelector(".boot-bg", { state: "detached", timeout: 5000 })
+      .catch(() => {});
+    await page.waitForTimeout(400);
     const r = {};
     for (const view of ["catalog", "stock"]) {
       if (view === "stock") {

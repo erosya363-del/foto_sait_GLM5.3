@@ -22,17 +22,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ popular: POPULAR, fabrics: [], variants: [] });
   }
 
-  const rows = await db.productVariant.findMany({
-    where: { active: true },
-    include: {
-      category: true,
-      model: true,
-      material: true,
-      size: true,
-      tags: { include: { tag: true } },
-      photos: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
-    },
-  });
+  const rows = (
+    await db.productVariant.findMany({
+      where: { active: true, deletedAt: null },
+      include: {
+        category: true,
+        model: true,
+        material: true,
+        size: true,
+        tags: { include: { tag: true } },
+        photos: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } },
+      },
+    })
+  ).filter((v) => v.photos.length > 0); // «нет фото — нет результата» (единое правило с каталогом)
 
   const hit = rows.filter((v) =>
     matchesQuery(

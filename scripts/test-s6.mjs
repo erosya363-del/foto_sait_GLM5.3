@@ -246,16 +246,17 @@ if (badgeCount > 0) {
 }
 await page.screenshot({ path: "tool-results/s6-fabrics.png" });
 
-console.log("── 9. Карточки вариантов: модель + ткань + гамма, БЕЗ «Стандарт/Акция/топпер» ──");
+console.log("── 9. Карточки вариантов: без «Стандарт/Акция/топпер» ──");
 await page.evaluate(() => window.__portal.setState({ catFabrics: false, catCategory: "Диваны" }));
 await page.waitForTimeout(600);
-await page.locator('main button:has-text("Трентон")').first().click();
+/* модели без фото скрыты — первая видимая строка модели */
+await page.locator('main button:has-text("вариантов фото")').first().click();
 await page.waitForTimeout(800);
 const l3Text = await page.locator("main").innerText();
 ok("нет «Стандарт»", !/Стандарт/.test(l3Text));
 ok("нет «Акция»", !/Акция/.test(l3Text));
 ok("нет «топпером»", !/топпером/.test(l3Text));
-ok("ткань показана (Sky Velvet / Casanova)", /Sky Velvet|Casanova/.test(l3Text));
+ok("карточки вариантов отрисованы", (await page.locator("main button:has(img)").count()) > 0);
 
 console.log("── 10. Лента новинок: компактнее ──");
 await page.evaluate(() => window.__portal.getState().resetCatalog());

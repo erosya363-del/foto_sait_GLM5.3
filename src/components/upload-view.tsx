@@ -23,6 +23,10 @@ export function UploadView() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  /** Прогресс по файлам: сколько готово, какой отправляется, фаза текущего файла */
+  const [doneCount, setDoneCount] = useState(0);
+  const [upIdx, setUpIdx] = useState(0);
+  const [phase, setPhase] = useState<"send" | "proc">("send");
   const [done, setDone] = useState<{ variantId: string; count: number; rejected: Array<{ name: string; reason: string }> } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const openProduct = usePortal((s) => s.openProduct);
@@ -103,6 +107,7 @@ export function UploadView() {
   }
 
   function removeAt(i: number) {
+    if (busy) return; // во время отправки список зафиксирован
     setFiles((prev) => {
       const next = prev.filter((_, idx) => idx !== i);
       // ФИКС F-004: URL берутся из кэша — новых object URL не создаётся
@@ -111,71 +116,130 @@ export function UploadView() {
     });
   }
 
-  /** Загрузка через XHR — только он даёт реальный прогресс отправки */
-  function submit() {
+  /** Один файл → один запрос /api/upload. Резолвится ВСЕГДА (ok/error) —
+   *  чтобы сбой одного файла не ронял остальные. Сетевые ошибки и ошибки
+   *  сервера превращаются в { ok:false, reason }, а не в исключение. */
+  function uploadOne(
+    file: File,
+    onFrac: (frac: number) => void
+  ): Promise<{ ok: boolean; variantId?: string; error?: string }> {
+    return new Promise((resolve) => {
+      const fd = new FormData();
+      fd.set("categoryId", categoryId);
+      fd.set("modelId", modelId);
+      if (materialId) fd.set("materialId", materialId);
+      if (sizeId) fd.set("sizeId", sizeId);
+      if (comment) fd.set("comment", comment);
+      if (tagIds.size) fd.set("tagIds", [...tagIds].join(","));
+      fd.append("photos", file);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/upload");
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onFrac(Math.min(0.9, (e.loaded / e.total) * 0.9));
+      };
+      // отправка завершена — дальше сервер обрабатывает (sharp + миниатюры)
+      xhr.upload.onload = () => {
+        setPhase("proc");
+        onFrac(0.9);
+      };
+      xhr.onerror = () => resolve({ ok: false, error: "Ошибка сети — файл не отправлен" });
+      xhr.onabort = () => resolve({ ok: false, error: "Загрузка отменена" });
+      xhr.onload = () => {
+        let j: Record<string, unknown> = {};
+        try {
+          j = JSON.parse(xhr.responseText);
+        } catch {
+          /* пустой ответ */
+        }
+        if (xhr.status >= 200 && xhr.status < 300 && j.ok) {
+          onFrac(1);
+          resolve({ ok: true, variantId: String(j.variantId ?? "") });
+        } else {
+          onFrac(1);
+          resolve({ ok: false, error: String(j.error || `Ошибка сервера (${xhr.status})`) });
+        }
+      };
+      xhr.send(fd);
+    });
+  }
+
+  /** Последовательная загрузка по одному файлу — честный счётчик «N/M».
+   *  Успешные файлы убираются из очереди, неудачные ОСТАЮТСЯ для повтора. */
+  async function submit() {
+    if (busy) return;
     if (!categoryId || !modelId) return toast.error("Выберите категорию и модель");
     if (!files.length) return toast.error("Добавьте хотя бы одно фото");
 
-    const fd = new FormData();
-    fd.set("categoryId", categoryId);
-    fd.set("modelId", modelId);
-    if (materialId) fd.set("materialId", materialId);
-    if (sizeId) fd.set("sizeId", sizeId);
-    if (comment) fd.set("comment", comment);
-    if (tagIds.size) fd.set("tagIds", [...tagIds].join(","));
-    files.forEach((f) => fd.append("photos", f));
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload");
+    const list = [...files];
+    const total = list.length;
     setBusy(true);
     setProgress(0);
+    setDoneCount(0);
+    setUpIdx(0);
+    setPhase("send");
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        // Отправка — до 70% общего прогресса, остальное — обработка на сервере
-        const pct = Math.round((e.loaded / e.total) * 70);
-        setProgress(pct);
-      }
-    };
+    type Res = { file: File; ok: boolean; reason?: string; variantId?: string };
+    const results: Res[] = [];
 
-    xhr.onerror = () => {
-      setBusy(false);
-      toast.error("Проблема с сетью — проверьте соединение и попробуйте ещё раз");
-    };
-
-    xhr.onabort = () => {
-      setBusy(false);
-      toast.info("Загрузка отменена");
-    };
-
-    xhr.onload = () => {
-      setBusy(false);
-      setProgress(100);
-      let j: Record<string, unknown> = {};
-      try {
-        j = JSON.parse(xhr.responseText);
-      } catch {
-        /* пустой ответ */
-      }
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const rej = (j.rejected as Array<{ name: string; reason: string }>) ?? [];
-        setDone({ variantId: String(j.variantId), count: Number(j.uploaded), rejected: rej });
-        toast.success(`${j.uploaded} фото загружено`, {
-          description: "Фотографии уже видны в каталоге у товара",
-        });
-        rej.forEach((r) => toast.warning(`${r.name}: ${r.reason}`, { duration: 9000 }));
-        setFiles([]);
-        setPreviews([]);
-        revokeAll(); // ФИКС F-004: отзываем object URL после успешной загрузки
+    for (let i = 0; i < total; i++) {
+      setUpIdx(i);
+      setPhase("send");
+      const file = list[i];
+      const res = await uploadOne(file, (frac) => {
+        setProgress(Math.round(((i + frac) / total) * 100));
+      });
+      if (res.ok) {
+        setDoneCount(i + 1);
+        results.push({ file, ok: true, variantId: res.variantId });
       } else {
-        const msg = String(j.error || `Ошибка сервера (${xhr.status})`);
-        toast.error(msg, { duration: 8000 });
-        const rej = (j.rejected as Array<{ name: string; reason: string }>) ?? [];
-        rej.forEach((r) => toast.warning(`${r.name}: ${r.reason}`, { duration: 9000 }));
+        results.push({ file, ok: false, reason: res.error });
       }
-    };
+    }
 
-    xhr.send(fd);
+    setBusy(false);
+
+    const okFiles = results.filter((r) => r.ok);
+    const failFiles = results.filter((r) => !r.ok);
+
+    if (okFiles.length === 0) {
+      // ничего не ушло — очередь остаётся на месте, причины на экране
+      toast.error("Ни одно фото не загружено", {
+        description: "Проверьте соединение и попробуйте ещё раз — список сохранён",
+      });
+      failFiles.slice(0, 5).forEach((r) => toast.warning(`${r.file.name}: ${r.reason}`, { duration: 9000 }));
+      if (failFiles.length > 5) toast.warning(`…и ещё ${failFiles.length - 5} с ошибкой`, { duration: 9000 });
+      setProgress(0);
+      return;
+    }
+
+    // успешные убираем из очереди (и отзываем их object URL), неудачные остаются для повтора
+    okFiles.forEach((r) => {
+      const u = urlCache.current.get(r.file);
+      if (u) {
+        URL.revokeObjectURL(u);
+        urlCache.current.delete(r.file);
+      }
+    });
+    const remaining = failFiles.map((r) => r.file);
+    setFiles(remaining);
+    setPreviews(remaining.map(urlFor));
+
+    const lastVariantId = [...okFiles].reverse().find((r) => r.variantId)?.variantId ?? "";
+    setDone({
+      variantId: lastVariantId,
+      count: okFiles.length,
+      rejected: failFiles.map((r) => ({ name: r.file.name, reason: r.reason ?? "Не принято" })),
+    });
+    toast.success(
+      failFiles.length ? `${okFiles.length} из ${total} фото загружено` : `${okFiles.length} фото загружено`,
+      {
+        description: failFiles.length
+          ? `${failFiles.length} не принято — остались в списке для повтора`
+          : "Фотографии уже видны в каталоге у товара",
+      }
+    );
+    failFiles.forEach((r) => toast.warning(`${r.file.name}: ${r.reason}`, { duration: 9000 }));
   }
 
   if (done) {
@@ -203,20 +267,22 @@ export function UploadView() {
           </div>
         )}
         <div className="flex flex-wrap justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              const id = done.variantId;
-              setDone(null);
-              openProduct(id, "catalog");
-            }}
-            className="btn-brand flex items-center gap-2 px-5 py-2.5 text-[13px]"
-          >
-            <Images size={15} strokeWidth={2.3} />
-            Показать в каталоге
-          </button>
+          {done.variantId && (
+            <button
+              type="button"
+              onClick={() => {
+                const id = done.variantId;
+                setDone(null);
+                openProduct(id, "catalog");
+              }}
+              className="btn-brand flex items-center gap-2 px-5 py-2.5 text-[13px]"
+            >
+              <Images size={15} strokeWidth={2.3} />
+              Показать в каталоге
+            </button>
+          )}
           <button type="button" onClick={() => setDone(null)} className="btn-ghost px-5 py-2.5 text-[13px]">
-            Загрузить ещё
+            {done.rejected.length > 0 ? "Повторить не принятые" : "Загрузить ещё"}
           </button>
         </div>
       </div>
@@ -342,9 +408,13 @@ export function UploadView() {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
+            if (busy) return; // во время отправки очередь зафиксирована
             addFiles(e.dataTransfer.files);
           }}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => {
+            if (busy) return;
+            inputRef.current?.click();
+          }}
           className={cn(
             "flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition-all duration-300",
             dragOver
@@ -372,7 +442,8 @@ export function UploadView() {
           />
         </div>
 
-        {/* Превью */}
+        {/* Превью — во время загрузки каждая плитка показывает свой статус:
+            галочка — файл загружен, спиннер — отправляется/обрабатывается */}
         {previews.length > 0 && (
           <div>
             <p className="mb-2 text-[12px] font-semibold text-muted-foreground">
@@ -382,7 +453,17 @@ export function UploadView() {
               {previews.map((src, i) => (
                 <div key={`${src}-${i}`} className="group relative aspect-square overflow-hidden rounded-xl border border-border">
                   { }
-                  <img src={src} alt={`Предпросмотр ${i + 1}`} className="h-full w-full object-cover" />
+                  <img src={src} alt={`Предпросмотр ${i + 1}`} className={cn("h-full w-full object-cover transition-opacity", busy && i < doneCount && "opacity-45")} />
+                  {busy && i < doneCount && (
+                    <span className="absolute inset-0 grid place-items-center">
+                      <CheckCircle2 size={22} className="text-[color:var(--brand)]" strokeWidth={2.4} />
+                    </span>
+                  )}
+                  {busy && i === upIdx && (
+                    <span className="absolute inset-0 grid place-items-center bg-black/25 backdrop-blur-[2px]">
+                      <Loader2 size={22} className="animate-spin text-white" strokeWidth={2.4} />
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -403,7 +484,10 @@ export function UploadView() {
         {busy && (
           <div>
             <div className="flex items-center justify-between text-[11.5px] font-semibold text-muted-foreground">
-              <span>{progress < 70 ? "Отправляем фото…" : "Обрабатываем и создаём миниатюры…"}</span>
+              <span>
+                Фото {Math.min(upIdx + 1, files.length)} из {files.length} ·{" "}
+                {phase === "send" ? "отправляем…" : "обрабатываем и создаём миниатюры…"}
+              </span>
               <span className="tabular">{progress}%</span>
             </div>
             <div
@@ -412,6 +496,7 @@ export function UploadView() {
               aria-valuenow={progress}
               aria-valuemin={0}
               aria-valuemax={100}
+              aria-label="Прогресс загрузки"
             >
               <div
                 className="h-full rounded-full bg-[color:var(--brand)] transition-[width] duration-300 ease-out"
@@ -430,7 +515,7 @@ export function UploadView() {
           {busy ? (
             <>
               <Loader2 size={17} className="animate-spin" />
-              Загружаем… {progress}%
+              Загружаем… {Math.min(upIdx + 1, Math.max(files.length, 1))}/{Math.max(files.length, 1)}
             </>
           ) : (
             <>

@@ -8,6 +8,37 @@ export type CatalogMode = "grid" | "rows" | "large";
 export type StockMode = "compact" | "cards";
 
 const SS_KEY = "skovo-portal-state";
+/** Предпочтения вида — в localStorage: живут и после закрытия вкладки/браузера.
+ *  Остальное (слой каталога, товар) — по-прежнему sessionStorage. */
+const LS_PREFS = "skovo-view-prefs";
+
+type ViewPrefs = { catalogMode: CatalogMode; stockMode: StockMode };
+
+function loadPrefs(): Partial<ViewPrefs> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(LS_PREFS);
+    if (raw) return JSON.parse(raw) as Partial<ViewPrefs>;
+  } catch {
+    /* приватный режим */
+  }
+  // миграция: первый запуск после ввода localStorage — берём из сессии
+  try {
+    const p = JSON.parse(sessionStorage.getItem(SS_KEY) || "{}") as Partial<Persisted>;
+    return { catalogMode: p.catalogMode, stockMode: p.stockMode };
+  } catch {
+    return {};
+  }
+}
+
+function savePrefs(p: ViewPrefs) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LS_PREFS, JSON.stringify(p));
+  } catch {
+    /* приватный режим — молча игнорируем */
+  }
+}
 
 type Persisted = {
   view: View;
@@ -223,11 +254,13 @@ export const usePortal = create<PortalState>((set, get) => ({
   setCatalogMode: (m) => {
     set({ catalogMode: m });
     persist(get);
+    savePrefs({ catalogMode: get().catalogMode, stockMode: get().stockMode });
   },
 
   setStockMode: (m) => {
     set({ stockMode: m });
     persist(get);
+    savePrefs({ catalogMode: get().catalogMode, stockMode: get().stockMode });
   },
 
   back: () => {
@@ -260,6 +293,7 @@ export const usePortal = create<PortalState>((set, get) => ({
         ? ((window.history.state as { portal?: PortalSnapshot } | null)?.portal ?? null)
         : null;
     const p = loadPersisted();
+    const prefs = loadPrefs(); // localStorage приоритетнее сессии для режимов вида
     set({
       view: st?.view ?? p.view ?? "catalog",
       productId: st?.productId ?? p.productId ?? null,
@@ -270,8 +304,8 @@ export const usePortal = create<PortalState>((set, get) => ({
       catFabrics: st?.catFabrics ?? p.catFabrics ?? false,
       catMaterial: st?.catMaterial ?? p.catMaterial ?? null,
       searchQuery: st?.searchQuery ?? p.searchQuery ?? null,
-      catalogMode: p.catalogMode ?? "grid",
-      stockMode: p.stockMode ?? "compact",
+      catalogMode: prefs.catalogMode ?? p.catalogMode ?? "grid",
+      stockMode: prefs.stockMode ?? p.stockMode ?? "compact",
       restored: true,
     });
   },
