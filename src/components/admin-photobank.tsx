@@ -171,24 +171,18 @@ export function PhotoBank() {
     <div>
       {/* Переключатель Активные / Корзина */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="flex rounded-xl border border-border bg-secondary p-1">
+        <div className="lg-seg">
           <button
             type="button"
             onClick={() => { setMode("active"); setSelected(new Set()); }}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
-              mode === "active" ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--brand)]" : "text-muted-foreground"
-            )}
+            className={cn(mode === "active" && "is-on")}
           >
             Активные
           </button>
           <button
             type="button"
             onClick={() => { setMode("trash"); setSelected(new Set()); }}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
-              mode === "trash" ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--brand)]" : "text-muted-foreground"
-            )}
+            className={cn(mode === "trash" && "is-on")}
           >
             Корзина{trash && trashItems.length > 0 ? ` (${trashItems.length})` : ""}
           </button>
@@ -297,7 +291,7 @@ export function PhotoBank() {
       {/* Панель действий над выбранным — ВЫШЕ нижней пилюли навигации
           (иначе «Снять»/«В корзину» прячутся под ней, просьба пользователя) */}
       {selCount > 0 && (
-        <div className="sticky bottom-[calc(86px+env(safe-area-inset-bottom))] z-30 mt-3 flex items-center gap-2 rounded-2xl border border-border bg-background/95 px-3 py-2.5 shadow-xl backdrop-blur lg:bottom-2">
+        <div className="sticky bottom-[calc(86px+env(safe-area-inset-bottom))] z-30 mt-3 flex items-center gap-2 glass rounded-2xl px-3 py-2.5 lg:bottom-2">
           <span className="flex-1 text-[12.5px] font-semibold">
             Выбрано: <span className="text-[color:var(--brand)]">{selCount}</span>
           </span>
@@ -342,7 +336,7 @@ export function PhotoBank() {
 
       {/* Диалоги подтверждения */}
       <AlertDialog open={confirm != null} onOpenChange={(v) => !v && setConfirm(null)}>
-        <AlertDialogContent className="rounded-2xl border-border">
+        <AlertDialogContent className="glass-panel">
           {confirm === "delete" && (
             <>
               <AlertDialogHeader>

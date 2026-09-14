@@ -80,7 +80,7 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
     <>
       <div
         className={cn(
-          "flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-all duration-300 hover:border-[rgba(var(--brand-rgb),0.35)]",
+          "lg-row",
           !v.active && "opacity-50"
         )}
       >
@@ -100,10 +100,10 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
                 if (e.key === "Escape") setEditing(false);
               }}
             />
-            <button type="button" onClick={save} aria-label="Сохранить" className="grid h-8 w-8 place-items-center rounded-lg bg-[rgba(var(--brand-rgb),0.15)] text-[color:var(--brand)] transition-transform hover:scale-110">
+            <button type="button" onClick={save} aria-label="Сохранить" className="lg-iconbtn is-ok">
               <Check size={14} strokeWidth={2.6} />
             </button>
-            <button type="button" onClick={() => setEditing(false)} aria-label="Отмена" className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-muted-foreground">
+            <button type="button" onClick={() => setEditing(false)} aria-label="Отмена" className="lg-iconbtn">
               <X size={14} strokeWidth={2.4} />
             </button>
           </>
@@ -121,7 +121,7 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
               onClick={() => { setDraft(v.variantName ?? ""); setEditing(true); }}
               aria-label="Переименовать"
               title="Переименовать"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:text-[color:var(--brand)]"
+              className="lg-iconbtn is-brand"
             >
               <Pencil size={13} strokeWidth={2.4} />
             </button>
@@ -130,7 +130,7 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
               onClick={() => setConfirming(true)}
               aria-label="Удалить товар"
               title="Удалить (фото — в корзину)"
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:border-[rgba(251,113,133,0.4)] hover:bg-[rgba(251,113,133,0.12)] hover:text-[#fb7185]"
+              className="lg-iconbtn is-danger"
             >
               <Trash2 size={13} strokeWidth={2.4} />
             </button>
@@ -140,7 +140,7 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
 
       {/* Подтверждение удаления: товар исчезнет, фото уйдут в корзину (возврат — из корзины) */}
       <AlertDialog open={confirming} onOpenChange={(o) => !o && setConfirming(false)}>
-        <AlertDialogContent className="rounded-2xl border-border">
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">Удалить «{v.label}»?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -300,7 +300,7 @@ export function ProductManager() {
                 type="button"
                 onClick={() => setCategoryMode(m)}
                 className={cn(
-                  "rounded-lg px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+                  "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-all active:scale-95",
                   categoryMode === m
                     ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--brand)]"
                     : "text-muted-foreground hover:text-foreground"
@@ -331,7 +331,7 @@ export function ProductManager() {
                 type="button"
                 onClick={() => setModelMode(m)}
                 className={cn(
-                  "rounded-lg px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+                  "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-all active:scale-95",
                   modelMode === m
                     ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--brand)]"
                     : "text-muted-foreground hover:text-foreground"
@@ -392,7 +392,7 @@ export function ProductManager() {
 
       {/* Подтверждение */}
       <AlertDialog open={pending != null} onOpenChange={(v) => !v && setPending(null)}>
-        <AlertDialogContent className="rounded-2xl border-border">
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">Создать товар?</AlertDialogTitle>
             <AlertDialogDescription>

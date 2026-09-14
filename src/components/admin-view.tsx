@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, Vibrate, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { vibrateTest } from "@/lib/tick";
 import type { Dictionaries } from "@/lib/portal";
 import { ProductManager } from "@/components/admin-product-manager";
 import { FabricManager } from "@/components/admin-fabric-manager";
@@ -48,6 +49,25 @@ async function api(body: Record<string, unknown>) {
 }
 
 /**
+ * Самопроверка вибрации: на Android шлёт реальный паттерн [14,60,24];
+ * на iPhone честно объясняет, что Apple запрещает вибрацию в веб (не баг сайта).
+ */
+function vibroTest() {
+  const ok = vibrateTest();
+  if (ok) {
+    toast.success("Команда вибрации отправлена [14, 60, 24] мс", {
+      description: "Телефон должен дважды толкнуться. Работает на Android/Chrome.",
+    });
+  } else {
+    toast.error("Vibration API недоступна на этом устройстве", {
+      description:
+        "iPhone: Apple не даёт веб-страницам и PWA доступ к вибромотору — это ограничение iOS, а не сайта. Отклик на iPhone — tick-звук + пружина стекла. Android: проверьте, что вибрация включена в системе.",
+      duration: 10000,
+    });
+  }
+}
+
+/**
  * Строка справочника: переименование (карандаш/тап по названию) +
  * УДАЛЕНИЕ с подтверждением (вместо прежнего «отключения»).
  * Занято в товарах — сервер откажет и покажет, сколько товаров мешают.
@@ -71,7 +91,7 @@ function Row({
   const [draft, setDraft] = useState(name);
 
   return (
-    <div className="group flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-all duration-300 hover:border-[rgba(var(--brand-rgb),0.35)]">
+    <div className="lg-row group">
       {editing ? (
         <>
           <input
@@ -94,7 +114,7 @@ function Row({
               setEditing(false);
             }}
             aria-label="Сохранить"
-            className="grid h-8 w-8 place-items-center rounded-lg bg-[rgba(var(--brand-rgb),0.15)] text-[color:var(--brand)] transition-transform hover:scale-110"
+            className="lg-iconbtn is-ok"
           >
             <Check size={14} strokeWidth={2.6} />
           </button>
@@ -102,7 +122,7 @@ function Row({
             type="button"
             onClick={() => setEditing(false)}
             aria-label="Отмена"
-            className="grid h-8 w-8 place-items-center rounded-lg bg-secondary text-muted-foreground"
+            className="lg-iconbtn"
           >
             <X size={14} strokeWidth={2.4} />
           </button>
@@ -129,7 +149,7 @@ function Row({
             }}
             aria-label="Переименовать"
             title="Переименовать"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:text-[color:var(--brand)]"
+            className="lg-iconbtn is-brand"
           >
             <Pencil size={13} strokeWidth={2.4} />
           </button>
@@ -138,7 +158,7 @@ function Row({
             onClick={() => onDelete(id, name)}
             aria-label="Удалить"
             title="Удалить"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:border-[rgba(251,113,133,0.4)] hover:bg-[rgba(251,113,133,0.12)] hover:text-[#fb7185]"
+            className="lg-iconbtn is-danger"
           >
             <Trash2 size={13} strokeWidth={2.4} />
           </button>
@@ -260,7 +280,7 @@ function DictManager({
 
       {/* Подтверждение создания — защита от опечаток и дублей */}
       <AlertDialog open={pending != null} onOpenChange={(v) => !v && setPending(null)}>
-        <AlertDialogContent className="rounded-2xl border-border">
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">
               Добавить «{pending}»?
@@ -278,7 +298,7 @@ function DictManager({
 
       {/* Подтверждение удаления справочника */}
       <AlertDialog open={deleting != null} onOpenChange={(v) => !v && setDeleting(null)}>
-        <AlertDialogContent className="rounded-2xl border-border">
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">
               Удалить «{deleting?.name}»?
@@ -333,7 +353,7 @@ function DictionariesSection() {
   return (
     <div className="flex flex-col gap-3">
       <div
-        className="flex gap-1 overflow-x-auto rounded-2xl border border-border bg-secondary p-1"
+        className="lg-seg w-full overflow-x-auto"
         role="tablist"
         aria-label="Тип справочника"
       >
@@ -344,12 +364,7 @@ function DictionariesSection() {
             role="tab"
             aria-selected={entity === t.key}
             onClick={() => setEntity(t.key)}
-            className={cn(
-              "whitespace-nowrap rounded-xl px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
-              entity === t.key
-                ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--accent-foreground)]"
-                : "text-muted-foreground hover:text-foreground"
-            )}
+            className={cn(entity === t.key && "is-on")}
           >
             {t.label}
           </button>
@@ -363,39 +378,51 @@ function DictionariesSection() {
 export function AdminView() {
   return (
     <div className="flex flex-col gap-4">
-      <div className="rise">
-        <h1 className="font-display text-xl font-bold sm:text-2xl">
-          Админ<span className="gradient-text">-панель</span>
-        </h1>
-        <p className="mt-1 text-[12.5px] text-muted-foreground">
-          Товары, справочники и фото: создание, переименование, удаление с корзиной
-        </p>
+      <div className="rise flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-display text-xl font-bold sm:text-2xl">
+            Админ<span className="gradient-text">-панель</span>
+          </h1>
+          <p className="mt-1 text-[12.5px] text-muted-foreground">
+            Товары, справочники и фото: создание, переименование, удаление с корзиной
+          </p>
+        </div>
+        {/* Самопроверка вибрации устройства (Android вибрирует; iOS честно объясняет запрет Apple) */}
+        <button
+          type="button"
+          onClick={vibroTest}
+          title="Проверить, поддерживает ли это устройство вибрацию"
+          className="btn-ghost flex shrink-0 items-center gap-2 px-3.5 py-2 text-[12.5px]"
+        >
+          <Vibrate size={15} strokeWidth={2.2} />
+          Тест вибрации
+        </button>
       </div>
 
       {/* Четыре крупных раздела: ткани заводятся отдельно от товара */}
       <Tabs defaultValue="products" className="rise rise-1">
-        <TabsList className="flex w-full gap-1 rounded-2xl border border-border bg-secondary p-1 sm:w-auto">
+        <TabsList className="lg-seg h-auto w-full sm:w-auto">
           <TabsTrigger
             value="products"
-            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+            className="rounded-full data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] data-[state=active]:text-[color:var(--accent-foreground)] data-[state=active]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_4px_14px_-6px_rgba(var(--brand-rgb),0.55)] dark:data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] dark:data-[state=active]:text-[color:var(--accent-foreground)] dark:data-[state=active]:border-transparent"
           >
             Товары
           </TabsTrigger>
           <TabsTrigger
             value="fabrics"
-            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+            className="rounded-full data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] data-[state=active]:text-[color:var(--accent-foreground)] data-[state=active]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_4px_14px_-6px_rgba(var(--brand-rgb),0.55)] dark:data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] dark:data-[state=active]:text-[color:var(--accent-foreground)] dark:data-[state=active]:border-transparent"
           >
             Ткани
           </TabsTrigger>
           <TabsTrigger
             value="dicts"
-            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+            className="rounded-full data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] data-[state=active]:text-[color:var(--accent-foreground)] data-[state=active]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_4px_14px_-6px_rgba(var(--brand-rgb),0.55)] dark:data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] dark:data-[state=active]:text-[color:var(--accent-foreground)] dark:data-[state=active]:border-transparent"
           >
             Справочники
           </TabsTrigger>
           <TabsTrigger
             value="photos"
-            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+            className="rounded-full data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] data-[state=active]:text-[color:var(--accent-foreground)] data-[state=active]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_4px_14px_-6px_rgba(var(--brand-rgb),0.55)] dark:data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] dark:data-[state=active]:text-[color:var(--accent-foreground)] dark:data-[state=active]:border-transparent"
           >
             Фото
           </TabsTrigger>

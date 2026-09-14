@@ -97,7 +97,7 @@ function FabricRow({
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 transition-all duration-300 hover:border-[rgba(var(--brand-rgb),0.35)]">
+    <div className="lg-row gap-3">
       {/* Превью / замена фото каталога ткани */}
       <button
         type="button"
@@ -150,7 +150,7 @@ function FabricRow({
             onClick={saveEdits}
             disabled={busy}
             aria-label="Сохранить"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[rgba(var(--brand-rgb),0.15)] text-[color:var(--brand)] transition-transform hover:scale-110"
+            className="lg-iconbtn is-ok"
           >
             <Check size={14} strokeWidth={2.6} />
           </button>
@@ -162,7 +162,7 @@ function FabricRow({
               setGroupDraft(f.colorGroup ?? "");
             }}
             aria-label="Отмена"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-secondary text-muted-foreground"
+            className="lg-iconbtn"
           >
             <X size={14} strokeWidth={2.4} />
           </button>
@@ -189,7 +189,7 @@ function FabricRow({
             onClick={() => setEditing(true)}
             aria-label="Изменить"
             title="Название / гамма"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:text-[color:var(--brand)]"
+            className="lg-iconbtn is-brand"
           >
             <Pencil size={13} strokeWidth={2.4} />
           </button>
@@ -198,7 +198,7 @@ function FabricRow({
             onClick={() => onDelete(f.id, f.name)}
             aria-label="Удалить"
             title="Удалить"
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-transparent bg-secondary text-muted-foreground transition-colors hover:border-[rgba(251,113,133,0.4)] hover:bg-[rgba(251,113,133,0.12)] hover:text-[#fb7185]"
+            className="lg-iconbtn is-danger"
           >
             <Trash2 size={13} strokeWidth={2.4} />
           </button>
@@ -328,7 +328,7 @@ export function FabricManager() {
 
       {/* Подтверждение создания */}
       <AlertDialog open={pending} onOpenChange={(v) => !v && setPending(false)}>
-        <AlertDialogContent className="rounded-2xl border-border">
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">Добавить ткань «{name.trim()}»?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -347,7 +347,7 @@ export function FabricManager() {
 
       {/* Подтверждение удаления */}
       <AlertDialog open={deleting != null} onOpenChange={(v) => !v && setDeleting(null)}>
-        <AlertDialogContent className="rounded-2xl border-border">
+        <AlertDialogContent className="glass-panel">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display">Удалить ткань «{deleting?.name}»?</AlertDialogTitle>
             <AlertDialogDescription>

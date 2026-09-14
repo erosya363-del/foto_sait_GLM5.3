@@ -338,3 +338,25 @@ Work Log:
 
 Stage Summary:
 - История теперь неуязвима: GitHub (вне песочницы) + git-теги локально. После сброса песочницы восстановление: git clone + token re-add.
+
+---
+Task ID: 22
+Agent: main (Super Z)
+Task: «Найди скилл для iOS-стиля (Liquid Glass), проверь почему нет вибрации, доработай прозрачность/кнопки/поиск до 8/10, админку подними с 4/10».
+
+Work Log:
+- ClawHub: установлены swiftui-liquid-glass (Apple-спека glassEffect/capsule/specular/interactive) и build-webgl-liquid-glass (CSS-рецепт стекла + тюнинг) в skills/; из них собран Liquid Glass CSS-слой.
+- ДИАГНОЗ вибрации: (а) iOS Safari/PWA не имеет navigator.vibrate вообще — запрет Apple, код не виноват; (б) реальная дыра у нас: playTick/haptic были ТОЛЬКО в пилюле (portal.tsx) — поиск/темы/админка/карточки молчали.
+- ФИКС: глобальный click-делегат (useWowEffects) тикает на любом button/[role=button]/a/select/summary; троттл 60 мс в tick.ts схлопывает двойные вызовы (проверено test-tick-catalog: ровно +1 на тап).
+- Кнопка «Тест вибрации» в шапке админки: vibrateTest() шлёт [14,60,24] (Android) и объясняет запрет iOS в тосте.
+- Liquid Glass: токены --glass-spec(-strong) обеих тем; .glass/.glass-strong со спекуляром; .glass-panel (диалоги); .lg-back (круглое стекло «Назад», scale .86); .lg-row/.lg-iconbtn (строки админки); .lg-seg (сегмент-табы iOS); .press/.press-sm; приминание карточек/чипов; поиск-капсула с focus-glow; чип склада; кружки поиска/наверх.
+- Админка v2: TabsList→lg-seg (линза на data-state=active), справочники→lg-seg, строки всех 4 вкладок→lg-row+lg-iconbtn, AlertDialog→glass-panel, фотобанк фильтр→lg-seg.
+- АВАРИЯ+УРОК: /api/upload вторично утерян платформой (в прошлый раз восстановили на диск без коммита; в git/копиях его не было) → восстановлен ПО КОНТРАКТУ (formData photos/categoryId/modelId/materialId/sizeId/comment/tagIds; sharp optimized 1600 + thumb 420; апсерт варианта по 4 полям; sortOrder max+1; rejected[{name,reason}]) и немедленно закоммичен (612b142). CHECKPOINT §8 дополнен правилом «восстановил → сразу в git».
+- test-pill: 4 флака переходов (mid-transition значения) → settle-хелпер (2.5с, как в test-s6) для titleOpacity/hdrBg/panelH/lightBg.
+- Уборка: тег __probe_s5 удалён; мусор упавшего s5-прогона (ТестКат-*) вычищен твёрдо (scripts/cleanup-testjunk.mjs, файлы+строки).
+- Скриншоты: download/screenshots/v16-mob-{catalog-level2,admin-products,admin-dicts,light-catalog,search-pop}.png, v16-desktop-admin.png.
+
+Stage Summary:
+- Регресс весь зелёный: tick 9/9, pill 60/60, s4 34/34, s5 ✓, s6 68/68; build+restart OK.
+- Публичная часть: стекло/капсулы/пружины по спеке iOS 26; отклик (звук+вибро) на каждый тап везде; вибрация на iPhone физически невозможна — в админке есть «Тест вибрации» с объяснением.
+- Жду проверку на iPhone и оценку; дальше — «Каталог тканей обложек» (Task 17 остаток) по «да».

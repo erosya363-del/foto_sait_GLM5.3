@@ -24,6 +24,18 @@ function ok(name, cond, extra = "") {
   }
 }
 
+/** Дождаться завершения CSS-перехода (флаки под нагрузкой, как в test-s6):
+    опрашиваем значение до 2.5с, пока не выполнится предикат. */
+async function settle(poll, pred, timeout = 2500) {
+  const t0 = Date.now();
+  let v = await poll();
+  while (!pred(v) && Date.now() - t0 < timeout) {
+    await page.waitForTimeout(120);
+    v = await poll();
+  }
+  return v;
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 760 } });
 const consoleErrors = [];
@@ -152,11 +164,20 @@ const fab0 = page.locator(".search-fab");
 ok("наверху: кружка нет", (await fab0.count()) === 0);
 await page.evaluate(() => window.scrollTo({ top: 300, behavior: "instant" }));
 await page.waitForTimeout(500);
-const titleOpacity = await page.locator("header .font-display").evaluate((el) => Number(getComputedStyle(el.closest(".header-fade") ?? el).opacity));
+const titleOpacity = await settle(
+  () => page.locator("header .font-display").evaluate((el) => Number(getComputedStyle(el.closest(".header-fade") ?? el).opacity)),
+  (v) => v < 0.05
+);
 ok("при скролле: заголовок скрыт (opacity 0)", titleOpacity < 0.05, `opacity=${titleOpacity}`);
-const hdrBg = await page.locator("header.glass").evaluate((el) => getComputedStyle(el).backgroundColor);
+const hdrBg = await settle(
+  () => page.locator("header.glass").evaluate((el) => getComputedStyle(el).backgroundColor),
+  (v) => v === "rgba(0, 0, 0, 0)"
+);
 ok("при скролле: шапка полностью прозрачна", hdrBg === "rgba(0, 0, 0, 0)", hdrBg);
-const panelH = (await searchPanel.boundingBox())?.height ?? 0;
+const panelH = await settle(
+  async () => (await searchPanel.boundingBox())?.height ?? 0,
+  (v) => v <= 2
+);
 ok("при скролле: панель поиска свернулась (высота ≤2px)", panelH <= 2, `h=${panelH}`);
 ok("при скролле: кружок поиска появился", await fab0.isVisible());
 ok("при скролле: «Назад» осталась (шапка жива)", await page.locator("header").isVisible());
@@ -208,7 +229,10 @@ await page.evaluate(() => {
   document.documentElement.classList.remove("dark");
 });
 await page.waitForTimeout(600); // 280мс переход фона темы должен завершиться
-const lightBg = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
+const lightBg = await settle(
+  () => shell.evaluate((el) => getComputedStyle(el).backgroundColor),
+  (v) => /^rgba\(255,\s*255,\s*255/.test(v)
+);
 ok("светлая тема: стекло светлое", /^rgba\(255,\s*255,\s*255/.test(lightBg), lightBg);
 const lightLens = await page.locator(".nav-lens-core").evaluate((el) => getComputedStyle(el).boxShadow);
 ok("светлая линза с белой кромкой", /255,\s*255,\s*255/.test(lightLens));

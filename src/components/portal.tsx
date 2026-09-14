@@ -44,7 +44,7 @@ function WarehouseSelect({ className }: { className?: string }) {
       onChange={(e) => setWarehouse(e.target.value as Warehouse)}
       aria-label="Склад"
       className={cn(
-        "cursor-pointer appearance-none rounded-md bg-secondary px-1.5 py-0.5 text-left font-semibold uppercase tracking-[0.14em] text-muted-foreground outline-none transition-colors hover:text-[color:var(--brand)]",
+        "cursor-pointer appearance-none rounded-full border border-border bg-secondary/80 px-2.5 py-1 text-left font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_1px_0_var(--glass-spec)] backdrop-blur-md outline-none transition-colors hover:border-[rgba(var(--brand-rgb),0.4)] hover:text-[color:var(--brand)] active:scale-95",
         className
       )}
     >
@@ -113,10 +113,7 @@ function BackButton({ className }: { className?: string }) {
         if (usePortal.getState().productId) dismissProduct();
         else usePortal.getState().back();
       }}
-      className={cn(
-        "grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border bg-secondary/70 text-foreground transition-colors hover:text-[color:var(--brand)] active:scale-90",
-        className
-      )}
+      className={cn("lg-back", className)}
     >
       <ArrowLeft size={20} strokeWidth={2.3} />
     </button>
@@ -165,6 +162,18 @@ function useWowEffects() {
     };
     document.addEventListener("keydown", onKey);
 
+    /* Единый тактильный отклик на ВСЁ нажимаемое (кроме пилюли — у неё своя
+       логика с drag-to-select): tick-звук + вибрация (Android) на каждый тап.
+       Двойные срабатывания с явными playTick() компонентов схлопывает
+       троттл 60 мс в tick.ts. disabled-кнопки click не кидают — safe. */
+    const onClickTick = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const t = e.target as Element | null;
+      const hit = t?.closest?.("button, [role='button'], a[href], select, summary") as Element | null;
+      if (hit && !hit.hasAttribute("disabled")) playTick();
+    };
+    document.addEventListener("click", onClickTick, { passive: true });
+
     const vv = window.visualViewport;
     const onVV = () => {
       if (!vv) return;
@@ -177,6 +186,7 @@ function useWowEffects() {
     return () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("keydown", onKey);
+      document.removeEventListener("click", onClickTick);
       vv?.removeEventListener("resize", onVV);
       vv?.removeEventListener("scroll", onVV);
       document.documentElement.classList.remove("kb-open");
@@ -248,7 +258,7 @@ export function Portal() {
     if (key === "catalog") {
       goCatalog(itemRefs.current.get("catalog") ?? null);
     } else {
-      usePortal.getState().setView(key);
+      usePortal.getState().setView(key as View);
       playTick();
       haptic(10);
     }

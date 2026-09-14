@@ -41,7 +41,7 @@ export function ThemeSwitch({ compact = false, mini = false }: { compact?: boole
             title={label}
             onClick={() => setTheme(key)}
             className={cn(
-              "relative grid place-items-center rounded-full transition-all duration-300",
+              "relative grid place-items-center rounded-full transition-all duration-300 active:scale-90",
               mini ? "h-7 w-7" : "h-8 w-8",
               on
                 ? "text-[color:var(--brand)] shadow-[0_0_14px_rgba(var(--brand-rgb),0.35)]"

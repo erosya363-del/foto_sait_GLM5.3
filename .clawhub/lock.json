@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "swiftui-liquid-glass": {
+      "version": "1.0.0",
+      "installedAt": 1789402723203,
+      "ownerHandle": "steipete"
+    },
+    "build-webgl-liquid-glass": {
+      "version": "1.0.0",
+      "installedAt": 1789402728092,
+      "ownerHandle": "woodfishhhh"
+    }
+  }
+}

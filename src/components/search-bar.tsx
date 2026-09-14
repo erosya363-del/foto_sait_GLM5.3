@@ -207,8 +207,8 @@ export function SearchBar() {
           aria-label="Единый поиск: ткань, модель, размер"
           enterKeyHint="search"
           autoComplete="off"
-          // 16px на мобильных — iOS не зумит поле
-          className="h-11 w-full rounded-[14px] border border-border bg-secondary/80 pl-10 pr-10 text-[16px] font-medium text-foreground outline-none transition-colors placeholder:text-muted-foreground/80 focus:border-[rgba(var(--brand-rgb),0.5)] sm:text-[14px]"
+          // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass со спекуляром
+          className="h-11 w-full rounded-full border border-border bg-secondary/70 pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-md transition-all placeholder:text-muted-foreground/80 focus:border-[rgba(var(--brand-rgb),0.5)] focus:bg-secondary/90 focus:shadow-[inset_0_1px_0_var(--glass-spec),0_0_0_4px_rgba(var(--brand-rgb),0.14)] sm:text-[14px]"
         />
         {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
         {!(value || searchQuery) && !searchOpen && (
@@ -225,7 +225,7 @@ export function SearchBar() {
               if (searchQuery) commit(null);
               inputRef.current?.focus();
             }}
-            className="absolute right-2.5 top-1/2 z-[1] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-muted/70 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="absolute right-2.5 top-1/2 z-[1] grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-muted/70 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-90"
           >
             <X size={14} />
           </button>
@@ -250,7 +250,7 @@ export function SearchBar() {
                     key={p}
                     type="button"
                     onClick={() => commit(p)}
-                    className="rounded-full border border-border bg-secondary/70 px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 backdrop-blur-md transition-colors hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                    className="rounded-full border border-border bg-secondary/70 px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 backdrop-blur-md transition-all hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] active:scale-95"
                   >
                     {p}
                   </button>
@@ -270,7 +270,7 @@ export function SearchBar() {
                     key={f.id}
                     type="button"
                     onClick={() => commit(f.name)}
-                    className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-secondary"
+                    className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-all hover:bg-secondary active:scale-[0.98]"
                   >
                     {f.swatchUrl ? (
                       <img src={f.swatchUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
@@ -304,7 +304,7 @@ export function SearchBar() {
                       setValue("");
                       inputRef.current?.blur();
                     }}
-                    className="group overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-[color:var(--brand)]"
+                    className="group overflow-hidden rounded-xl border border-border bg-card text-left transition-all hover:border-[color:var(--brand)] active:scale-[0.97]"
                   >
                     {/* Фиксированная пропорция — фото не налезает на текст */}
                     <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
@@ -352,7 +352,7 @@ export function SearchBar() {
           <button
             type="button"
             onClick={() => commit(null)}
-            className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition-all hover:text-foreground active:scale-95"
           >
             сбросить
           </button>
