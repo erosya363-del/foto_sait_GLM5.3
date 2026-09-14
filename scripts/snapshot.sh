@@ -27,7 +27,7 @@ SEQ=$((SEQ + 1))
 echo "$SEQ" > "$SEQ_FILE"
 SEQ_PADDED=$(printf "%03d" "$SEQ")
 
-echo "── [1/6] git commit…"
+echo "── [1/7] git commit…"
 if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
   git add -A
   git commit -m "snapshot: ${LABEL} (${STAMP})" -q

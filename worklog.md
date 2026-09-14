@@ -323,3 +323,18 @@ Work Log:
 
 Stage Summary:
 - Контрольная точка задокументирована и в git; документ — точка входа для новых сессий. Жду «да» + iPhone-проверку (звук/полоса/ярлык PWA).
+
+---
+Task ID: 21 (GitHub — внешнее хранилище истории)
+Agent: main (Super Z)
+Task: Подключить github.com/erosya363-del/foto_sait_GLM5.3 как внешнюю копию истории.
+
+Work Log:
+- Первый токен (fine-grained) дал 403 — у него не было Contents: Read and write (диагностика через API: «Resource not accessible»); владелец выдал классический PAT (repo).
+- История залита: main + 11 тегов snap/v1.5-* + v1.5-step4-base; ls-remote подтверждает.
+- Токен хранится ВНЕ проекта (~/.github-token, 600) — в копии/репо не попадает.
+- snapshot.sh: новый шаг [3/7] — автопуш main+теги при каждом снапшоте (нет токена → мягкий пропуск); CHECKPOINT.md §7 обновлён (GitHub = главный механизм восстановления).
+- Тест в бою: snapshot «github-backup» — push ✓.
+
+Stage Summary:
+- История теперь неуязвима: GitHub (вне песочницы) + git-теги локально. После сброса песочницы восстановление: git clone + token re-add.
