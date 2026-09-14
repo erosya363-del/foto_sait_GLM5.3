@@ -79,7 +79,7 @@ function ModeSwitch() {
   const mode = usePortal((s) => s.catalogMode);
   const setMode = usePortal((s) => s.setCatalogMode);
   return (
-    <div className="flex items-center gap-0.5 rounded-xl border border-border bg-secondary/60 p-0.5">
+    <div className="mode-switch flex items-center gap-0.5 rounded-xl border border-border bg-secondary/60 p-0.5">
       {MODES.map(({ key, Icon, label }) => (
         <button
           key={key}
@@ -89,7 +89,7 @@ function ModeSwitch() {
           aria-pressed={mode === key}
           onClick={() => setMode(key)}
           className={cn(
-            "grid h-8 w-9 place-items-center rounded-lg transition-colors",
+            "relative grid h-8 w-9 place-items-center rounded-lg transition-colors",
             mode === key
               ? "bg-[color:var(--brand)] text-[color:var(--primary-foreground)]"
               : "text-muted-foreground hover:text-foreground"
@@ -583,6 +583,7 @@ function LevelMaterialVariants({ material }: { material: string }) {
 function SearchResults({ query }: { query: string }) {
   const mode = usePortal((s) => s.catalogMode);
   const crumbs = useCatalogCrumbs();
+  const applySearch = usePortal((s) => s.applySearch);
   const { data, isLoading } = useQuery<SearchResp>({
     queryKey: ["search-full", query],
     queryFn: async () => {
@@ -622,13 +623,22 @@ function SearchResults({ query }: { query: string }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Ткани:</span>
           {data!.fabrics.map((f) => (
-            <span key={f.id} className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--brand)]/40 bg-[color:var(--brand)]/10 px-2.5 py-1 text-[12px] font-bold text-[color:var(--brand)]">
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => {
+                // F-009: чип ткани кликабелен — переход к результатам по этой ткани
+                applySearch(f.name);
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--brand)]/40 bg-[color:var(--brand)]/10 px-2.5 py-1 text-[12px] font-bold text-[color:var(--brand)] transition-all hover:border-[color:var(--brand)]/70 active:scale-95"
+            >
               {f.swatchUrl && <img src={f.swatchUrl} alt="" className="h-[18px] w-[18px] rounded-full object-cover" />}
               {f.name}
               <span className="grid h-[16px] min-w-[16px] place-items-center rounded-full bg-[color:var(--brand)] px-1 text-[9.5px] text-white">
                 {f.count}
               </span>
-            </span>
+            </button>
           ))}
         </div>
       )}

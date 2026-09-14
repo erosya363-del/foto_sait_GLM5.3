@@ -37,6 +37,12 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "sait_copy_1",
+    "sait_copy_2",
+    "skills",
+    "download",
+    "tool-results",
+    "scripts"
   ]
 }

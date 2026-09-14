@@ -1,0 +1,398 @@
+{
+  "startedAt": "2026-09-14T19:45:37.407Z",
+  "findings": [],
+  "stats": {
+    "sections": {
+      "catalog": {
+        "overflowX": 0,
+        "brokenImgs": [],
+        "small": [
+          "Как в системе (28×28)",
+          "Светлая (28×28)",
+          "Тёмная (28×28)"
+        ],
+        "overlapped": [],
+        "invisible": [],
+        "btnCount": 36
+      },
+      "stock": {
+        "overflowX": 0,
+        "brokenImgs": [],
+        "small": [
+          "Как в системе (28×28)",
+          "Светлая (28×28)",
+          "Тёмная (28×28)",
+          "Компактный вид (36×32)",
+          "Карточки (36×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "BUTTON (35×32)",
+          "Скопировать название (32×32)",
+          "BUTTON (35×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)",
+          "Скопировать название (32×32)"
+        ],
+        "overlapped": [
+          {
+            "btn": "Скопировать название",
+            "by": "BUTTON.pill-item",
+            "pos": "287,730",
+            "floating": "pill-item"
+          },
+          {
+            "btn": "2",
+            "by": "SPAN.text-[10px] font-semibold",
+            "pos": "337,730",
+            "floating": "pill-item"
+          }
+        ],
+        "invisible": [],
+        "btnCount": 59
+      },
+      "upload": {
+        "overflowX": 0,
+        "brokenImgs": [],
+        "small": [
+          "Как в системе (28×28)",
+          "Светлая (28×28)",
+          "Тёмная (28×28)"
+        ],
+        "overlapped": [],
+        "invisible": [],
+        "btnCount": 25
+      },
+      "admin": {
+        "overflowX": 0,
+        "brokenImgs": [],
+        "small": [
+          "Как в системе (28×28)",
+          "Светлая (28×28)",
+          "Тёмная (28×28)"
+        ],
+        "overlapped": [],
+        "invisible": [],
+        "btnCount": 63
+      }
+    },
+    "viewports": {
+      "320x568": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "360x640": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "375x667": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "390x760": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "393x852": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "412x915": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "430x932": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "768x1024": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "820x1180": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "1024x1366": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "1280x800": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "1366x768": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "1440x900": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "1920x1080": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "852x393": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "932x430": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 59
+        }
+      }
+    },
+    "back": {},
+    "offline": {
+      "bodyLen": 451,
+      "hasSplash": true,
+      "title": "Склад мебели · Askona"
+    },
+    "upload": {
+      "previews": true,
+      "status": 200,
+      "okScreen": true,
+      "body": "{\"ok\":true,\"variantId\":\"cmu1nl4230007szz8mdc0psds\",\"uploaded\":2,\"rejected\":[]}"
+    },
+    "pillStyles": {
+      "mobile": {
+        "catalog": {
+          "navZ": "40",
+          "navPos": "fixed",
+          "navDisplay": "block",
+          "shellH": 64,
+          "shellW": 362,
+          "radius": "999px",
+          "bg": "rgba(56, 62, 70, 0.9)",
+          "blur": "blur(80px) saturate(1.7)",
+          "border": "rgba(255, 255, 255, 0.16)",
+          "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
+          "cls": "pill-shell pill-active",
+          "bottomInset": "10px",
+          "mainPadB": "108px",
+          "winH": 760
+        },
+        "stock": {
+          "navZ": "40",
+          "navPos": "fixed",
+          "navDisplay": "block",
+          "shellH": 64,
+          "shellW": 362,
+          "radius": "999px",
+          "bg": "rgba(56, 62, 70, 0.9)",
+          "blur": "blur(80px) saturate(1.7)",
+          "border": "rgba(255, 255, 255, 0.16)",
+          "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
+          "cls": "pill-shell pill-active",
+          "bottomInset": "10px",
+          "mainPadB": "108px",
+          "winH": 760
+        },
+        "upload": {
+          "navZ": "40",
+          "navPos": "fixed",
+          "navDisplay": "block",
+          "shellH": 64,
+          "shellW": 362,
+          "radius": "999px",
+          "bg": "rgba(56, 62, 70, 0.9)",
+          "blur": "blur(80px) saturate(1.7)",
+          "border": "rgba(255, 255, 255, 0.16)",
+          "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
+          "cls": "pill-shell pill-active",
+          "bottomInset": "10px",
+          "mainPadB": "108px",
+          "winH": 760
+        },
+        "admin": {
+          "navZ": "40",
+          "navPos": "fixed",
+          "navDisplay": "block",
+          "shellH": 64,
+          "shellW": 362,
+          "radius": "999px",
+          "bg": "rgba(56, 62, 70, 0.9)",
+          "blur": "blur(80px) saturate(1.7)",
+          "border": "rgba(255, 255, 255, 0.16)",
+          "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
+          "cls": "pill-shell pill-active",
+          "bottomInset": "10px",
+          "mainPadB": "108px",
+          "winH": 760
+        }
+      }
+    }
+  }
+}

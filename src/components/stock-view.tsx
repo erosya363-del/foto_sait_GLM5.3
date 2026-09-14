@@ -159,7 +159,7 @@ export function StockView() {
           {/* Шаг 1 v1.5: пружинный сегмент-контрол складов */}
           <WarehouseSegmented className="mt-2.5" />
         </div>
-        <div className="flex items-center gap-0.5 rounded-xl border border-border bg-secondary/60 p-0.5">
+        <div className="mode-switch flex items-center gap-0.5 rounded-xl border border-border bg-secondary/60 p-0.5">
           <button
             type="button"
             title="Компактно"
@@ -167,7 +167,7 @@ export function StockView() {
             aria-pressed={mode === "compact"}
             onClick={() => setMode("compact" as StockMode)}
             className={cn(
-              "grid h-8 w-9 place-items-center rounded-lg transition-colors",
+              "relative grid h-8 w-9 place-items-center rounded-lg transition-colors",
               mode === "compact" ? "bg-[color:var(--brand)] text-[color:var(--primary-foreground)]" : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -180,7 +180,7 @@ export function StockView() {
             aria-pressed={mode === "cards"}
             onClick={() => setMode("cards" as StockMode)}
             className={cn(
-              "grid h-8 w-9 place-items-center rounded-lg transition-colors",
+              "relative grid h-8 w-9 place-items-center rounded-lg transition-colors",
               mode === "cards" ? "bg-[color:var(--brand)] text-[color:var(--primary-foreground)]" : "text-muted-foreground hover:text-foreground"
             )}
           >

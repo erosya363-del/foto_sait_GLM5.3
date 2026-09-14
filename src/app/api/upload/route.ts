@@ -71,36 +71,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Добавьте хотя бы одно фото" }, { status: 400 });
     }
 
-    // ── Вариант: найти по комбинации или создать ──────────────────────
-    let variant = await db.productVariant.findFirst({
-      where: { categoryId, modelId, materialId, sizeId, deletedAt: null },
-    });
-    if (!variant) {
-      variant = await db.productVariant.create({
-        data: { categoryId, modelId, materialId, sizeId },
-      });
-    }
-
-    // Признаки: привязать к варианту (дубликаты пропускаем)
-    if (tagIds.length > 0) {
-      await db.productVariantTag.createMany({
-        data: tagIds.map((tagId) => ({ variantId: variant.id, tagId })),
-        skipDuplicates: true,
-      });
-    }
-
-    // ── Приём и обработка файлов ──────────────────────────────────────
+    // ── Приём и подготовка файлов (ДО создания варианта — ФИКС F-003:
+    //    если все файлы отклонены, пустой вариант в каталоге не появляется) ──
     const rejected: Array<{ name: string; reason: string }> = [];
     const accepted = files.slice(0, MAX_FILES);
     files.slice(MAX_FILES).forEach((f) => rejected.push({ name: f.name, reason: "Лимит 10 фото за раз" }));
 
     await ensureDirs();
-    const maxAgg = await db.photo.aggregate({
-      where: { variantId: variant.id },
-      _max: { sortOrder: true },
-    });
-    let sortOrder = (maxAgg._max.sortOrder ?? -1) + 1;
-    let uploaded = 0;
+    const prepared: Array<{
+      name: string; thumbName: string; optBuf: Buffer; thumbBuf: Buffer;
+    }> = [];
 
     for (const file of accepted) {
       const ext = ACCEPT[file.type];
@@ -145,24 +125,70 @@ export async function POST(req: NextRequest) {
           .toBuffer();
 
         const name = uniqueName(ext);
-        const thumbName = `${name}.jpg`;
-        await Promise.all([
-          writeFile(path.join(UPLOADS_OPT_DIR, name), optBuf),
-          writeFile(path.join(UPLOADS_THUMB_DIR, thumbName), thumbBuf),
-        ]);
+        prepared.push({ name, thumbName: `${name}.jpg`, optBuf, thumbBuf });
+      } catch {
+        rejected.push({ name: file.name, reason: "Не удалось обработать изображение" });
+      }
+    }
 
+    if (prepared.length === 0) {
+      return NextResponse.json(
+        { error: "Ни одно фото не принято", uploaded: 0, rejected },
+        { status: 400 }
+      );
+    }
+
+    // ── Вариант: найти по комбинации или создать (только когда есть фото) ──
+    let variant = await db.productVariant.findFirst({
+      where: { categoryId, modelId, materialId, sizeId, deletedAt: null },
+    });
+    if (!variant) {
+      variant = await db.productVariant.create({
+        data: { categoryId, modelId, materialId, sizeId },
+      });
+    }
+
+    // Признаки: привязать к варианту (дубликаты отсекаем вручную — skipDuplicates
+    // в createMany недоступен для SQLite в текущем клиенте Prisma)
+    if (tagIds.length > 0) {
+      const existing = await db.productVariantTag.findMany({
+        where: { variantId: variant.id, tagId: { in: tagIds } },
+        select: { tagId: true },
+      });
+      const have = new Set(existing.map((e) => e.tagId));
+      const fresh = [...new Set(tagIds)].filter((t) => !have.has(t));
+      if (fresh.length > 0) {
+        await db.productVariantTag.createMany({
+          data: fresh.map((tagId) => ({ variantId: variant.id, tagId })),
+        });
+      }
+    }
+
+    const maxAgg = await db.photo.aggregate({
+      where: { variantId: variant.id },
+      _max: { sortOrder: true },
+    });
+    let sortOrder = (maxAgg._max.sortOrder ?? -1) + 1;
+    let uploaded = 0;
+
+    for (const p of prepared) {
+      try {
+        await Promise.all([
+          writeFile(path.join(UPLOADS_OPT_DIR, p.name), p.optBuf),
+          writeFile(path.join(UPLOADS_THUMB_DIR, p.thumbName), p.thumbBuf),
+        ]);
         await db.photo.create({
           data: {
             variantId: variant.id,
-            url: `/uploads/optimized/${name}`,
-            thumbUrl: `/uploads/thumbs/${thumbName}`,
+            url: `/uploads/optimized/${p.name}`,
+            thumbUrl: `/uploads/thumbs/${p.thumbName}`,
             comment,
             sortOrder: sortOrder++,
           },
         });
         uploaded++;
       } catch {
-        rejected.push({ name: file.name, reason: "Не удалось обработать изображение" });
+        rejected.push({ name: p.name, reason: "Не удалось сохранить файл" });
       }
     }
 

@@ -82,6 +82,12 @@ export default function RootLayout({
             } catch (e) {}
           })();`}
         </Script>
+        {/* F-002 offline: регистрация минимального SW (network-first, fallback
+            только для навигаций). readyState-гейт: window "load" мог уже пройти
+            к моменту инъекции afterInteractive-скрипта. Ошибки — молча. */}
+        <Script id="sw-register" strategy="afterInteractive">
+          {`if ("serviceWorker" in navigator) { var __swReg = function () { navigator.serviceWorker.register("/sw.js").catch(function () {}); }; if (document.readyState === "complete") __swReg(); else window.addEventListener("load", __swReg); }`}
+        </Script>
       </head>
       <body className={`${inter.variable} ${unbounded.variable} antialiased`}>
         <Providers>{children}</Providers>

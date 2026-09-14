@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UploadCloud, X, ImagePlus, CheckCircle2, Loader2, Images } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +26,36 @@ export function UploadView() {
   const [done, setDone] = useState<{ variantId: string; count: number; rejected: Array<{ name: string; reason: string }> } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const openProduct = usePortal((s) => s.openProduct);
+
+  /* ФИКС F-004: кэш object URL на файл — URL создаётся один раз на файл,
+     переиспользуется при удалении соседей и отзывается при очистке.
+     Раньше каждый removeAt/createObjectURL терял старые URL — утечка памяти. */
+  const urlCache = useRef(new Map<File, string>());
+  const urlFor = (f: File) => {
+    let u = urlCache.current.get(f);
+    if (!u) {
+      u = URL.createObjectURL(f);
+      urlCache.current.set(f, u);
+    }
+    return u;
+  };
+  const revokeAll = () => {
+    urlCache.current.forEach((u) => URL.revokeObjectURL(u));
+    urlCache.current.clear();
+  };
+  // отзываем все URL при уходе со страницы загрузки
+  useEffect(() => () => revokeAll(), []);
+
+  /* ФИКС F-005: страховка от случайного закрытия страницы во время отправки */
+  useEffect(() => {
+    if (!busy) return;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [busy]);
 
   const { data: d } = useQuery<Dictionaries>({
     queryKey: ["dictionaries"],
@@ -67,7 +97,7 @@ export function UploadView() {
     setFiles((prev) => {
       const merged = [...prev, ...ok].slice(0, MAX_FILES);
       if (prev.length + ok.length > MAX_FILES) toast.warning(`Выбрано ${prev.length + ok.length} — взяты первые ${MAX_FILES}`);
-      setPreviews(merged.map((f) => URL.createObjectURL(f)));
+      setPreviews(merged.map(urlFor));
       return merged;
     });
   }
@@ -75,7 +105,8 @@ export function UploadView() {
   function removeAt(i: number) {
     setFiles((prev) => {
       const next = prev.filter((_, idx) => idx !== i);
-      setPreviews(next.map((f) => URL.createObjectURL(f)));
+      // ФИКС F-004: URL берутся из кэша — новых object URL не создаётся
+      setPreviews(next.map(urlFor));
       return next;
     });
   }
@@ -135,6 +166,7 @@ export function UploadView() {
         rej.forEach((r) => toast.warning(`${r.name}: ${r.reason}`, { duration: 9000 }));
         setFiles([]);
         setPreviews([]);
+        revokeAll(); // ФИКС F-004: отзываем object URL после успешной загрузки
       } else {
         const msg = String(j.error || `Ошибка сервера (${xhr.status})`);
         toast.error(msg, { duration: 8000 });

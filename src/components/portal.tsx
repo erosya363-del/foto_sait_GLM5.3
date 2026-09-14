@@ -111,6 +111,11 @@ function BackButton({ className }: { className?: string }) {
       onClick={() => {
         playTick();
         if (usePortal.getState().productId) dismissProduct();
+        // ФИКС F-001: слои каталога теперь В ИСТОРИИ (push-эффект следит за cat*/
+        // searchQuery), поэтому встроенной «Назад» достаточно применить back() —
+        // пуш-эффект сам создаст запись согласованному состоянию, а браузерный
+        // Back проходит те же уровни послойно (suppressAndBack здесь нельзя:
+        // popstate применит состояние ПРЕДЫДУЩЕЙ записи и перепрыгнет слой).
         else usePortal.getState().back();
       }}
       className={cn("lg-back", className)}
@@ -244,6 +249,10 @@ export function Portal() {
   const restored = usePortal((s) => s.restored);
   const searchOpen = usePortal((s) => s.searchOpen);
   const searchQuery = usePortal((s) => s.searchQuery);
+  const catCategory = usePortal((s) => s.catCategory);
+  const catModel = usePortal((s) => s.catModel);
+  const catFabrics = usePortal((s) => s.catFabrics);
+  const catMaterial = usePortal((s) => s.catMaterial);
   const title = useHeaderTitle();
   const searchVisible = view === "catalog" || view === "stock";
   useWowEffects();
@@ -431,6 +440,9 @@ export function Portal() {
   }, [searchFabOpen]);
 
   // ── History API: каждый новый слой/раздел — отдельная запись ─────
+  // ФИКС F-001: в deps включены ВСЕ слои (cat*/searchQuery) — раньше запись
+  // пушилась только на смену view/productId/viewerOpen, поэтому дриллдаун
+  // каталога не попадал в историю и браузерный Back выкидывал из приложения.
   useEffect(() => {
     if (!restored || isPushSuppressed()) return;
     const cur = (window.history.state as { portal?: PortalSnapshot } | null)?.portal;
@@ -439,16 +451,16 @@ export function Portal() {
       cur.view === view &&
       cur.productId === productId &&
       cur.viewerOpen === viewerOpen &&
-      cur.searchQuery === usePortal.getState().searchQuery &&
-      cur.catModel === usePortal.getState().catModel &&
-      cur.catCategory === usePortal.getState().catCategory &&
-      cur.catFabrics === usePortal.getState().catFabrics &&
-      cur.catMaterial === usePortal.getState().catMaterial
+      cur.searchQuery === searchQuery &&
+      cur.catModel === catModel &&
+      cur.catCategory === catCategory &&
+      cur.catFabrics === catFabrics &&
+      cur.catMaterial === catMaterial
     ) {
       return; // запись уже актуальна (после popstate / restore) — не дублируем
     }
     window.history.pushState(snapshot(), "");
-  }, [restored, view, productId, viewerOpen]);
+  }, [restored, view, productId, viewerOpen, searchQuery, catCategory, catModel, catFabrics, catMaterial]);
 
   // ── Браузерный Back/Forward: применяем верхний слой из истории ───
   useEffect(() => {

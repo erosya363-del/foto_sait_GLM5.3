@@ -305,10 +305,19 @@ if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>).__portal = usePortal;
 }
 
-/** Текущее состояние для записи в history.state */
-export function snapshot(): { portal: PortalSnapshot } {
+/** Текущее состояние для записи в history.state.
+ *  КРИТИЧНО (ФИКС reload-on-back): сохраняем ВСЕ посторонние поля history.state
+ *  (в т.ч. маркер __NA сервиса Next.js App Router). Если затереть их — Next
+ *  считает запись «легаси» и на Back делает ПОЛНУЮ перезагрузку страницы
+ *  вместо same-document popstate. */
+export function snapshot(): Record<string, unknown> {
   const s = usePortal.getState();
+  const base =
+    typeof window !== "undefined"
+      ? ((window.history.state ?? {}) as Record<string, unknown>)
+      : {};
   return {
+    ...base,
     portal: {
       view: s.view,
       productId: s.productId,

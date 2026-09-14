@@ -399,3 +399,29 @@ Work Log:
 Stage Summary:
 - GitHub снова актуален: main + 13 тегов, включая точку восстановления v1.7 «мутное стекло» (4ec6a55).
 - Новый токен переживает сброс песочницы только в памяти владельца — при следующем сбросе потребуется новый (или тот же) токен заново.
+
+---
+Task ID: 25 (Полный аудит и стабилизация фронтенда — план из 27 этапов)
+Agent: main (Super Z)
+Task: «План полного аудита и доработки фронтенда»: P0-аудит (runtime+статика), адаптивность, нижняя навигация, сплэш, Back/history, upload, админка, остатки, PWA, отчёт-таблица, исправления пакетами. Косметику не трогать до устранения функциональных ошибок.
+
+Work Log:
+- АУДИТ-RUNTIME (scripts/audit-full.mjs, Playwright): 5 разделов (каталог/остатки/загрузка/админ+4 таба) на 390×760; 16 вьюпортов 320→1920 + landscape 852×393/932×430; map интерактивных элементов с детектором перекрытий (elementFromPoint, фильтры: pointer-events/opacity/клипы лент/плавающая навигация); сбор console/pageerror/HTTP≥400/requestfailed/битые img; сплэш (старт/F5/переходы); offline; upload E2E.
+- АУДИТ-СТАТИКА: eslint (2 ошибки — мусор sait_copy_1), tsc (1 реальная: skipDuplicates не в типах клиента SQLite), ревью portal/store/catalog/search/upload/admin/stock/photo-viewer/breadcrumbs/темы/манифест/sw, API-контракты (upload, admin 409, stock photoMatch).
+- ГЛАВНЫЙ P0 НАЙДЕН И ПОБЕЖДЁН (F-001, reload-on-back): push-эффект portal.tsx следил только за [restored, view, productId, viewerOpen] → дриллдаун каталога НЕ пушится в историю; глубже — снапшоты затирали маркер __NA Next.js App Router → браузерный Back делал ПОЛНУЮ перезагрузку (Next считает запись «легаси»). ФИКС: (1) deps push-эффекта включают catCategory/catModel/catFabrics/catMaterial/searchQuery; (2) snapshot() мерджит существующий history.state ({...base, portal}) — маркер Next сохраняется, Back стал same-document послойным. Встроенная «Назад» оставлена на back() (suppressAndBack для каталога НЕ годится: popstate применяет состояние предыдущей записи и перепрыгивает слой).
+- F-002 offline: минимальный public/sw.js (network-first, кэш ровно одного документа "/", fallback ТОЛЬКО для навигаций — «вечного старого фронтенда» не будет) + регистрация в layout.tsx с readyState-гейтом (load мог уже пройти). Оффлайн-перезагрузка теперь даёт оболочку+сплэш (bodyLen 451 vs ~0).
+- F-003 upload API: файлы обрабатываются ДО создания варианта — отклонённые фото больше не оставляют пустых вариантов-призраков.
+- F-004/F-005 upload UI: кэш objectURL (Map<File,url>) — revoke при очистке/unmount, removeAt больше не пересоздаёт URL (утечка памяти устранена); beforeunload-страховка во время busy.
+- F-006 tsc: skipDuplicates убран из createMany (недоступен для SQLite в этом клиенте — 500 в рантайме при загрузке с признаками); дедупликация тегов вручную (findMany→filter→createMany).
+- F-007 инфраструктура: sait_copy_1/2, skills, download, tool-results, scripts → в ignores eslint и exclude tsconfig; prisma generate.
+- F-008 a11y: hit-зоны ::after inset -8px для кнопок темы (28px→44 тап) и переключателей вида (mode-switch, relative).
+- F-009 поиск: чипы тканей в результатах — теперь кнопки (переход к результатам по ткани).
+- F-010 dead code: stats-strip.tsx удалён (нигде не использовался).
+- ИНСТРУМЕНТЫ: scripts/audit-back.mjs (4 back-сценария в чистых сессиях — каноничный harness Back; history.back() внутри evaluate глушится патчем Playwright — используем page.goBack), scripts/cleanup-audit-junk.mjs (автоочистка тестовых фото/вариантов, вызывается из аудита), dbg-скрипты удалены после расследования.
+- РЕГРЕСС ПОСЛЕ ПАКЕТА: tick 9/9, pill 60/60, s4 34/34, s5 ✓, s6 68/68 (флаки переходов темы — повтор зелёный), audit-back 4/4, audit-full 0 находок, lint 0, tsc src/ 0. build+restart OK.
+- УРОКИ: (1) next build копирует public/ в standalone на момент сборки — файлы, добавленные после, нужно cp+restart (ловушка №3); (2) evaluate(history.back()) в Playwright ненадёжен — только page.goBack/CDP; (3) история в Next App Router: никогда не затирать history.state — только мерджить.
+
+Stage Summary:
+- Приложение прошло полный аудит по плану владельца: 0 P0/P1-находок, Back послойный и без перезагрузок, offline — оболочка вместо белого экрана, upload не мусорит БД, утечки памяти закрыты, tsc/lint чистые.
+- Готовность по критериям ЭТАПА 27: консоль чиста, перекрытых кнопок нет, overflow нет (320→1920+landscape), сплэш только на старте, пилюля едина, safe-area работает, Back логичен, каталог проходит Category→Model→Fabric→Photos, upload/admin/stocks стабильны, PWA-манифест валиден.
+- Осталось на владельце: device test на реальных iPhone/Android (ЭТАП 21), перезапуск полной E2E-матрицы по требованию.

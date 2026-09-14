@@ -392,6 +392,16 @@ body {
   box-shadow: inset 0 1px 0 var(--glass-spec), 0 8px 22px -12px rgba(0, 0, 0, 0.45);
 }
 
+/* F-008 (a11y): расширенная зона нажатия мелких круглых кнопок (тема 28px,
+   режимы вида 36×32) — тап-таргет ~44px без визуальных изменений. */
+.lg-theme button::after,
+.mode-switch button::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+}
+
 /* ─── Liquid Glass: стеклянные строки админки ───────────────────────────── */
 .lg-row {
   display: flex;
