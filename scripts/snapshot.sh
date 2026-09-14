@@ -38,9 +38,25 @@ fi
 
 TAG="snap/v1.5-${LABEL}"
 git tag -f "$TAG" >/dev/null 2>&1 || true
-echo "── [2/6] тег $TAG"
+echo "── [2/7] тег $TAG"
 
-echo "── [3/6] зеркалирование в sait_copy_1…"
+echo "── [3/7] push в GitHub (main + теги)…"
+# Токен живёт ВНЕ проекта (~/.github-token) — в копии/репозиторий не попадает.
+# Нет токена (после сброса песочницы) — снапшот всё равно создаётся, пуш пропускается.
+if [ -s "$HOME/.github-token" ] && git remote get-url origin >/dev/null 2>&1; then
+  PTOKEN=$(cat "$HOME/.github-token")
+  PURL=$(git remote get-url origin)
+  PURL="${PURL/https:\/\//https:\/\/erosya363-del:${PTOKEN}@}"
+  if git push "$PURL" main --tags --quiet 2>/dev/null; then
+    echo "        ✓ отправлено в GitHub"
+  else
+    echo "        ⚠ push не удался (токен/сеть) — снапшот создан, пуш повторится в следующий раз"
+  fi
+else
+  echo "        пропущено (нет ~/.github-token)"
+fi
+
+echo "── [4/7] зеркалирование в sait_copy_1…"
 # ВАЖНО: якоря с ведущим «/» — иначе исключение «upload» зацепит src/app/api/upload
 rsync -a --delete \
   --exclude=/node_modules --exclude=/.next --exclude=/sait_copy_1 --exclude=/sait_copy_2 --exclude=/public/sait_copy_2.tar.gz \
@@ -54,7 +70,7 @@ rsync -a .git/ sait_copy_1/.git/ >/dev/null
 echo "        $(du -sh sait_copy_1 | cut -f1)"
 
 SNAP="download/snapshots/snap-${SEQ_PADDED}-v1.5-${LABEL}-${STAMP}.tar.gz"
-echo "── [4/6] tar-снапшот → $SNAP"
+echo "── [5/7] tar-снапшот → $SNAP"
 # ВАЖНО: «./NAME» — якорь к корню архива; «NAME» без якоря выкинет и src/app/api/upload!
 tar -czf "$SNAP" \
   --exclude=./node_modules --exclude=./.next --exclude=./sait_copy_1 --exclude=./sait_copy_2 --exclude=./public/sait_copy_2.tar.gz \
@@ -65,12 +81,12 @@ tar -czf "$SNAP" \
 SIZE=$(du -sh "$SNAP" | cut -f1)
 echo "        $SIZE"
 
-echo "── [5/6] постоянные копии документации…"
+echo "── [6/7] постоянные копии документации…"
 for f in worklog.md STATUS.md CHANGELOG.md; do
   [ -f "$f" ] && cp -f "$f" "download/logs/${f%.md}-$(date +%Y%m%d).md"
 done
 
-echo "── [6/6] INDEX.md"
+echo "── [7/7] INDEX.md"
 {
   echo "| ${SEQ_PADDED} | ${STAMP} | v1.5 · ${LABEL} | $(git rev-parse --short HEAD) | ${SIZE} |"
 } >> download/snapshots/INDEX.md
