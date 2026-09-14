@@ -60,12 +60,14 @@ model Model {
 }
 
 model Material {
-  id        String           @id @default(cuid())
-  name      String
-  type      String           @default("Ткань")
-  swatchUrl String?
-  active    Boolean          @default(true)
-  variants  ProductVariant[]
+  id         String           @id @default(cuid())
+  name       String
+  type       String           @default("Ткань")
+  swatchUrl  String?
+  // Цветовая гамма ткани («Серая», «Бежевая»…) — показывается на карточках каталога тканей
+  colorGroup String?
+  active     Boolean          @default(true)
+  variants   ProductVariant[]
 
   @@map("materials")
 }

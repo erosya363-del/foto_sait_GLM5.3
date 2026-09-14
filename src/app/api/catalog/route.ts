@@ -74,15 +74,27 @@ export async function GET(req: NextRequest) {
   }
 
   if (level === "fabrics") {
-    // Шаг 4: все ткани (материалы с вариантами) — карточки с превью и счётчиками
+    // Все ткани (материалы с вариантами). Карточка:
+    //  — фото каталога ткани (Material.swatchUrl) имеет приоритет;
+    //  — иначе последнее (по дате) фото дивана с этой тканью;
+    //  — подпись: название + цветовая гамма (colorGroup).
     const rows = await db.productVariant.findMany({
       where: { active: true, materialId: { not: null } },
-      include: { material: true, photos: { where: { deletedAt: null }, orderBy: { sortOrder: "asc" } } },
+      include: { material: true, photos: { where: { deletedAt: null }, orderBy: { createdAt: "desc" } } },
       orderBy: { createdAt: "asc" },
     });
     const map = new Map<
       string,
-      { id: string; name: string; swatchUrl: string | null; thumb: string | null; variantCount: number; newCount: number }
+      {
+        id: string;
+        name: string;
+        colorGroup: string | null;
+        swatchUrl: string | null;
+        thumb: string | null;
+        variantCount: number;
+        newCount: number;
+        latestAt: number;
+      }
     >();
     for (const v of rows) {
       if (!v.material) continue;
@@ -90,13 +102,23 @@ export async function GET(req: NextRequest) {
         map.get(v.material.id) ?? {
           id: v.material.id,
           name: v.material.name,
+          colorGroup: v.material.colorGroup,
           swatchUrl: v.material.swatchUrl,
-          thumb: v.photos[0]?.thumbUrl ?? null,
+          thumb: null as string | null,
           variantCount: 0,
           newCount: 0,
+          latestAt: 0,
         };
       cur.variantCount++;
       if (isNewVariant(v.createdAt, v.photos)) cur.newCount++;
+      const newest = v.photos[0]; // фото отсортированы по дате (свежие первыми)
+      if (newest) {
+        const t = newest.createdAt.getTime();
+        if (t >= cur.latestAt) {
+          cur.latestAt = t;
+          cur.thumb = newest.thumbUrl;
+        }
+      }
       map.set(v.material.id, cur);
     }
     const fabrics = [...map.values()]
@@ -159,6 +181,7 @@ export async function GET(req: NextRequest) {
     variantName: v.variantName,
     materialId: v.materialId,
     materialName: v.material?.name ?? null,
+    materialGroup: v.material?.colorGroup ?? null,
     sizeId: v.sizeId,
     sizeName: v.size?.name ?? null,
     description: v.description,

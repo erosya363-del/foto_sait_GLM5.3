@@ -246,6 +246,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, photosToTrash: trashed.count });
     }
 
+    // ── Ткани: задать/очистить цветовую гамму ────────────────────────
+    if (action === "setFabricGroup") {
+      if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
+      const colorGroup = String(body.colorGroup ?? "").trim() || null;
+      await db.material.update({ where: { id }, data: { colorGroup } });
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── Ткани: привязать/очистить фото каталога ткани (swatch) ───────
+    if (action === "setFabricPhoto") {
+      if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
+      const swatchUrl = String(body.swatchUrl ?? "").trim();
+      await db.material.update({ where: { id }, data: { swatchUrl: swatchUrl || null } });
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Справочники: УДАЛИТЬ (вместо отключения). Занято в товарах — отказ с числом. ──
     if (action === "delete") {
       if (!id) return NextResponse.json({ error: "Нужен id" }, { status: 400 });
@@ -316,9 +332,10 @@ export async function POST(req: NextRequest) {
       }
       if (entity === "material") {
         const type = String(body.type ?? "Ткань");
+        const colorGroup = String(body.colorGroup ?? "").trim() || null;
         const dup = await db.material.findFirst({ where: { name, type } });
         if (dup) return NextResponse.json({ error: `Материал «${name}» уже есть` }, { status: 409 });
-        const row = await db.material.create({ data: { name, type } });
+        const row = await db.material.create({ data: { name, type, colorGroup } });
         return NextResponse.json({ ok: true, id: row.id });
       }
       if (entity === "size") {

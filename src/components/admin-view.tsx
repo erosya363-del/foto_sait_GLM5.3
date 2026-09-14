@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Dictionaries } from "@/lib/portal";
 import { ProductManager } from "@/components/admin-product-manager";
+import { FabricManager } from "@/components/admin-fabric-manager";
 import { PhotoBank } from "@/components/admin-photobank";
 import {
   Tabs,
@@ -371,7 +372,7 @@ export function AdminView() {
         </p>
       </div>
 
-      {/* Три крупных раздела вместо семи мелких вкладок */}
+      {/* Четыре крупных раздела: ткани заводятся отдельно от товара */}
       <Tabs defaultValue="products" className="rise rise-1">
         <TabsList className="flex w-full gap-1 rounded-2xl border border-border bg-secondary p-1 sm:w-auto">
           <TabsTrigger
@@ -379,6 +380,12 @@ export function AdminView() {
             className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
           >
             Товары
+          </TabsTrigger>
+          <TabsTrigger
+            value="fabrics"
+            className="rounded-xl px-4 py-1.5 text-[13px] font-semibold data-[state=active]:bg-[rgba(var(--brand-rgb),0.18)] data-[state=active]:text-[color:var(--accent-foreground)]"
+          >
+            Ткани
           </TabsTrigger>
           <TabsTrigger
             value="dicts"
@@ -395,6 +402,9 @@ export function AdminView() {
         </TabsList>
         <TabsContent value="products" className="mt-4">
           <ProductManager />
+        </TabsContent>
+        <TabsContent value="fabrics" className="mt-4">
+          <FabricManager />
         </TabsContent>
         <TabsContent value="dicts" className="mt-4">
           <DictionariesSection />

@@ -58,6 +58,8 @@ export type CatalogItemDto = {
   variantName?: string | null;
   materialId: string | null;
   materialName: string | null;
+  /** Цветовая гамма ткани (Material.colorGroup) — показывается на карточках */
+  materialGroup?: string | null;
   sizeId: string | null;
   sizeName: string | null;
   description: string | null;
@@ -70,7 +72,7 @@ export type CatalogItemDto = {
 export type Dictionaries = {
   categories: Array<{ id: string; name: string; active: boolean }>;
   models: Array<{ id: string; name: string; categoryId: string; categoryName: string; active: boolean }>;
-  materials: Array<{ id: string; name: string; type: string; active: boolean }>;
+  materials: Array<{ id: string; name: string; type: string; active: boolean; swatchUrl?: string | null; colorGroup?: string | null }>;
   sizes: Array<{ id: string; name: string; active: boolean }>;
   tags: Array<{ id: string; name: string; active: boolean }>;
 };

@@ -589,13 +589,25 @@ body {
     0 18px 44px -14px rgba(0, 0, 0, 0.6),
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
   transition: background 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+  /* Drag-to-select: движение пальца по капсуле НЕ скроллит страницу
+     и не вызывает выделение текста/долгий тап-коллаут */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-/* Листают — стекло прозрачнее и тише */
+/* Листают — стекло почти исчезает, активный пункт продолжает гореть (80%) */
 .pill-shell.pill-dim {
   background: var(--pill-bg-dim);
-  box-shadow:
-    0 10px 28px -14px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-color: transparent;
+  box-shadow: none;
+}
+.pill-shell.pill-dim .pill-item {
+  opacity: 0.38;
+}
+.pill-shell.pill-dim .pill-item.is-on,
+.pill-shell.pill-dim .pill-item.is-drag {
+  opacity: 0.8;
 }
 /* Коснулись пилюли — плотное активное стекло до тапа мимо */
 .pill-shell.pill-active {
@@ -622,10 +634,14 @@ body {
   min-width: 44px;
   border-radius: 999px;
   color: var(--muted-foreground);
-  transition: color 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: color 0.2s ease, opacity 0.25s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .pill-item:active {
   transform: scale(0.92);
+}
+/* Пункт под пальцем во время drag — подсвечен как активный */
+.pill-item.is-drag {
+  color: var(--brand-strong);
 }
 /* «Линза» активного пункта — стеклянная капсула, перетекающая между вкладками
    (framer-motion layoutId в portal.tsx двигает именно этот элемент);
@@ -685,8 +701,19 @@ body {
 }
 
 /* ─── Шапка: сворачивание при скролле + плавающий поиск-кружок ─────────────
-   Наверху — полная шапка (лого, склад, заголовок) и панель поиска.
-   Листают — остаётся компакт: «Назад» + тема, поиск сжимается в кружок. */
+   Наверху — полная шапка («Назад», заголовок раздела, тема) и панель поиска.
+   Листают — шапка становится ПОЛНОСТЬЮ прозрачной («как будто её не было»):
+   остаются только плавающие «Назад» (крупная) и кружок поиска СЛЕВА. */
+header.glass {
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease;
+}
+.header-collapsed header.glass {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 .header-fade {
   transition: opacity 0.26s ease, transform 0.26s ease;
 }
@@ -711,11 +738,11 @@ body {
   opacity: 0;
   pointer-events: none;
 }
-/* Кружок поиска — появляется вместо панели при скролле */
+/* Кружок поиска — появляется вместо панели при скролле, СЛЕВА (одна сторона со «Назад») */
 .search-fab {
   position: fixed;
-  top: calc(58px + env(safe-area-inset-top));
-  right: 14px;
+  top: calc(60px + env(safe-area-inset-top));
+  left: 14px;
   z-index: 46;
   display: grid;
   place-items: center;
@@ -787,6 +814,12 @@ body {
     opacity: 1;
     transform: none;
     pointer-events: auto;
+  }
+  .header-collapsed header.glass {
+    background: var(--glass);
+    border-color: var(--border);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    backdrop-filter: blur(22px) saturate(1.5);
   }
   .header-collapsed .search-collapse {
     grid-template-rows: 1fr;
@@ -961,53 +994,6 @@ body {
 
 /* recompile 1789167327 */
 
-/* ── Анимированная рамка поиска (вращающийся градиент при фокусе) ── */
-.search-frame {
-  position: relative;
-  border-radius: 16px;
-  padding: 1.5px;
-  background: var(--border);
-  transition: background 0.3s ease;
-}
-.search-frame::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--search-angle, 0deg),
-    transparent 0%,
-    rgba(var(--brand-rgb), 0.9) 12%,
-    transparent 30%
-  );
-  opacity: 0;
-  transition: opacity 0.35s ease;
-}
-.search-frame--live::before {
-  opacity: 1;
-  animation: search-spin 2.6s linear infinite;
-}
-.search-frame > input {
-  position: relative;
-  z-index: 1;
-}
-@property --search-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-@keyframes search-spin {
-  to {
-    --search-angle: 360deg;
-  }
-}
-/* Браузеры без @property — просто статичная подсветка бордера */
-@supports not (background: paint(x)) {
-  .search-frame--live {
-    background: rgba(var(--brand-rgb), 0.55);
-  }
-}
-
 /* ── iOS: фикс масштаба страницы при фокусе в поля ── */
 input,
 select,
@@ -1085,7 +1071,7 @@ label {
 }
 .fab-top {
   position: fixed;
-  right: 14px;
+  left: 14px;
   bottom: calc(118px + env(safe-area-inset-bottom));
   z-index: 45;
   display: grid;
@@ -1115,7 +1101,7 @@ label {
 }
 @media (min-width: 1024px) {
   .fab-top {
-    right: 26px;
+    left: 26px;
     bottom: 26px;
   }
 }

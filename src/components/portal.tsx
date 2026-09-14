@@ -8,7 +8,7 @@ import {
   type View, type Warehouse, type PortalSnapshot,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { playTick, haptic } from "@/lib/tick";
+import { playTick, playStep, haptic } from "@/lib/tick";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { BootSplash } from "@/components/boot-splash";
 import { SearchBar } from "@/components/search-bar";
@@ -57,29 +57,15 @@ function WarehouseSelect({ className }: { className?: string }) {
   );
 }
 
-/** Заголовок текущего экрана для шапки */
+/** Заголовок текущего экрана — только раздел, ничего лишнего (просьба пользователя) */
 function useHeaderTitle() {
   const view = usePortal((s) => s.view);
   const productId = usePortal((s) => s.productId);
-  const searchQuery = usePortal((s) => s.searchQuery);
-  const catCategory = usePortal((s) => s.catCategory);
-  const catModel = usePortal((s) => s.catModel);
-  const catFabrics = usePortal((s) => s.catFabrics);
-  const catMaterial = usePortal((s) => s.catMaterial);
   if (productId) return "Фото товара";
-  if (view === "catalog") {
-    if (searchQuery) {
-      const short = searchQuery.length > 12 ? searchQuery.slice(0, 11) + "…" : searchQuery;
-      return `Поиск: «${short}»`;
-    }
-    if (catFabrics) return catMaterial ?? "Все ткани";
-    if (catModel) return catModel;
-    if (catCategory) return catCategory;
-    return "Каталог";
-  }
-  if (view === "stock") return "Остатки";
-  if (view === "upload") return "Загрузка фото";
-  return "Админ";
+  if (view === "stock") return "Askona Остатки";
+  if (view === "upload") return "Askona Загрузка фото";
+  if (view === "admin") return "Askona Админ";
+  return "Askona Каталог";
 }
 
 /**
@@ -120,15 +106,16 @@ function BackButton({ className }: { className?: string }) {
       type="button"
       aria-label="Назад"
       onClick={() => {
+        playTick();
         if (usePortal.getState().productId) dismissProduct();
         else usePortal.getState().back();
       }}
       className={cn(
-        "grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border bg-secondary/70 text-foreground transition-colors hover:text-[color:var(--brand)] active:scale-90",
+        "grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border bg-secondary/70 text-foreground transition-colors hover:text-[color:var(--brand)] active:scale-90",
         className
       )}
     >
-      <ArrowLeft size={16} strokeWidth={2.3} />
+      <ArrowLeft size={20} strokeWidth={2.3} />
     </button>
   );
 }
@@ -248,6 +235,67 @@ export function Portal() {
   const searchVisible = view === "catalog" || view === "stock";
   useWowEffects();
 
+  /* ── Пилюля: бег линзы за пальцем (drag-to-select, как на iPhone) ───── */
+  const itemRefs = useRef(new Map<string, HTMLButtonElement>());
+  const dragRef = useRef<{ on: boolean; key: string | null }>({ on: false, key: null });
+  const suppressClickRef = useRef(false);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+
+  const pillActivate = (key: string) => {
+    if (key === "catalog") {
+      goCatalog(itemRefs.current.get("catalog") ?? null);
+    } else {
+      usePortal.getState().setView(key);
+      playTick();
+      haptic(10);
+    }
+  };
+
+  /** Пункт пилюли под точкой (палец может чуть съезжать — допуск ±12px) */
+  const keyAtPoint = (x: number, y: number): string | null => {
+    for (const [key, el] of itemRefs.current) {
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top - 12 && y <= r.bottom + 12) return key;
+    }
+    return null;
+  };
+
+  const onShellPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const key = keyAtPoint(e.clientX, e.clientY);
+    dragRef.current = { on: true, key };
+    setDragKey(key);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* старые браузеры без capture — drag просто не сработает */
+    }
+  };
+
+  const onShellPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current.on) return;
+    const key = keyAtPoint(e.clientX, e.clientY);
+    if (key && key !== dragRef.current.key) {
+      dragRef.current.key = key;
+      setDragKey(key);
+      playStep(); // тихий tick + лёгкая вибрация на каждом пункте
+    }
+  };
+
+  const onShellPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current.on) return;
+    dragRef.current.on = false;
+    const key = keyAtPoint(e.clientX, e.clientY) ?? dragRef.current.key;
+    setDragKey(null);
+    if (!key) return;
+    // активация здесь: синтетический click подавляем (сработал бы на старом пункте)
+    suppressClickRef.current = true;
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 500);
+    pillActivate(key);
+  };
+
   /* ── Шапка/пилюля: реакция на скролл и касание ────────────────────── */
   const [scrolled, setScrolled] = useState(false);
   const [pillTouched, setPillTouched] = useState(false);
@@ -255,8 +303,6 @@ export function Portal() {
   const [searchFabOpen, setSearchFabOpen] = useState(false);
   /* «Жидкий» переезд линзы — 480 мс после смены активного пункта */
   const [liquid, setLiquid] = useState(false);
-
-  const searchLensOn = (searchOpen || searchFabOpen) && !productId;
 
   useEffect(() => {
     usePortal.getState().restore();
@@ -301,7 +347,7 @@ export function Portal() {
   }, []);
 
   // Жидкий эффект: запуск на смену активного пункта пилюли
-  const activeKey = productId ? `product:${productId}` : searchLensOn ? "search" : view;
+  const activeKey = productId ? `product:${productId}` : view;
   const prevActiveKey = useRef(activeKey);
   useEffect(() => {
     if (prevActiveKey.current === activeKey) return;
@@ -546,8 +592,9 @@ export function Portal() {
       </aside>
 
       {/* Липкая шапка + панель поиска — мобильные и десктоп (в зоне контента).
-          При скролле шапка сворачивается: остаются «Назад» и тема (header-fade),
-          поиск сжимается и доступен из кружка (search-fab) ниже. */}
+          Наверху: «Назад» + заголовок раздела + тема. При скролле шапка становится
+          ПОЛНОСТЬЮ прозрачной — остаются только плавающие «Назад» (крупная) и
+          кружок поиска слева (search-fab), как просил пользователь. */}
       <div className={cn("sticky top-0 z-40 lg:ml-[248px]", scrolled && "header-collapsed")}>
         <header className="glass flex items-center gap-2 px-3 pb-2 pt-[max(10px,env(safe-area-inset-top))] sm:px-4">
           <div className="lg:hidden">
@@ -557,7 +604,7 @@ export function Portal() {
             type="button"
             onClick={() => goCatalog(usePortal.getState().productId != null ? null : undefined)}
             aria-label="На главную — Каталог фото"
-            className="header-fade shrink-0 max-[359px]:hidden"
+            className="header-fade hidden shrink-0 lg:block"
           >
             <img
               src="/logo-askona.png"
@@ -566,19 +613,21 @@ export function Portal() {
               draggable={false}
             />
           </button>
-          <div className="header-fade flex min-w-0 flex-col items-start">
-            <span className="max-w-[46vw] truncate font-display text-[13px] font-bold leading-none sm:text-[14px]" title={title}>
+          <div className="header-fade flex min-w-0 flex-1 flex-col items-start lg:flex-none">
+            <span className="max-w-[64vw] truncate font-display text-[13px] font-bold leading-none sm:text-[14px] lg:max-w-[46vw]" title={title}>
               {title}
             </span>
-            <div className="lg:hidden">
-              <WarehouseSelect className="mt-1 w-[102px] text-[9px]" />
+            <div className="mt-1 hidden lg:block">
+              <WarehouseSelect className="w-[102px] text-[9px]" />
             </div>
           </div>
-          <span className="min-w-2 flex-1" aria-hidden />
+          <span className="min-w-2 flex-1 lg:block" aria-hidden />
           <div className="hidden lg:block">
             <BackButton />
           </div>
-          <ThemeSwitch mini />
+          <span className="header-fade">
+            <ThemeSwitch mini />
+          </span>
         </header>
 
         {searchVisible && (
@@ -620,9 +669,10 @@ export function Portal() {
       </main>
 
       {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass, как в iOS 26).
-          «Линза» активного пункта перетекает между вкладками (layoutId, spring 430)
-          с жидким сквошем; 5-й пункт «Поиск» фокусирует поле и поднимает клавиатуру.
-          Реакция: листают — стекло прозрачнее (pill-dim); коснулись — плотнее (pill-active) до тапа мимо. */}
+          «Линза» перетекает между вкладками (layoutId, spring 430) с жидким сквошем;
+          если палец НЕ отрывается — линза бежит за пальцем по пунктам (drag-to-select).
+          Реакция: листают — стекло растворяется (pill-dim), активный пункт горит;
+          коснулись пилюли — плотное активное стекло (pill-active) до тапа мимо. */}
       <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
         <div
           className={cn(
@@ -631,24 +681,35 @@ export function Portal() {
             pillTouched && "pill-active",
             liquid && IS_CHROMIUM && "is-liquid"
           )}
+          onPointerDown={onShellPointerDown}
+          onPointerMove={onShellPointerMove}
+          onPointerUp={onShellPointerEnd}
+          onPointerCancel={onShellPointerEnd}
         >
           {NAV.map(({ key, short, Icon }) => {
-            const on = view === key && !productId && !searchLensOn;
+            const on = view === key && !productId;
+            const lensHere = dragKey ? dragKey === key : on;
             return (
               <button
                 key={key}
                 type="button"
+                ref={(el) => {
+                  if (el) itemRefs.current.set(key, el);
+                  else itemRefs.current.delete(key);
+                }}
                 onClick={(e) => {
+                  if (suppressClickRef.current) return; // активация уже сделана в pointerup
                   if (key === "catalog") goCatalog(e.currentTarget);
                   else {
                     usePortal.getState().setView(key);
+                    playTick();
                     haptic(10);
                   }
                 }}
-                className={cn("pill-item", on && "is-on")}
+                className={cn("pill-item", on && "is-on", dragKey === key && !on && "is-drag")}
                 aria-current={on ? "page" : undefined}
               >
-                {on && (
+                {lensHere && (
                   <motion.span
                     layoutId="nav-lens"
                     className={cn("nav-lens", liquid && "is-squash")}
@@ -662,26 +723,6 @@ export function Portal() {
               </button>
             );
           })}
-          {/* 5-й пункт «Поиск»: тап — фокус поля + клавиатура; пилюлю прячет .kb-open.
-              Линза стоит на «Поиске», пока поиск активен (дропдаун/подвесной). */}
-          <button
-            type="button"
-            onClick={openSearch}
-            className={cn("pill-item", searchLensOn && "is-on")}
-            aria-current={searchLensOn ? "page" : undefined}
-          >
-            {searchLensOn && (
-              <motion.span
-                layoutId="nav-lens"
-                className={cn("nav-lens", liquid && "is-squash")}
-                transition={{ type: "spring", stiffness: 430, damping: 36 }}
-              >
-                <span className="nav-lens-core" />
-              </motion.span>
-            )}
-            <Search size={21} strokeWidth={2.1} />
-            <span className="text-[10px] font-semibold">Поиск</span>
-          </button>
         </div>
       </nav>
 

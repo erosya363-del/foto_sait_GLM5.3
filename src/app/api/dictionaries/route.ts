@@ -22,7 +22,14 @@ export async function GET() {
       categoryName: m.category.name,
       active: m.active,
     })),
-    materials: materials.map((m) => ({ id: m.id, name: m.name, type: m.type, active: m.active })),
+    materials: materials.map((m) => ({
+      id: m.id,
+      name: m.name,
+      type: m.type,
+      active: m.active,
+      swatchUrl: m.swatchUrl,
+      colorGroup: m.colorGroup,
+    })),
     sizes: sizes.map((s) => ({ id: s.id, name: s.name, active: s.active })),
     tags: tags.map((t) => ({ id: t.id, name: t.name, active: t.active })),
   });

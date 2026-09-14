@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { usePortal } from "@/lib/store";
-import { cn } from "@/lib/utils";
 
 type SearchResp = {
   popular: string[];
@@ -15,12 +14,58 @@ type SearchResp = {
     modelName: string;
     variantName: string | null;
     materialName: string | null;
+    materialGroup?: string | null;
     sizeName: string | null;
     tags: string[];
     photo: { url: string; thumbUrl: string } | null;
     photoCount: number;
   }>;
 };
+
+/* ── Личные популярные запросы: частые вводы за последние 7 дней (localStorage) ── */
+const LOG_KEY = "skovo-search-log";
+type SearchLog = Record<string, number[]>;
+const WEEK = 7 * 24 * 3600 * 1000;
+
+function loadLog(): SearchLog {
+  try {
+    return JSON.parse(localStorage.getItem(LOG_KEY) || "{}") as SearchLog;
+  } catch {
+    return {};
+  }
+}
+
+/** Записать применённый запрос (Enter/чип/ткань) — помним 7 дней, всегда */
+function recordQuery(q: string) {
+  try {
+    const now = Date.now();
+    const fresh = loadLog();
+    const pruned: SearchLog = {};
+    for (const [k, v] of Object.entries(fresh)) {
+      const vv = v.filter((t) => t >= now - WEEK);
+      if (vv.length) pruned[k] = vv.slice(-30);
+    }
+    pruned[q] = [...(pruned[q] ?? []), now].slice(-30);
+    localStorage.setItem(LOG_KEY, JSON.stringify(pruned));
+  } catch {
+    /* приватный режим — не страшно */
+  }
+}
+
+/** Топ частых запросов за 7 дней (по числу, затем по свежести) */
+function popularFromLog(max = 6): string[] {
+  try {
+    const week = Date.now() - WEEK;
+    return Object.entries(loadLog())
+      .map(([q, ts]) => ({ q, n: ts.filter((t) => t >= week).length, last: Math.max(...ts) }))
+      .filter((r) => r.n > 0)
+      .sort((a, b) => b.n - a.n || b.last - a.last)
+      .slice(0, max)
+      .map((r) => r.q);
+  } catch {
+    return [];
+  }
+}
 
 const PHRASES = [
   "Поиск: ткань, модель, «sky»…",
@@ -119,6 +164,7 @@ export function SearchBar() {
   }, [searchOpen, setSearchOpen]);
 
   const commit = (q: string | null) => {
+    if (q) recordQuery(q);
     applySearch(q);
     setSearchOpen(false);
     setValue(q ?? "");
@@ -126,13 +172,18 @@ export function SearchBar() {
   };
 
   const hasDropdown = searchOpen;
-  const q = data?.popular ? undefined : undefined;
-  void q;
+
+  // Личные популярные — пересчитывать при каждом открытии дропдауна
+  const personal = useMemo(
+    () => (searchOpen && !debounced ? popularFromLog(6) : []),
+    [searchOpen, debounced]
+  );
 
   return (
     <div ref={wrapRef} className="relative">
-      {/* Поле с анимированным градиентным бордером */}
-      <div className={cn("search-frame", (searchOpen || isFetching) && "search-frame--live")}>
+      {/* Поле: серое, полупрозрачное (80%), тонкая чёткая рамка — никаких
+          анимированных/мигающих рамок (просьба пользователя) */}
+      <div className="relative">
         <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-muted-foreground" />
         <input
           ref={inputRef}
@@ -157,7 +208,7 @@ export function SearchBar() {
           enterKeyHint="search"
           autoComplete="off"
           // 16px на мобильных — iOS не зумит поле
-          className="h-11 w-full rounded-[14px] bg-secondary/60 pl-10 pr-10 text-[16px] font-medium text-foreground outline-none placeholder:text-muted-foreground/80 sm:text-[14px]"
+          className="h-11 w-full rounded-[14px] border border-border bg-secondary/80 pl-10 pr-10 text-[16px] font-medium text-foreground outline-none transition-colors placeholder:text-muted-foreground/80 focus:border-[rgba(var(--brand-rgb),0.5)] sm:text-[14px]"
         />
         {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
         {!(value || searchQuery) && !searchOpen && (
@@ -181,21 +232,25 @@ export function SearchBar() {
         )}
       </div>
 
-      {/* Дропдаун: непрозрачный, без внутренней анимации секций */}
+      {/* Дропдаун: полупрозрачный стеклянный (~80%) с размытым фоном,
+          без внутренней анимации секций */}
       {hasDropdown && (
-        <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 max-h-[min(62dvh,480px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-background p-2.5 shadow-2xl shadow-black/25">
+        <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 max-h-[min(62dvh,480px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-background/85 p-2.5 shadow-2xl shadow-black/25 backdrop-blur-xl">
           {!debounced && (
             <>
               <p className="px-1.5 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                Популярные запросы
+                {personal.length > 0 ? "Популярные за 7 дней" : "Популярные запросы"}
               </p>
               <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
-                {(data?.popular ?? ["Трентон", "Магни", "Локо", "sky", "casanova", "угловой", "акция", "160×200"]).map((p) => (
+                {(personal.length > 0
+                  ? [...personal, ...(data?.popular ?? []).filter((p) => !personal.includes(p))].slice(0, 8)
+                  : (data?.popular ?? ["Трентон", "Магни", "Локо", "Ника", "sky", "casanova", "угловой", "160×200"])
+                ).map((p) => (
                   <button
                     key={p}
                     type="button"
                     onClick={() => commit(p)}
-                    className="rounded-full border border-border bg-secondary px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 transition-colors hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
+                    className="rounded-full border border-border bg-secondary/70 px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 backdrop-blur-md transition-colors hover:border-[color:var(--brand)] hover:text-[color:var(--brand)]"
                   >
                     {p}
                   </button>
@@ -266,7 +321,7 @@ export function SearchBar() {
                     <div className="px-2 py-1.5">
                       <p className="truncate text-[12.5px] font-bold leading-tight">{v.modelName}</p>
                       <p className="truncate text-[11px] text-muted-foreground">
-                        {[v.materialName, v.sizeName].filter(Boolean).join(" · ")}
+                        {[v.materialName, v.materialGroup, v.sizeName].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                   </button>

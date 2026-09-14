@@ -61,11 +61,11 @@ ok("позиция fixed", navStyle.pos === "fixed");
 ok("плавает над низом (bottom 10px)", Math.abs(parseFloat(navStyle.bottom) - 10) < 1.5, navStyle.bottom);
 ok("обёртка не ловит клики мимо", navStyle.pe === "none");
 
-console.log("── 2. Пункты (5, включая «Поиск») и линза ──");
+console.log("── 2. Пункты (4, без «Поиск») и линза ──");
 const items = page.locator(".pill-item");
-ok("5 пунктов", (await items.count()) === 5);
+ok("4 пункта (пятый «Поиск» убран по просьбе)", (await items.count()) === 4);
 const labels = await items.allTextContents();
-ok("подписи на месте", /Каталог/.test(labels[0]) && /Остатки/.test(labels[1]) && /Загрузка/.test(labels[2]) && /Админ/.test(labels[3]) && /Поиск/.test(labels[4]), labels.join("|"));
+ok("подписи на месте, без «Поиск»", /Каталог/.test(labels[0]) && /Остатки/.test(labels[1]) && /Загрузка/.test(labels[2]) && /Админ/.test(labels[3]) && labels.every((l) => !/Поиск/.test(l)), labels.join("|"));
 
 ok("SVG-фильтр #nav-liquid в DOM", (await page.locator("#nav-liquid").count()) === 1);
 const lensCount = await page.locator(".nav-lens").count();
@@ -101,7 +101,7 @@ ok("сквош снят через ~700мс", !liquidAfter.squash && !liquidAfte
 const lensBox2 = await page.locator(".nav-lens").boundingBox();
 const item2 = await items.nth(1).boundingBox();
 ok("линза приземлилась на «Остатки»", Math.abs(lensBox2.x - item2.x) < 3, `lens=${lensBox2.x} item=${item2.x}`);
-ok("заголовок в шапке «Остатки»", (await page.locator("header .font-display").textContent())?.trim() === "Остатки");
+ok("заголовок в шапке «Askona Остатки»", (await page.locator("header .font-display").textContent())?.trim() === "Askona Остатки");
 
 console.log("── 4. Тап «Загрузка» → линза едет дальше ──");
 await items.nth(2).click();
@@ -111,7 +111,8 @@ const item3 = await items.nth(2).boundingBox();
 ok("линза на «Загрузка»", Math.abs(lensBox3.x - item3.x) < 3);
 
 console.log("── 5. Пилюля и скролл/касание: pill-dim / pill-active ──");
-await items.nth(0).click(); // в каталог
+// скроллим «Остатки» (на L1 каталога места под скролл почти нет)
+await page.locator('nav.pill-nav button:has-text("Остатки")').click();
 await page.waitForTimeout(600);
 ok("наверху: нет pill-dim", !(await shell.evaluate((el) => el.classList.contains("pill-dim"))));
 // безопасный «тап мимо» (не по контенту — чтобы не открыть товар): синтетический pointerdown
@@ -125,8 +126,12 @@ await page.waitForTimeout(400);
 ok("после скролла: pill-dim", await shell.evaluate((el) => el.classList.contains("pill-dim")));
 const bgDim = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
 ok("фон прозрачнее при скролле", bgDim !== shellStyle.bg, `${shellStyle.bg} → ${bgDim}`);
-// касание пилюли → pill-active; касание мимо → снялось
-await page.locator(".pill-shell").click({ position: { x: 10, y: 10 } });
+ok("неактивные пункты при скролле растворяются (0.38)", Math.abs(Number(await items.nth(0).evaluate((el) => getComputedStyle(el).opacity)) - 0.38) < 0.03);
+ok("активный пункт горит (0.8)", Math.abs(Number(await items.nth(1).evaluate((el) => getComputedStyle(el).opacity)) - 0.8) < 0.03);
+// касание пилюли → pill-active; касание мимо → снялось (синтетический pointerdown — без активации пункта)
+await page.evaluate(() => {
+  document.querySelector(".pill-shell")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 99 }));
+});
 await page.waitForTimeout(250);
 ok("тап по пилюле → pill-active", await shell.evaluate((el) => el.classList.contains("pill-active")));
 const bgActive = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -136,20 +141,25 @@ await page.waitForTimeout(250);
 ok("тап мимо → pill-active снялся", !(await shell.evaluate((el) => el.classList.contains("pill-active"))));
 
 console.log("── 6. Шапка: сворачивание при скролле ──");
+await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+await page.waitForTimeout(400);
 const logo = page.locator("header img[alt='Askona']");
 const searchPanel = page.locator(".search-collapse");
-ok("наверху: лого виден", await logo.isVisible());
+ok("на мобиле: лого скрыт (заголовок «Askona …» вместо него)", !(await logo.isVisible()));
 ok("наверху: панель поиска видна", await searchPanel.isVisible());
+ok("наверху: заголовок раздела виден", await page.locator("header .font-display").isVisible());
 const fab0 = page.locator(".search-fab");
 ok("наверху: кружка нет", (await fab0.count()) === 0);
 await page.evaluate(() => window.scrollTo({ top: 300, behavior: "instant" }));
 await page.waitForTimeout(500);
-const logoOpacity = await logo.evaluate((el) => Number(getComputedStyle(el.closest(".header-fade") ?? el).opacity));
-ok("при скролле: лого скрыт (opacity 0)", logoOpacity < 0.05, `opacity=${logoOpacity}`);
+const titleOpacity = await page.locator("header .font-display").evaluate((el) => Number(getComputedStyle(el.closest(".header-fade") ?? el).opacity));
+ok("при скролле: заголовок скрыт (opacity 0)", titleOpacity < 0.05, `opacity=${titleOpacity}`);
+const hdrBg = await page.locator("header.glass").evaluate((el) => getComputedStyle(el).backgroundColor);
+ok("при скролле: шапка полностью прозрачна", hdrBg === "rgba(0, 0, 0, 0)", hdrBg);
 const panelH = (await searchPanel.boundingBox())?.height ?? 0;
 ok("при скролле: панель поиска свернулась (высота ≤2px)", panelH <= 2, `h=${panelH}`);
 ok("при скролле: кружок поиска появился", await fab0.isVisible());
-ok("при скролле: «Назад»/тема остались (шапка жива)", await page.locator("header").isVisible());
+ok("при скролле: «Назад» осталась (шапка жива)", await page.locator("header").isVisible());
 
 console.log("── 7. Кружок → подвесной поиск → листание сжимает ──");
 await fab0.click();
@@ -160,9 +170,6 @@ const panelH2 = (await searchPanel.boundingBox())?.height ?? 0;
 ok("панельный поиск при этом свернут", panelH2 <= 2, `h=${panelH2}`);
 const focused1 = await page.evaluate(() => document.activeElement?.id);
 ok("поле поиска в фокусе (клавиатура)", focused1 === "global-search", `activeElement=${focused1}`);
-// линза пересела на «Поиск»
-const lensOnSearch = await items.nth(4).evaluate((el) => el.classList.contains("is-on"));
-ok("линза на пункте «Поиск»", lensOnSearch);
 // печатаем — дропдаун в подвесном формате
 await page.keyboard.type("диван");
 await page.waitForTimeout(600);
@@ -176,18 +183,12 @@ await page.evaluate(() => window.scrollTo({ top: 108, behavior: "instant" }));
 await page.waitForTimeout(500);
 ok("кружок вернулся", await fab0.isVisible());
 
-console.log("── 8. Пункт «Поиск» в пилюле: тап фокусирует поле ──");
-await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-await page.waitForTimeout(500);
-await items.nth(4).click();
-await page.waitForTimeout(350);
-const focused2 = await page.evaluate(() => document.activeElement?.id);
-ok("тап «Поиск» в пилюле → поле в фокусе", focused2 === "global-search", `activeElement=${focused2}`);
-ok("линза на «Поиске» после тапа", await items.nth(4).evaluate((el) => el.classList.contains("is-on")));
-await page.keyboard.press("Escape");
-await page.waitForTimeout(250);
-
-console.log("── 9. Повторный тап «Каталог»: пульс + мгновенный верх (Шаг 2) ──");
+console.log("── 8. Повторный тап «Каталог»: пульс + мгновенный верх (Шаг 2) ──");
+await items.nth(0).click(); // из остатков → в каталог (обычный переход, без пульса)
+await page.waitForTimeout(600);
+// запас скролла: открываем «Все ткани» (длинная сетка)
+await page.evaluate(() => window.__portal.setState({ catFabrics: true }));
+await page.waitForTimeout(900);
 await page.evaluate(() => window.scrollTo({ top: 999999, behavior: "instant" }));
 await page.waitForTimeout(250);
 const beforePulse = await page.evaluate(() => window.scrollY);

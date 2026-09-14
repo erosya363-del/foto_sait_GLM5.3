@@ -1,14 +1,22 @@
 "use client";
 
 /**
- * Короткий «tick» через Web Audio — звуковой отклик навигации.
- * Вибрация: navigator.vibrate вызывается ВСЕГДА на всех телефонах, где API
- * существует (Android/Chrome — вибрирует; iOS Safari/PWA API не даёт и молча
- * пропустит — там отклик дают tick + пульс). AudioContext ленивый, в жесте тапа.
+ * Звуковой «tick» (Web Audio) + вибрация на всех телефонах, где ОНА ВОЗМОЖНА.
+ *
+ * Правда про iPhone: Apple НЕ даёт веб-страницам и PWA доступ к вибромотору —
+ * navigator.vibrate в Safari/Home-Screen-PWA просто отсутствует, и никакой код
+ * физически не может заставить iPhone вибрировать. Поэтому универсальный отклик:
+ *  — Android/Chrome: navigator.vibrate (настоящая вибрация) + tick;
+ *  — iPhone: короткий «tick» (щелчок, как у системных клавиш) + визуальный пульс —
+ *    это максимум, который iOS технически позволяет.
+ * AudioContext ленивый, создаётся в жесте тапа.
  */
 let ctx: AudioContext | null = null;
 
-export function playTick() {
+type TickKind = "tap" | "step";
+
+export function playTick(kind: TickKind = "tap") {
+  haptic(kind === "step" ? 4 : 12);
   if (typeof window === "undefined") return;
   try {
     const AC =
@@ -22,21 +30,30 @@ export function playTick() {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
+    // «step» — тише и короче (бег линзы за пальцем), «tap» — обычный отклик
+    const peak = kind === "step" ? 0.05 : 0.11;
+    const dur = kind === "step" ? 0.045 : 0.07;
+
     osc.type = "triangle";
-    osc.frequency.setValueAtTime(1750, t);
-    osc.frequency.exponentialRampToValueAtTime(950, t + 0.055);
+    osc.frequency.setValueAtTime(kind === "step" ? 1500 : 1750, t);
+    osc.frequency.exponentialRampToValueAtTime(950, t + dur);
 
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.11, t + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    gain.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(t);
-    osc.stop(t + 0.085);
+    osc.stop(t + dur + 0.02);
   } catch {
     /* тишина лучше ошибки */
   }
+}
+
+/** Короткий тихий tick при «пробегании» линзы по пунктам во время drag. */
+export function playStep() {
+  playTick("step");
 }
 
 /** Вибрация на всех телефонах, где есть navigator.vibrate (iOS игнорирует молча). */

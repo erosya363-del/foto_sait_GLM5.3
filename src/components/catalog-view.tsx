@@ -32,6 +32,7 @@ type SearchResp = {
 type FabricDto = {
   id: string;
   name: string;
+  colorGroup?: string | null;
   swatchUrl: string | null;
   thumb: string | null;
   variantCount: number;
@@ -48,12 +49,12 @@ type FreshItem = {
   variantName: string | null;
 };
 
-/** Пилюля NEW на карточках (варианты, ткани, лента новинок) */
+/** Пилюля NEW на карточках (варианты, ткани, лента новинок) — компактная */
 function NewBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "pointer-events-none absolute z-10 rounded-full bg-[color:var(--brand)] px-2 py-0.5 text-[9.5px] font-extrabold tracking-[0.08em] text-white shadow-lg shadow-[color:var(--brand)]/35",
+        "pointer-events-none absolute z-10 rounded-full bg-[color:var(--brand)] px-1.5 py-px text-[8px] font-extrabold tracking-[0.06em] text-white shadow-md shadow-[color:var(--brand)]/35",
         className
       )}
     >
@@ -132,10 +133,10 @@ function FreshStrip() {
             key={p.photoId}
             type="button"
             onClick={() => openProduct(p.variantId, "catalog")}
-            className="card-hover spot rise group relative w-[122px] shrink-0 snap-start overflow-hidden rounded-2xl border border-border bg-card text-left"
+            className="card-hover spot rise group relative w-[100px] shrink-0 snap-start overflow-hidden rounded-2xl border border-border bg-card text-left"
             style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
           >
-            <NewBadge className="left-2 top-2" />
+            <NewBadge className="left-1.5 top-1.5" />
             <div className="aspect-[4/5] w-full overflow-hidden bg-muted">
               <img
                 src={p.thumbUrl}
@@ -145,10 +146,10 @@ function FreshStrip() {
                 className="img-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
               />
             </div>
-            <div className="flex flex-col gap-px p-2">
-              <p className="truncate text-[11.5px] font-bold leading-tight">{p.modelName}</p>
+            <div className="flex flex-col gap-px p-1.5">
+              <p className="truncate text-[10.5px] font-bold leading-tight">{p.modelName}</p>
               {p.variantName && (
-                <p className="truncate text-[10.5px] font-semibold text-[color:var(--brand)]">{p.variantName}</p>
+                <p className="truncate text-[9.5px] font-semibold text-[color:var(--brand)]">{p.variantName}</p>
               )}
             </div>
           </motion.button>
@@ -284,7 +285,7 @@ function VariantCard({
 }: {
   v: {
     id: string; modelName: string; variantName: string | null;
-    materialName: string | null; sizeName: string | null;
+    materialName: string | null; materialGroup?: string | null; sizeName: string | null;
     tags: string[]; photo: { thumbUrl: string } | null; photoCount: number;
     isNew?: boolean;
   };
@@ -292,7 +293,9 @@ function VariantCard({
   index: number;
 }) {
   const openProduct = usePortal((s) => s.openProduct);
-  const meta = [v.materialName, v.sizeName].filter(Boolean).join(" · ");
+  /* Карточка: модель → ткань → цветовая гамма. Больше ничего:
+     «Акция/Стандарт/Со встроенным топпером» и признаки убраны (просьба пользователя). */
+  const meta = [v.materialName, v.materialGroup].filter(Boolean).join(" · ");
 
   if (mode === "rows") {
     return (
@@ -317,11 +320,8 @@ function VariantCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-[13.5px] font-bold leading-tight">{v.modelName}</p>
-          {v.variantName && <p className="truncate text-[12px] font-semibold text-[color:var(--brand)]">{v.variantName}</p>}
-          <p className="truncate text-[11.5px] text-muted-foreground">{meta}</p>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {v.tags.slice(0, 2).map((t) => <span key={t} className="tag-mini">{t}</span>)}
-          </div>
+          {v.materialName && <p className="truncate text-[12px] font-semibold text-[color:var(--brand)]">{v.materialName}</p>}
+          <p className="truncate text-[11.5px] text-muted-foreground">{meta || "\u00A0"}</p>
         </div>
         <span className="flex shrink-0 items-center gap-1 self-start rounded-full bg-black/45 px-2 py-1 text-[10px] font-bold text-white">
           <Camera size={10} strokeWidth={2.5} />{v.photoCount}
@@ -365,16 +365,12 @@ function VariantCard({
       </div>
       <div className={cn("flex flex-col gap-1 p-3", large && "p-4")}>
         <p className={cn("font-display font-bold leading-tight", large ? "text-[16px]" : "text-[13px]")}>{v.modelName}</p>
-        {v.variantName && (
-          <p className="text-[12px] font-semibold text-[color:var(--brand)]">{v.variantName}</p>
+        {v.materialName && (
+          <p className="text-[12px] font-semibold text-[color:var(--brand)]">{v.materialName}</p>
         )}
-        <p className={cn("text-muted-foreground", large ? "text-[12.5px]" : "text-[11.5px]")}>{meta}</p>
-        <div className="flex flex-wrap gap-1">
-          {v.tags.slice(0, large ? 3 : 2).map((t) => (
-            <span key={t} className="tag-mini">{t}</span>
-          ))}
-          {v.tags.length > (large ? 3 : 2) && <span className="tag-mini opacity-70">+{v.tags.length - (large ? 3 : 2)}</span>}
-        </div>
+        <p className={cn("text-muted-foreground", large ? "text-[12.5px]" : "text-[11.5px]")}>
+          {meta || "\u00A0"}
+        </p>
       </div>
     </motion.button>
   );
@@ -417,6 +413,7 @@ function LevelVariants({ category, model }: { category: string; model: string })
         modelName: it.modelName,
         variantName: it.variantName ?? null,
         materialName: it.materialName,
+        materialGroup: it.materialGroup,
         sizeName: it.sizeName,
         tags: it.tags,
         isNew: it.isNew,
@@ -465,6 +462,8 @@ function LevelFabrics() {
     <div className="flex flex-col gap-3">
       <Breadcrumbs crumbs={crumbs} />
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+      {/* Карточка ткани: фото каталога ткани → последнее фото дивана по дате;
+          подпись: название ткани + цветовая гамма — больше ничего */}
         {(data?.fabrics ?? []).map((f, i) => (
           <button
             key={f.id}
@@ -474,8 +473,16 @@ function LevelFabrics() {
             style={{ animationDelay: `${Math.min(i % 12, 10) * 40}ms` }}
           >
             <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
-              {f.newCount > 0 && <NewBadge className="left-2.5 top-2.5" />}
-              {f.thumb ? (
+              {f.newCount > 0 && <NewBadge className="left-1.5 top-1.5" />}
+              {f.swatchUrl ? (
+                <img
+                  src={f.swatchUrl}
+                  alt={f.name}
+                  loading="lazy"
+                  onLoad={(e) => e.currentTarget.classList.add("is-loaded")}
+                  className="img-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                />
+              ) : f.thumb ? (
                 <img
                   src={f.thumb}
                   alt={f.name}
@@ -483,8 +490,6 @@ function LevelFabrics() {
                   onLoad={(e) => e.currentTarget.classList.add("is-loaded")}
                   className="img-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                 />
-              ) : f.swatchUrl ? (
-                <img src={f.swatchUrl} alt={f.name} className="h-full w-full object-cover" loading="lazy" />
               ) : (
                 <span className="grid h-full w-full place-items-center text-muted-foreground">
                   <SwatchBook size={26} />
@@ -493,12 +498,9 @@ function LevelFabrics() {
             </div>
             <div className="flex flex-col gap-0.5 p-3">
               <p className="truncate text-[13px] font-bold">{f.name}</p>
-              <p className="text-[11.5px] text-muted-foreground">
-                {f.variantCount} вариантов фото
-                {f.newCount > 0 && (
-                  <span className="ml-1 font-bold text-[color:var(--brand)]">· {f.newCount} новых</span>
-                )}
-              </p>
+              {f.colorGroup && (
+                <p className="truncate text-[11.5px] font-semibold text-[color:var(--brand)]">{f.colorGroup}</p>
+              )}
             </div>
           </button>
         ))}
@@ -541,6 +543,7 @@ function LevelMaterialVariants({ material }: { material: string }) {
         modelName: it.modelName,
         variantName: it.variantName ?? null,
         materialName: it.materialName,
+        materialGroup: it.materialGroup,
         sizeName: it.sizeName,
         tags: it.tags,
         isNew: it.isNew,

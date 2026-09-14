@@ -61,7 +61,8 @@ console.log("── 4. Экран «Все ткани» ──");
 await fabricsBtn.click();
 await page.waitForTimeout(900);
 const title = await page.locator("header span").first().textContent();
-ok("заголовок «Все ткани»", title?.trim() === "Все ткани", `(got «${title}»)`);
+ok("заголовок фиксированный «Askona Каталог» (Шаг 6)", title?.trim() === "Askona Каталог", `(got «${title}»)`);
+ok("крошка «Все ткани» на месте", (await page.locator('[role="navigation"]:has-text("Все ткани")').count()) > 0);
 const fabricCards = page.locator("main button:has(img)");
 ok("карточки тканей есть", (await fabricCards.count()) > 0, `(${await fabricCards.count()})`);
 const fabricNew = await page.locator("main span:has-text('NEW')").count();
@@ -71,13 +72,14 @@ console.log("── 5. Ткань → её варианты + крошки ─�
 await fabricCards.first().click();
 await page.waitForTimeout(900);
 const title2 = await page.locator("header span").first().textContent();
-ok("заголовок = имя ткани", /Sky Velvet|Casanova/.test(title2 || ""), `(got «${title2}»)`);
+ok("заголовок остаётся «Askona Каталог» (Шаг 6)", title2?.trim() === "Askona Каталог", `(got «${title2}»)`);
+ok("крошка-ткань показывает имя", (await page.locator('[role="navigation"]:has-text("Sky Velvet"), [role="navigation"]:has-text("Casanova")').count()) > 0);
 ok("крошка «Все ткани» тапабельна", await page.locator('button:has-text("Все ткани")').first().isVisible());
 ok("варианты ткани показаны", (await page.locator("main button:has(img)").count()) > 0);
 // тап по «Все ткани» в крошках — назад к списку тканей
 await page.locator('button:has-text("Все ткани")').first().click();
 await page.waitForTimeout(600);
-ok("вернулись к списку тканей", (await page.locator("header span").first().textContent())?.trim() === "Все ткани");
+ok("вернулись к списку тканей", (await fabricCards.count()) > 0);
 
 console.log("── 6. Назад (кнопка шапки) → уровень 1 ──");
 await page.locator('header button[aria-label="Назад"]').first().click();
