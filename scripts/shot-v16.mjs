@@ -55,8 +55,12 @@ await shot("v16-desktop-admin", async (p) => {
   await p.waitForTimeout(1100);
 }, { width: 1440, height: 900 });
 
-// 6. Мобильный: подвесной поиск-стекло (капсула + дропдаун)
+// 6. Мобильный: подвесной поиск-стекло (капсула + дропдаун).
+//    Скроллим ВНУТРИ категории — на L1 после чистки мусора страница короткая.
 await shot("v16-mob-search-pop", async (p) => {
+  const row = p.locator("main button, main a").filter({ hasText: /Все ткани/ }).first();
+  if (await row.count()) await row.click();
+  await p.waitForTimeout(900);
   await p.evaluate(() => window.scrollTo({ top: 400, behavior: "instant" }));
   await p.waitForTimeout(600);
   await p.locator(".search-fab").click();

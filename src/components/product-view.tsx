@@ -26,15 +26,15 @@ export function ProductView() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Шапка: круглая «Назад» 40px (ведёт к источнику открытия) + крошки пути + счётчик фото */}
+      {/* Шапка: круглая «Назад» (единая lg-back 44px/иконка 20, как в шапке) + крошки пути + счётчик фото */}
       <div className="flex items-center gap-2.5">
         <button
           type="button"
           onClick={dismissProduct}
           aria-label="Назад"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border bg-secondary/70 text-foreground transition-all hover:text-[color:var(--brand)] active:scale-90"
+          className="lg-back"
         >
-          <ArrowLeft size={18} strokeWidth={2.3} />
+          <ArrowLeft size={20} strokeWidth={2.3} />
         </button>
         <div className="min-w-0 flex-1">
           {data ? (

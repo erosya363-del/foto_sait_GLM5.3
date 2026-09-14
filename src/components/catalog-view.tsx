@@ -229,7 +229,7 @@ function LevelCategories() {
             {fabricCount > 0 ? `${fabricCount} тканей · ${variantTotal} вариантов фото` : "Обзор каталога по тканям"}
           </span>
         </span>
-        <ChevronRight size={17} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        <ChevronRight size={16} strokeWidth={2.3} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
       </button>
     </div>
   );
@@ -270,7 +270,7 @@ function LevelModels({ category }: { category: string }) {
             <span className="block truncate font-display text-[14.5px] font-bold">{m.name}</span>
             <span className="text-[12px] text-muted-foreground">{m.variantCount} вариантов фото</span>
           </span>
-          <ChevronRight size={17} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          <ChevronRight size={16} strokeWidth={2.3} className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </button>
       ))}
       {!data && Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-[72px] rounded-2xl" />)}

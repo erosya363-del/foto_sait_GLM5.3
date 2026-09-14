@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Pencil, Plus, Trash2, Vibrate, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { vibrateTest } from "@/lib/tick";
+import { vibrateTest, hapticThump } from "@/lib/tick";
 import type { Dictionaries } from "@/lib/portal";
 import { ProductManager } from "@/components/admin-product-manager";
 import { FabricManager } from "@/components/admin-fabric-manager";
@@ -49,20 +49,22 @@ async function api(body: Record<string, unknown>) {
 }
 
 /**
- * Самопроверка вибрации: на Android шлёт реальный паттерн [14,60,24];
- * на iPhone честно объясняет, что Apple запрещает вибрацию в веб (не баг сайта).
+ * Самопроверка вибрации: на Android шлёт реальный усиленный паттерн [45,60,45,60,150];
+ * на iPhone Apple запрещает вибромотор — вместо этого играем низкочастотный
+ * аудио-«толчок» (динамик бубнит корпус — ладонь чувствует тычок).
  */
 function vibroTest() {
   const ok = vibrateTest();
   if (ok) {
-    toast.success("Команда вибрации отправлена [14, 60, 24] мс", {
-      description: "Телефон должен дважды толкнуться. Работает на Android/Chrome.",
+    toast.success("Команда вибрации отправлена [45, 60, 45, 60, 150] мс", {
+      description: "Телефон должен трижды толкнуться. Работает на Android/Chrome.",
     });
   } else {
-    toast.error("Vibration API недоступна на этом устройстве", {
+    hapticThump();
+    toast.error("Вибромотор недоступен (ограничение Apple) — проигран аудио-толчок", {
       description:
-        "iPhone: Apple не даёт веб-страницам и PWA доступ к вибромотору — это ограничение iOS, а не сайта. Отклик на iPhone — tick-звук + пружина стекла. Android: проверьте, что вибрация включена в системе.",
-      duration: 10000,
+        "iPhone: iOS не даёт веб-страницам доступ к вибромотору — это запрет Apple, а не сайта. Вместо вибрации — низкочастотный импульс через динамик (78→48 Гц): корпус физически «бубнит» — ладонь чувствует тычок на каждом тапе. Проверьте, что звук не на беззвучном.",
+      duration: 12000,
     });
   }
 }

@@ -44,7 +44,7 @@ function WarehouseSelect({ className }: { className?: string }) {
       onChange={(e) => setWarehouse(e.target.value as Warehouse)}
       aria-label="Склад"
       className={cn(
-        "cursor-pointer appearance-none rounded-full border border-border bg-secondary/80 px-2.5 py-1 text-left font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_1px_0_var(--glass-spec)] backdrop-blur-md outline-none transition-colors hover:border-[rgba(var(--brand-rgb),0.4)] hover:text-[color:var(--brand)] active:scale-95",
+        "cursor-pointer appearance-none rounded-full border border-border bg-secondary/80 px-2.5 py-1 text-left font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_1px_0_var(--glass-spec)] backdrop-blur-md outline-none transition-colors hover:border-[var(--border-strong)] hover:text-foreground active:scale-95",
         className
       )}
     >
@@ -229,7 +229,7 @@ function ScrollHud() {
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         className={cn("fab-top", progress > 0.14 && "is-show")}
       >
-        <ArrowUp size={17} strokeWidth={2.4} />
+        <ArrowUp size={20} strokeWidth={2.3} />
       </button>
     </>
   );
@@ -638,9 +638,9 @@ export function Portal() {
           <div className="hidden lg:block">
             <BackButton />
           </div>
-          <span className="header-fade">
-            <ThemeSwitch mini />
-          </span>
+          {/* Переключатель темы: НЕ растворяется при скролле (фикс — «пропадает настройка темы»),
+              стеклянная капсула видна всегда */}
+          <ThemeSwitch mini />
         </header>
 
         {searchVisible && (
@@ -747,7 +747,7 @@ export function Portal() {
           onClick={openSearch}
           className={cn("search-fab lg:hidden", searchQuery && "has-query")}
         >
-          <Search size={18} strokeWidth={2.3} />
+          <Search size={20} strokeWidth={2.3} />
         </button>
       )}
 

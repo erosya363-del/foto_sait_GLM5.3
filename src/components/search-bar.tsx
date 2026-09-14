@@ -207,8 +207,9 @@ export function SearchBar() {
           aria-label="Единый поиск: ткань, модель, размер"
           enterKeyHint="search"
           autoComplete="off"
-          // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass со спекуляром
-          className="h-11 w-full rounded-full border border-border bg-secondary/70 pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-md transition-all placeholder:text-muted-foreground/80 focus:border-[rgba(var(--brand-rgb),0.5)] focus:bg-secondary/90 focus:shadow-[inset_0_1px_0_var(--glass-spec),0_0_0_4px_rgba(var(--brand-rgb),0.14)] sm:text-[14px]"
+          // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass: блюр 80px,
+          // фокус нейтральный (без бирюзовой обводки), текст/плейсхолдер — сплошные
+          className="h-11 w-full rounded-full border border-border bg-secondary/70 pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] transition-all placeholder:text-muted-foreground focus:border-[var(--border-strong)] focus:bg-secondary/90 focus:shadow-[inset_0_1px_0_var(--glass-spec),0_0_0_4px_var(--focus-ring)] sm:text-[14px]"
         />
         {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
         {!(value || searchQuery) && !searchOpen && (
@@ -235,7 +236,7 @@ export function SearchBar() {
       {/* Дропдаун: полупрозрачный стеклянный (~80%) с размытым фоном,
           без внутренней анимации секций */}
       {hasDropdown && (
-        <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 max-h-[min(62dvh,480px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-background/85 p-2.5 shadow-2xl shadow-black/25 backdrop-blur-xl">
+        <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 max-h-[min(62dvh,480px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-[var(--glass-strong)] p-2.5 shadow-2xl shadow-black/25 backdrop-blur-[80px]">
           {!debounced && (
             <>
               <p className="px-1.5 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
@@ -250,7 +251,7 @@ export function SearchBar() {
                     key={p}
                     type="button"
                     onClick={() => commit(p)}
-                    className="rounded-full border border-border bg-secondary/70 px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 backdrop-blur-md transition-all hover:border-[color:var(--brand)] hover:text-[color:var(--brand)] active:scale-95"
+                    className="rounded-full border border-border bg-secondary/70 px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 backdrop-blur-md transition-all hover:border-[var(--border-strong)] hover:text-foreground active:scale-95"
                   >
                     {p}
                   </button>

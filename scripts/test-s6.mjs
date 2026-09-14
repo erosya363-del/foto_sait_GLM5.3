@@ -108,8 +108,8 @@ ok("фон панели сильно прозрачнее (50%)", Math.abs(alpha
 ok("рамка панели исчезла", alphaOf(await shell.evaluate((el) => getComputedStyle(el).borderColor)) === 0);
 const opItem0 = await items.nth(0).evaluate((el) => Number(getComputedStyle(el).opacity));
 const opItem1 = await items.nth(1).evaluate((el) => Number(getComputedStyle(el).opacity));
-ok("неактивные пункты почти невидимы (0.38)", Math.abs(opItem0 - 0.38) < 0.02, `got ${opItem0}`);
-ok("активный пункт горит (0.8)", Math.abs(opItem1 - 0.8) < 0.02, `got ${opItem1}`);
+ok("неактивные пункты чёткие (opacity 1, текст без прозрачности)", Math.abs(opItem0 - 1) < 0.02, `got ${opItem0}`);
+ok("активный пункт чёткий (opacity 1, текст без прозрачности)", Math.abs(opItem1 - 1) < 0.02, `got ${opItem1}`);
 // касание панели → полная плотность
 await page.evaluate(() => {
   document.querySelector(".pill-shell")?.dispatchEvent(
@@ -150,10 +150,13 @@ const titleOp = await page
   .locator("header .font-display")
   .evaluate((el) => Number(getComputedStyle(el.closest(".header-fade") ?? el).opacity));
 ok("заголовок скрыт при скролле", titleOp < 0.05, `opacity=${titleOp}`);
-const themeOp = await page
-  .locator("header > span.header-fade")
-  .evaluate((el) => Number(getComputedStyle(el).opacity));
-ok("переключатель темы скрыт при скролле", themeOp < 0.05, `opacity=${themeOp}`);
+const themeSw = page.locator("header [role='radiogroup']");
+const themeOp = await themeSw.evaluate((el) => Number(getComputedStyle(el).opacity));
+ok(
+  "переключатель темы ВИДЕН при скролле (фикс «пропадает тема»)",
+  (await themeSw.isVisible()) && Math.abs(themeOp - 1) < 0.02,
+  `opacity=${themeOp}`
+);
 // «Назад» появляется на уровнях глубже — откроем категорию через стор
 await page.evaluate(() => window.__portal.setState({ catCategory: "Диваны" }));
 await page.waitForTimeout(400);
@@ -338,8 +341,15 @@ await page.evaluate(() => {
   document.documentElement.classList.remove("dark");
 });
 await page.waitForTimeout(500);
+// снять pill-active (тап по пилюле выше) — читаем БАЗОВОЕ стекло светлой темы
+await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
+await page.waitForTimeout(350);
 const lightShell = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
-ok("светлая пилюля светлая", /^rgba\(255,\s*255,\s*255/.test(lightShell), lightShell);
+ok(
+  "светлая пилюля — мутное серое стекло (темнее фона)",
+  /^rgba\(150,\s*160,\s*169/.test(lightShell),
+  lightShell
+);
 await page.evaluate(() => {
   document.documentElement.classList.add("dark");
   document.documentElement.classList.remove("light");

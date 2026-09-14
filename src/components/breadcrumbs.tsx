@@ -76,7 +76,7 @@ export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] | null }) {
     >
       {crumbs.map((c, i) => (
         <span key={c.key} className="inline-flex shrink-0 items-center gap-1">
-          {i > 0 && <ChevronRight size={13} strokeWidth={2.4} className="shrink-0 text-muted-foreground/60" />}
+          {i > 0 && <ChevronRight size={14} strokeWidth={2.4} className="shrink-0 text-muted-foreground/70" />}
           {c.onPress && !c.current ? (
             <button
               type="button"

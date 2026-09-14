@@ -63,7 +63,7 @@ const shellStyle = await shell.evaluate((el) => {
   return { radius: cs.borderRadius, pos: cs.position, blur: cs.backdropFilter || cs.webkitBackdropFilter, bg: cs.backgroundColor };
 });
 ok("капсула fully-rounded (999px)", shellStyle.radius === "999px", shellStyle.radius);
-ok("стекло blur 30px", /30px/.test(shellStyle.blur), shellStyle.blur);
+ok("стекло blur 80px (мутное стекло)", /80px/.test(shellStyle.blur), shellStyle.blur);
 
 const navStyle = await nav.evaluate((el) => {
   const cs = getComputedStyle(el);
@@ -88,7 +88,11 @@ ok("линза внутри активного пункта «Каталог»",
 ok("линза имеет ядро .nav-lens-core", (await page.locator(".nav-lens .nav-lens-core").count()) === 1);
 
 const onColor = await items.nth(0).evaluate((el) => getComputedStyle(el).color);
-ok("активный пункт в фирменном цвете", onColor === "rgb(15, 214, 207)", onColor);
+ok(
+  "активный пункт чётким цветом текста (iOS-стиль, без бирюзы)",
+  onColor === "rgb(242, 244, 245)",
+  onColor
+);
 
 console.log("── 3. Жидкий переезд линзы: сквош + spring 430 ──");
 await items.nth(1).click();
@@ -138,8 +142,8 @@ await page.waitForTimeout(400);
 ok("после скролла: pill-dim", await shell.evaluate((el) => el.classList.contains("pill-dim")));
 const bgDim = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
 ok("фон прозрачнее при скролле", bgDim !== shellStyle.bg, `${shellStyle.bg} → ${bgDim}`);
-ok("неактивные пункты при скролле растворяются (0.38)", Math.abs(Number(await items.nth(0).evaluate((el) => getComputedStyle(el).opacity)) - 0.38) < 0.03);
-ok("активный пункт горит (0.8)", Math.abs(Number(await items.nth(1).evaluate((el) => getComputedStyle(el).opacity)) - 0.8) < 0.03);
+ok("неактивные пункты чёткие при скролле (opacity 1)", Math.abs(Number(await items.nth(0).evaluate((el) => getComputedStyle(el).opacity)) - 1) < 0.03);
+ok("активный пункт чёткий (opacity 1)", Math.abs(Number(await items.nth(1).evaluate((el) => getComputedStyle(el).opacity)) - 1) < 0.03);
 // касание пилюли → pill-active; касание мимо → снялось (синтетический pointerdown — без активации пункта)
 await page.evaluate(() => {
   document.querySelector(".pill-shell")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 99 }));
@@ -229,11 +233,18 @@ await page.evaluate(() => {
   document.documentElement.classList.remove("dark");
 });
 await page.waitForTimeout(600); // 280мс переход фона темы должен завершиться
+// снять pill-active/касание — читаем БАЗОВОЕ стекло светлой темы
+await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
+await page.waitForTimeout(350);
 const lightBg = await settle(
   () => shell.evaluate((el) => getComputedStyle(el).backgroundColor),
-  (v) => /^rgba\(255,\s*255,\s*255/.test(v)
+  (v) => /^rgba\(150,\s*160,\s*169/.test(v)
 );
-ok("светлая тема: стекло светлое", /^rgba\(255,\s*255,\s*255/.test(lightBg), lightBg);
+ok(
+  "светлая тема: мутное серое стекло (темнее фона, не сливается)",
+  /^rgba\(150,\s*160,\s*169/.test(lightBg),
+  lightBg
+);
 const lightLens = await page.locator(".nav-lens-core").evaluate((el) => getComputedStyle(el).boxShadow);
 ok("светлая линза с белой кромкой", /255,\s*255,\s*255/.test(lightLens));
 await page.screenshot({ path: "tool-results/pill-light.png" });

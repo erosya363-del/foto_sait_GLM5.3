@@ -83,18 +83,25 @@
   --sidebar-accent-foreground: #6fe6e2;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: rgba(var(--brand-rgb), 0.5);
-  --glass: rgba(18, 20, 23, 0.66);
-  --glass-strong: rgba(16, 18, 20, 0.92);
+  --glass: rgba(46, 51, 58, 0.55);
+  --glass-strong: rgba(56, 62, 70, 0.85);
   --shadow-card: 0 10px 40px -12px rgba(0, 0, 0, 0.55);
   --shadow-pop: 0 24px 70px -20px rgba(0, 0, 0, 0.7);
   --grid-line: rgba(255, 255, 255, 0.05);
   /* Цвет кромки/буквбокса iOS: нижние 48px вьюпорта всегда этого цвета
      (совпадает с фоном html — системная зона неотличима от страницы) */
   --edge: #10161a;
-  /* Стекло плавающей пилюли: обычное / при скролле (прозрачнее) / при касании (плотнее) */
-  --pill-bg: rgba(18, 20, 23, 0.62);
-  --pill-bg-dim: rgba(18, 20, 23, 0.38);
-  --pill-bg-active: rgba(16, 18, 20, 0.9);
+  /* Стекло плавающей пилюли: обычное / при скролле (прозрачнее) / при касании (плотнее).
+     МУТНОЕ СТЕКЛО: в тёмной теме — на 2 тона СВЕТЛЕЕ фона (#0d0e10 → ~#1f2227),
+     чтобы не сливалось с фоном и фото */
+  --pill-bg: rgba(46, 51, 58, 0.58);
+  --pill-bg-dim: rgba(46, 51, 58, 0.38);
+  --pill-bg-active: rgba(56, 62, 70, 0.9);
+  /* Линза активного пункта / чип темы — нейтральное светлое стекло (без бирюзы) */
+  --lens-bg: rgba(255, 255, 255, 0.14);
+  --lens-border: rgba(255, 255, 255, 0.24);
+  /* Нейтральный фокус-оринг полей (вместо бирюзового) */
+  --focus-ring: rgba(255, 255, 255, 0.12);
   /* Liquid Glass (iOS 26): спекуляр-блик на верхней кромке стеклянных поверхностей */
   --glass-spec: rgba(255, 255, 255, 0.1);
   --glass-spec-strong: rgba(255, 255, 255, 0.18);
@@ -130,14 +137,19 @@
   --sidebar-accent-foreground: #0b7d79;
   --sidebar-border: rgba(23, 36, 42, 0.08);
   --sidebar-ring: rgba(var(--brand-rgb), 0.4);
-  --glass: rgba(255, 255, 255, 0.66);
-  --glass-strong: rgba(255, 255, 255, 0.94);
+  --glass: rgba(150, 160, 169, 0.38);
+  --glass-strong: rgba(148, 158, 167, 0.72);
   --shadow-card: 0 8px 30px -14px rgba(23, 42, 51, 0.22);
   --shadow-pop: 0 24px 60px -22px rgba(23, 42, 51, 0.3);
   --grid-line: rgba(23, 36, 42, 0.05);
-  --pill-bg: rgba(255, 255, 255, 0.62);
-  --pill-bg-dim: rgba(255, 255, 255, 0.38);
-  --pill-bg-active: rgba(255, 255, 255, 0.93);
+  /* МУТНОЕ СТЕКЛО: в светлой теме — СЛЕГКА ТЕМНЕЕ фона (#f4f7f8 → ~#d8dde1),
+     чтобы белое стекло не сливалось с белым фоном */
+  --pill-bg: rgba(150, 160, 169, 0.42);
+  --pill-bg-dim: rgba(150, 160, 169, 0.26);
+  --pill-bg-active: rgba(142, 152, 161, 0.78);
+  --lens-bg: rgba(255, 255, 255, 0.72);
+  --lens-border: rgba(255, 255, 255, 0.95);
+  --focus-ring: rgba(23, 36, 42, 0.1);
   --glass-spec: rgba(255, 255, 255, 0.7);
   --glass-spec-strong: rgba(255, 255, 255, 0.9);
 }
@@ -301,26 +313,28 @@ body {
 }
 
 /* ─── Glass-поверхности ──────────────────────────────────────────────────── */
-/* Liquid Glass (iOS 26): blur+saturate за стеклом + спекуляр на верхней кромке */
+/* Liquid Glass (iOS 26): МУТНОЕ СТЕКЛО — блюр 80px + saturate за стеклом,
+   спекуляр на верхней кромке, тонкая нейтральная рамка (не даёт сливаться с фонами).
+   Текст на стекле всегда чёткий: сплошной цвет, без прозрачности и блюра. */
 .glass {
   background: var(--glass);
-  -webkit-backdrop-filter: blur(22px) saturate(1.7);
-  backdrop-filter: blur(22px) saturate(1.7);
+  -webkit-backdrop-filter: blur(80px) saturate(1.7);
+  backdrop-filter: blur(80px) saturate(1.7);
   border: 1px solid var(--border);
   box-shadow: inset 0 1px 0 var(--glass-spec);
 }
 .glass-strong {
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(28px) saturate(1.8);
-  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(80px) saturate(1.8);
+  backdrop-filter: blur(80px) saturate(1.8);
   border: 1px solid var(--border);
   box-shadow: inset 0 1px 0 var(--glass-spec-strong);
 }
 /* Стеклянная панель (диалоги, поповеры) */
 .glass-panel {
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(30px) saturate(1.8);
-  backdrop-filter: blur(30px) saturate(1.8);
+  -webkit-backdrop-filter: blur(80px) saturate(1.8);
+  backdrop-filter: blur(80px) saturate(1.8);
   border: 1px solid var(--border-strong);
   box-shadow: inset 0 1px 0 var(--glass-spec-strong), var(--shadow-pop);
 }
@@ -348,23 +362,34 @@ body {
   height: 44px;
   border-radius: 999px;
   background: var(--glass);
-  -webkit-backdrop-filter: blur(18px) saturate(1.8);
-  backdrop-filter: blur(18px) saturate(1.8);
+  -webkit-backdrop-filter: blur(80px) saturate(1.8);
+  backdrop-filter: blur(80px) saturate(1.8);
   border: 1px solid var(--border-strong);
   color: var(--foreground);
   box-shadow:
     inset 0 1px 0 var(--glass-spec-strong),
     0 8px 22px -10px rgba(0, 0, 0, 0.5);
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease, box-shadow 0.25s ease;
-}
-.lg-back:hover {
-  color: var(--brand);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
 }
 .lg-back:active {
   transform: scale(0.86);
   box-shadow:
     inset 0 1px 0 var(--glass-spec-strong),
     0 4px 12px -8px rgba(0, 0, 0, 0.4);
+}
+
+/* Стеклянная капсула переключателя темы — всегда видна (в т.ч. при скролле) */
+.lg-theme {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(80px) saturate(1.7);
+  backdrop-filter: blur(80px) saturate(1.7);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 var(--glass-spec), 0 8px 22px -12px rgba(0, 0, 0, 0.45);
 }
 
 /* ─── Liquid Glass: стеклянные строки админки ───────────────────────────── */
@@ -427,8 +452,8 @@ body {
   padding: 4px;
   border-radius: 999px;
   background: var(--glass);
-  -webkit-backdrop-filter: blur(18px) saturate(1.7);
-  backdrop-filter: blur(18px) saturate(1.7);
+  -webkit-backdrop-filter: blur(80px) saturate(1.7);
+  backdrop-filter: blur(80px) saturate(1.7);
   border: 1px solid var(--border);
   box-shadow:
     inset 0 1px 0 var(--glass-spec-strong),
@@ -744,8 +769,8 @@ body {
   padding: 5px;
   border-radius: 999px;
   background: var(--pill-bg);
-  -webkit-backdrop-filter: blur(30px) saturate(1.7);
-  backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(80px) saturate(1.7);
+  backdrop-filter: blur(80px) saturate(1.7);
   border: 1px solid var(--border);
   box-shadow:
     0 18px 44px -14px rgba(0, 0, 0, 0.6),
@@ -758,23 +783,25 @@ body {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-/* Листают — стекло почти исчезает, активный пункт продолжает гореть (80%) */
+/* Листают — стекло почти исчезает; ТЕКСТ пунктов остаётся чётким
+   (без прозрачности — просьба пользователя): приглушает только активный
+   цвет капсулы, не сами подписи */
 .pill-shell.pill-dim {
   background: var(--pill-bg-dim);
   border-color: transparent;
   box-shadow: none;
 }
 .pill-shell.pill-dim .pill-item {
-  opacity: 0.38;
+  opacity: 1;
 }
 .pill-shell.pill-dim .pill-item.is-on,
 .pill-shell.pill-dim .pill-item.is-drag {
-  opacity: 0.8;
+  opacity: 1;
 }
-/* Коснулись пилюли — плотное активное стекло до тапа мимо */
+/* Коснулись пилюли — плотное активное стекло до тапа мимо (рамка нейтральная) */
 .pill-shell.pill-active {
   background: var(--pill-bg-active);
-  border-color: rgba(var(--brand-rgb), 0.32);
+  border-color: var(--border-strong);
   box-shadow:
     0 22px 50px -14px rgba(0, 0, 0, 0.65),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
@@ -803,11 +830,10 @@ body {
 }
 /* Пункт под пальцем во время drag — подсвечен как активный */
 .pill-item.is-drag {
-  color: var(--brand-strong);
+  color: var(--foreground);
 }
-/* «Линза» активного пункта — стеклянная капсула, перетекающая между вкладками
-   (framer-motion layoutId в portal.tsx двигает именно этот элемент);
-   .nav-lens-core — визуальный слой, на нём сквош-анимация переезда. */
+/* «Линза» активного пункта — нейтральная стеклянная капсула (как в iOS 26),
+   перетекающая между вкладками; без бирюзовых обводок/свечения */
 .nav-lens {
   position: absolute;
   inset: 0;
@@ -817,11 +843,11 @@ body {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: rgba(var(--brand-rgb), 0.14);
-  border: 1px solid rgba(var(--brand-rgb), 0.3);
+  background: var(--lens-bg);
+  border: 1px solid var(--lens-border);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    0 6px 18px -6px rgba(var(--brand-rgb), 0.5);
+    inset 0 1px 0 var(--glass-spec-strong),
+    0 6px 18px -8px rgba(0, 0, 0, 0.55);
 }
 /* «Жидкий» сквош переезда: растяжение по ходу движения (scale 1.55 → 0.92 → 1, 480 мс) */
 .nav-lens.is-squash .nav-lens-core {
@@ -834,10 +860,7 @@ body {
   100% { transform: scaleX(1); }
 }
 .pill-item.is-on {
-  color: var(--brand-strong);
-}
-.pill-item.is-on svg {
-  filter: drop-shadow(0 4px 10px rgba(var(--brand-rgb), 0.55));
+  color: var(--foreground);
 }
 .light .pill-shell {
   box-shadow:
@@ -845,11 +868,9 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 .light .nav-lens-core {
-  background: rgba(var(--brand-rgb), 0.12);
-  border-color: rgba(var(--brand-rgb), 0.26);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    0 6px 16px -8px rgba(var(--brand-rgb), 0.42);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 6px 16px -8px rgba(23, 42, 51, 0.4);
 }
 /* Шаг 2: пульс пункта при повторном тапе «Каталог» (мгновенный возврат наверх) */
 .nav-pulse {
@@ -900,38 +921,39 @@ header.glass {
   opacity: 0;
   pointer-events: none;
 }
-/* Кружок поиска — появляется вместо панели при скролле, СЛЕВА (одна сторона со «Назад») */
+/* Кружок поиска — появляется вместо панели при скролле, СЛЕВА (одна сторона со «Назад»).
+   Единый размер с «Назад»/«наверх»: 44px, иконка 20 */
 .search-fab {
   position: fixed;
-  top: calc(60px + env(safe-area-inset-top));
+  top: calc(62px + env(safe-area-inset-top));
   left: 14px;
   z-index: 46;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   background: var(--pill-bg-active);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(80px) saturate(1.8);
+  backdrop-filter: blur(80px) saturate(1.8);
   border: 1px solid var(--border-strong);
   color: var(--foreground);
   box-shadow:
     inset 0 1px 0 var(--glass-spec-strong),
     0 10px 26px -10px rgba(0, 0, 0, 0.5);
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
   animation: search-fab-in 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .search-fab:active {
   transform: scale(0.9);
 }
-/* На кружке видно, что поиск применён */
+/* На кружке видно, что поиск применён — нейтральное усиление, без бирюзы */
 .search-fab.has-query {
-  border-color: rgba(var(--brand-rgb), 0.55);
-  color: var(--brand-strong);
+  border-color: var(--border-strong);
   box-shadow:
-    0 10px 26px -10px rgba(0, 0, 0, 0.5),
-    0 0 14px -2px rgba(var(--brand-rgb), 0.45);
+    inset 0 1px 0 var(--glass-spec-strong),
+    0 10px 26px -10px rgba(0, 0, 0, 0.55),
+    0 0 0 3px var(--focus-ring);
 }
 @keyframes search-fab-in {
   from {
@@ -952,8 +974,8 @@ header.glass {
   z-index: 50;
   border-radius: 20px;
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(30px) saturate(1.7);
-  backdrop-filter: blur(30px) saturate(1.7);
+  -webkit-backdrop-filter: blur(80px) saturate(1.7);
+  backdrop-filter: blur(80px) saturate(1.7);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-pop);
   padding: 8px;
@@ -983,8 +1005,8 @@ header.glass {
   .header-collapsed header.glass {
     background: var(--glass);
     border-color: var(--border);
-    -webkit-backdrop-filter: blur(22px) saturate(1.5);
-    backdrop-filter: blur(22px) saturate(1.5);
+    -webkit-backdrop-filter: blur(80px) saturate(1.5);
+    backdrop-filter: blur(80px) saturate(1.5);
   }
   .header-collapsed .search-collapse {
     grid-template-rows: 1fr;
@@ -1050,8 +1072,8 @@ header.glass {
   color: var(--muted-foreground);
 }
 .field:focus {
-  border-color: rgba(var(--brand-rgb), 0.55);
-  box-shadow: 0 0 0 4px rgba(var(--brand-rgb), 0.14), inset 0 1px 0 var(--glass-spec);
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 4px var(--focus-ring), inset 0 1px 0 var(--glass-spec);
   background: transparent;
 }
 
@@ -1252,25 +1274,21 @@ label {
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   background: var(--glass-strong);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5);
-  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(80px) saturate(1.5);
+  backdrop-filter: blur(80px) saturate(1.5);
   color: var(--foreground);
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 1px 0 var(--glass-spec-strong), 0 10px 30px -10px rgba(0, 0, 0, 0.5);
   opacity: 0;
   transform: translateY(14px) scale(0.9);
   pointer-events: none;
-  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease;
+  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .fab-top.is-show {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
-}
-.fab-top:hover {
-  color: var(--brand);
-  transform: translateY(-2px);
 }
 .fab-top:active {
   transform: scale(0.9);

@@ -14,6 +14,11 @@ const OPTIONS = [
 const emptySubscribe = () => () => {};
 const useMounted = () => useSyncExternalStore(emptySubscribe, () => true, () => false);
 
+/**
+ * Стеклянная капсула (.lg-theme — мутное стекло, блюр 80px) с нейтральной
+ * «линзой» на активной опции (var(--lens-bg)/var(--lens-border), как линза
+ * пилюли) — без бирюзовых обводок и свечения. Текст/иконки — сплошные цвета.
+ */
 export function ThemeSwitch({ compact = false, mini = false }: { compact?: boolean; mini?: boolean }) {
   const { theme, setTheme } = useTheme();
   const mounted = useMounted();
@@ -25,7 +30,7 @@ export function ThemeSwitch({ compact = false, mini = false }: { compact?: boole
       role="radiogroup"
       aria-label="Тема оформления"
       className={cn(
-        "relative inline-flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-secondary p-1",
+        "lg-theme items-center gap-0.5",
         compact && !mini ? "scale-90" : ""
       )}
     >
@@ -43,13 +48,11 @@ export function ThemeSwitch({ compact = false, mini = false }: { compact?: boole
             className={cn(
               "relative grid place-items-center rounded-full transition-all duration-300 active:scale-90",
               mini ? "h-7 w-7" : "h-8 w-8",
-              on
-                ? "text-[color:var(--brand)] shadow-[0_0_14px_rgba(var(--brand-rgb),0.35)]"
-                : "text-muted-foreground hover:text-foreground"
+              on ? "text-[color:var(--foreground)]" : "text-muted-foreground hover:text-foreground"
             )}
           >
             {on && (
-              <span className="absolute inset-0 rounded-full bg-[rgba(var(--brand-rgb),0.14)] ring-1 ring-[rgba(var(--brand-rgb),0.4)]" />
+              <span className="absolute inset-0 rounded-full border border-[color:var(--lens-border)] bg-[color:var(--lens-bg)] shadow-[inset_0_1px_0_var(--glass-spec-strong)]" />
             )}
             <Icon size={mini ? 14 : 15} strokeWidth={2.1} className="relative" />
           </button>
