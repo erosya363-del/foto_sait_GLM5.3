@@ -73,7 +73,8 @@ function useHeaderTitle() {
  * Уже в каталоге (на любой глубине, включая поиск/ткани/открытый товар) →
  * мгновенный возврат наверх (сброс дриллдауна) + отклик: пульс капсулы +
  * tick-звук + вибрация (Android; iOS — звук и пульс, vibrate запрещён).
- * Из другого раздела — обычный переход.
+ * Из другого раздела — обычный переход, но с тем же tick-откликом, что и у
+ * остальных пунктов пилюли (иначе тап «Каталог» — единственный без звука).
  */
 function goCatalog(btn?: HTMLElement | null) {
   const s = usePortal.getState();
@@ -89,6 +90,8 @@ function goCatalog(btn?: HTMLElement | null) {
     }
   } else {
     s.setView("catalog");
+    playTick();
+    haptic(10);
   }
 }
 

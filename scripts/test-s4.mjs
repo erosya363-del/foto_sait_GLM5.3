@@ -69,18 +69,27 @@ const fabricNew = await page.locator("main span:has-text('NEW')").count();
 ok("NEW-бейджи на тканях (данные за 7 дней)", fabricNew > 0);
 
 console.log("── 5. Ткань → её варианты + крошки ──");
-await fabricCards.first().click();
-await page.waitForTimeout(900);
+/* Данные живые: у части тканей варианты без фото (пользователь удаляет из
+   админки). Открываем ткань, у которой точно есть фото у вариантов (thumb из
+   API ставится только из фото вариантов), иначе проверка img теряет смысл. */
+const fabApi = await (await fetch(`${BASE}/api/catalog?level=fabrics`)).json();
+const withPhotos = (fabApi.fabrics ?? []).filter((f) => f.thumb);
+const fabricName = withPhotos[0]?.name;
+if (!fabricName) {
+  ok("есть ткань с фото вариантов (API)", false, "ни у одной ткани нет thumb");
+} else {
+  await page.locator(`main button:has-text("${fabricName}")`).first().click();
+  await page.waitForTimeout(900);
 const title2 = await page.locator("header span").first().textContent();
 ok("заголовок остаётся «Askona Каталог» (Шаг 6)", title2?.trim() === "Askona Каталог", `(got «${title2}»)`);
-ok("крошка-ткань показывает имя", (await page.locator('[role="navigation"]:has-text("Sky Velvet"), [role="navigation"]:has-text("Casanova")').count()) > 0);
+ok(`крошка-ткань показывает имя (${fabricName})`, (await page.locator(`[role="navigation"]:has-text("${fabricName}")`).count()) > 0);
 ok("крошка «Все ткани» тапабельна", await page.locator('button:has-text("Все ткани")').first().isVisible());
 ok("варианты ткани показаны", (await page.locator("main button:has(img)").count()) > 0);
 // тап по «Все ткани» в крошках — назад к списку тканей
 await page.locator('button:has-text("Все ткани")').first().click();
 await page.waitForTimeout(600);
 ok("вернулись к списку тканей", (await fabricCards.count()) > 0);
-
+}
 console.log("── 6. Назад (кнопка шапки) → уровень 1 ──");
 await page.locator('header button[aria-label="Назад"]').first().click();
 await page.waitForTimeout(500);
@@ -103,7 +112,12 @@ const variantNew = await page.locator("main span:has-text('NEW')").count();
 ok("NEW-бейджи на вариантах", variantNew > 0);
 
 console.log("── 9. Прыжок из товара по крошке (Шаг 3) ──");
-await page.locator("main button:has(img)").first().click();
+/* Данные живые (пользователь удаляет/меняет фото из админки) — у части
+   вариантов фото может не быть. Берём карточку с фото, если есть, иначе любую. */
+const imgCard = page.locator("main button:has(img)").first();
+const anyCard = page.locator("main button.card-hover").first();
+const target = (await imgCard.count()) > 0 ? imgCard : anyCard;
+await target.click();
 await page.waitForTimeout(800);
 ok("товар открыт", await page.locator('header button[aria-label="Назад"]').first().isVisible());
 await page.locator('[role="navigation"][aria-label="Путь в каталоге"] button:has-text("Диваны")').first().click();

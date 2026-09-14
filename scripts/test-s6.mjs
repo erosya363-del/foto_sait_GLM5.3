@@ -118,8 +118,25 @@ await page.evaluate(() => {
 });
 await page.waitForTimeout(300);
 ok("касание пилюли → pill-active", await shell.evaluate((el) => el.classList.contains("pill-active")));
+/* Переход фона 0.38→0.9 анимируется: под нагрузкой (после других наборов)
+   300мс хватает не всегда — ждём settle до 2с, потом читаем. */
+let activeSettled = true;
+try {
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector(".pill-shell");
+      if (!el) return false;
+      const m = getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
+      const a = m ? parseFloat(m[1].split(",")[3] ?? "1") : 1;
+      return a >= 0.88;
+    },
+    { timeout: 2000 }
+  );
+} catch {
+  activeSettled = false;
+}
 const activeBg = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
-ok("активное стекло плотное (0.9)", Math.abs(alphaOf(activeBg) - 0.9) < 0.02, activeBg);
+ok("активное стекло плотное (0.9)", activeSettled && Math.abs(alphaOf(activeBg) - 0.9) < 0.02, activeBg);
 await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
 await page.waitForTimeout(250);
 ok("тап мимо → pill-active снялся", !(await shell.evaluate((el) => el.classList.contains("pill-active"))));
