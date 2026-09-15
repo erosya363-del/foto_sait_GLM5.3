@@ -573,3 +573,20 @@ Stage Summary:
 - Все 5 пунктов аудита закрыты: линза следует за пальцем; бирюзовый «спиннер» и движущиеся бирюзовые авроры удалены; лупа — часть пилюли; капсула прозрачнее с настоящим преломлением (Chromium) и честным blur-fallback (Safari/iPhone); theme-color = теме приложения (серая полоса под чёлкой уходит); поиск — только последние ≤4 запросов без дёрганья; карточка товара компактная, «Назад» одна.
 - Регресс полностью зелёный: pill 70, s6 70, s4 34, search 25, tick 9, audit-back OK, audit-full 0, lint/tsc/build чисто.
 - Осталось на владельце: дать новый GitHub-токен (пуш 46ddebd + тег), реальный iPhone (этап 21: преломление в Safari недоступно — это ограничение Apple, на Android Chrome — полное; полоса первого запуска, чёлка, хаптика).
+
+---
+Task ID: 32
+Agent: main (Super Z)
+Task: Новый GitHub-токен (пуш отложенного v2.6) + установка скиллов emilkowalski/skills.
+
+Work Log:
+- Токен применён к origin (https://erosya363-del:<token>@github.com/...); git push origin main: 8d206cb..979f8fd — v2.6 аудит нижней панели уехал на GitHub.
+- git push origin --tags: snap/v2.6-audit-glass запушен (остальные теги уже были).
+- Установка скиллов: официальный `npx skills add emilkowalski/skills --all --copy` завис на сети (>130с, убит) — установлен вручную из клона github.com/emilkowalski/skills (содержимое идентично) копированием в /home/z/my-project/skills/.
+- Установлены 13 скиллов: emil-design-eng (главный — философия UI/анимаций Emil Kowalski, Vercel/Linear), animate (+RECIPES.md), animate-expo, animation-vocabulary, apple-design (принципы WWDC, переведённые для веба), ask-sonner (+API.md), find-animation-opportunities, improve-animations (+AUDIT.md, PLAN-TEMPLATE.md), mobile-native (веб-апп как нативный: safe areas, 100vh, зум инпутов, sticky hover), pick-ui-library, prototype (+PICKER.md), review-animations (+STANDARDS.md), write-swift.
+- Верификация: все 13 SKILL.md на месте, frontmatter name совпадает с папками.
+
+Stage Summary:
+- GitHub синхронизирован: main = 979f8fd (v2.6), тег snap/v2.6-audit-glass на месте.
+- Скиллы Emil Kowalski установлены в /home/z/my-project/skills/ — наиболее релевантные проекту: mobile-native (iPhone-аудит пилюли/поиска), apple-design + animate (Liquid Glass полировка), review-animations/improve-animations (аудит morph-анимаций линзы).
+- Применение: при следующих итерациях нижней панели/поиска/жестов — прогонять через emil-design-eng + review-animations; mobile-native — для чеклиста iPhone-фиксов (этап 21, реальное устройство).
