@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-15T13:00:15.512Z",
+  "startedAt": "2026-09-15T13:07:15.085Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -11,14 +11,7 @@
           "Светлая (28×28)",
           "Тёмная (28×28)"
         ],
-        "overlapped": [
-          {
-            "btn": "Все ткани18 тканей · 18 вариантов фото",
-            "by": "DIV.pill-shell pill-active",
-            "pos": "195,675",
-            "floating": "pill-shell"
-          }
-        ],
+        "overlapped": [],
         "invisible": [],
         "btnCount": 36
       },
@@ -31,37 +24,25 @@
           "Тёмная (28×28)",
           "Компактный вид (36×32)",
           "Карточки (36×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)",
-          "Скопировать название (32×32)"
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)",
+          "2 (38×28)"
         ],
         "overlapped": [
           {
-            "btn": "Скопировать название",
-            "by": "INPUT.pill-haptic",
-            "pos": "287,728",
-            "floating": "pill-item"
-          },
-          {
             "btn": "2",
             "by": "INPUT.pill-haptic",
-            "pos": "337,728",
+            "pos": "342,727",
             "floating": "pill-item"
           }
         ],
@@ -90,53 +71,11 @@
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 62
+        "btnCount": 61
       }
     },
     "viewports": {
       "320x568": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 36
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 2,
-          "broken": 0,
-          "btns": 59
-        }
-      },
-      "360x640": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 36
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 2,
-          "broken": 0,
-          "btns": 59
-        }
-      },
-      "375x667": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 36
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 2,
-          "broken": 0,
-          "btns": 59
-        }
-      },
-      "390x760": {
         "catalog": {
           "overflowX": 0,
           "overlapped": 1,
@@ -145,7 +84,49 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 4,
+          "overlapped": 1,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "360x640": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 1,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 1,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "375x667": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 1,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 1,
+          "broken": 0,
+          "btns": 59
+        }
+      },
+      "390x760": {
+        "catalog": {
+          "overflowX": 0,
+          "overlapped": 0,
+          "broken": 0,
+          "btns": 36
+        },
+        "stock": {
+          "overflowX": 0,
+          "overlapped": 2,
           "broken": 0,
           "btns": 59
         }
@@ -159,7 +140,7 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 2,
+          "overlapped": 1,
           "broken": 0,
           "btns": 59
         }
@@ -173,7 +154,7 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 2,
+          "overlapped": 1,
           "broken": 0,
           "btns": 59
         }
@@ -187,7 +168,7 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 2,
+          "overlapped": 1,
           "broken": 0,
           "btns": 59
         }
@@ -321,7 +302,7 @@
     },
     "back": {},
     "offline": {
-      "bodyLen": 451,
+      "bodyLen": 437,
       "hasSplash": true,
       "title": "Склад мебели · Askona"
     },
@@ -329,7 +310,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu2ojn9h0003nh6bgmmkailo\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu2osmrc0002nhlghmqt7at3\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {

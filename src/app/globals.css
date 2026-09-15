@@ -525,12 +525,21 @@ body {
   box-shadow:
     inset 0 1px 0 var(--glass-spec-strong),
     0 10px 28px -14px rgba(0, 0, 0, 0.45);
+  /* Мобилка: 4+ таба не сжимаются в кашу — горизонтальный скролл (разбор §2/§4) */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.lg-seg::-webkit-scrollbar {
+  display: none;
 }
 .lg-seg > * {
   border-radius: 999px;
 }
 .lg-seg button {
-  flex: 1 1 0;
+  flex: 1 0 auto;
+  min-width: max-content;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1332,6 +1341,13 @@ header.glass {
   border-color: var(--border-strong);
   box-shadow: 0 0 0 4px var(--focus-ring), inset 0 1px 0 var(--glass-spec);
   background: transparent;
+}
+/* Мобилка: поля плотнее (разбор §2: «поля занимают весь экран — неудобно») */
+@media (max-width: 639px) {
+  .field {
+    padding: 9px 12px;
+    border-radius: 12px;
+  }
 }
 
 /* ─── Кнопки ─────────────────────────────────────────────────────────────── */

@@ -81,13 +81,13 @@ function StockRow({ item, index }: { item: StockItemDto; index: number }) {
         </p>
       </div>
 
-      {/* Действия */}
+      {/* Действия — на мобилке компактнее (разбор: «иконки занимают много места») */}
       <button
         type="button"
         onClick={copyName}
         title="Скопировать название"
         aria-label="Скопировать название"
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        className="hidden h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:grid sm:h-8 sm:w-8"
       >
         {copied ? <Check size={14} strokeWidth={2.5} className="text-[color:var(--brand)]" /> : <Copy size={13.5} strokeWidth={2} />}
       </button>
@@ -95,14 +95,14 @@ function StockRow({ item, index }: { item: StockItemDto; index: number }) {
         <button
           type="button"
           onClick={() => openProduct(pm.variantId, "stock")}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-[rgba(var(--brand-rgb),0.4)] bg-[color:var(--brand)]/10 px-2.5 text-[11.5px] font-bold text-[color:var(--brand)] transition-colors hover:bg-[color:var(--brand)]/20"
+          className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-[rgba(var(--brand-rgb),0.4)] bg-[color:var(--brand)]/10 px-1.5 text-[11px] font-bold text-[color:var(--brand)] transition-colors hover:bg-[color:var(--brand)]/20 sm:h-8 sm:gap-1.5 sm:px-2.5 sm:text-[11.5px]"
           title={`Совпадение: ${pm.variantName}`}
         >
           <ImageIcon size={13} strokeWidth={2.3} />
           {pm.photoCount > 1 && <span>{pm.photoCount}</span>}
         </button>
       ) : (
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-dashed border-border text-muted-foreground/50" title="Фото пока нет">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-dashed border-border text-muted-foreground/50 sm:h-8 sm:w-8" title="Фото пока нет">
           <ImageIcon size={13} strokeWidth={2} />
         </span>
       )}

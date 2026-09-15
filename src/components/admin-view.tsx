@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Pencil, Plus, Trash2, Vibrate, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { vibrateTest, hapticThump } from "@/lib/tick";
 import type { Dictionaries } from "@/lib/portal";
 import { ProductManager } from "@/components/admin-product-manager";
 import { FabricManager } from "@/components/admin-fabric-manager";
@@ -48,26 +47,6 @@ async function api(body: Record<string, unknown>) {
   return j;
 }
 
-/**
- * Самопроверка вибрации: на Android шлёт реальный усиленный паттерн [45,60,45,60,150];
- * на iPhone Apple запрещает вибромотор — вместо этого играем низкочастотный
- * аудио-«толчок» (динамик бубнит корпус — ладонь чувствует тычок).
- */
-function vibroTest() {
-  const ok = vibrateTest();
-  if (ok) {
-    toast.success("Команда вибрации отправлена [45, 60, 45, 60, 150] мс", {
-      description: "Телефон должен трижды толкнуться. Работает на Android/Chrome.",
-    });
-  } else {
-    hapticThump();
-    toast.error("Вибромотор недоступен (ограничение Apple) — проигран аудио-толчок", {
-      description:
-        "iPhone: iOS не даёт веб-страницам доступ к вибромотору — это запрет Apple, а не сайта. Вместо вибрации — низкочастотный импульс через динамик (78→48 Гц): корпус физически «бубнит» — ладонь чувствует тычок на каждом тапе. Проверьте, что звук не на беззвучном.",
-      duration: 12000,
-    });
-  }
-}
 
 /**
  * Строка справочника: переименование (карандаш/тап по названию) +
@@ -389,21 +368,11 @@ export function AdminView() {
             Товары, справочники и фото: создание, переименование, удаление с корзиной
           </p>
         </div>
-        {/* Самопроверка вибрации устройства (Android вибрирует; iOS честно объясняет запрет Apple) */}
-        <button
-          type="button"
-          onClick={vibroTest}
-          title="Проверить, поддерживает ли это устройство вибрацию"
-          className="btn-ghost flex shrink-0 items-center gap-2 px-3.5 py-2 text-[12.5px]"
-        >
-          <Vibrate size={15} strokeWidth={2.2} />
-          Тест вибрации
-        </button>
       </div>
 
       {/* Четыре крупных раздела: ткани заводятся отдельно от товара */}
       <Tabs defaultValue="products" className="rise rise-1">
-        <TabsList className="lg-seg h-auto w-full sm:w-auto">
+        <TabsList className="lg-seg h-auto w-full max-w-full sm:w-auto">
           <TabsTrigger
             value="products"
             className="rounded-full data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] data-[state=active]:text-[color:var(--accent-foreground)] data-[state=active]:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_4px_14px_-6px_rgba(var(--brand-rgb),0.55)] dark:data-[state=active]:bg-[linear-gradient(135deg,rgba(var(--brand-rgb),0.22),rgba(var(--brand-rgb),0.1))] dark:data-[state=active]:text-[color:var(--accent-foreground)] dark:data-[state=active]:border-transparent"
