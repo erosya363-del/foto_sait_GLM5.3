@@ -623,6 +623,7 @@ Work Log:
 - Создан public/sait_copy_3.tar.gz (146МБ, 3200 записей, префикс sait_copy_3/, gzip -t OK) — РАСШИРЕННЫЙ состав: всё из копии №2 (включая .git 1208 файлов, .env, .zscripts) ПЛЮС skills/ (1536 файлов, все 13 скиллов Emil Kowalski с приложениями RECIPES/STANDARDS/AUDIT/PICKER/API), data/skills/ + agent/skills/ (35+35 файлов), download/ (54 файла: скриншоты, snapshots, logs), CHECKPOINT.md, skills-lock.json.
 - Исключено (регенерируемое/мусор): node_modules (1.2G), .next (405M), dev.log/server.log, tool-results (26M), tsconfig.tsbuildinfo, ~50 агентских dot-папок (.claude, .codex…), старый sait_copy_2.tar.gz (вложение бэкапа в бэкап).
 - .gitignore: + /public/sait_copy_3.tar.gz (146МБ > жёсткого лимита GitHub 100МБ — в git НЕ коммитить, копия №2 была меньше и попала в историю).
+- ОТДАЧА ПОЛЬЗОВАТЕЛЮ: next-server standalone (restart.sh) снапшотит список public/ при старте — архив, созданный после старта, давал 404. Решение: копия архива в .next/standalone/public/ + рестарт сервера → HTTP 200, Accept-Ranges (докачка), MD5 отданного файла = оригиналу (d932ad2d…); ссылка /sait_copy_3.tar.gz на адресе сайта. Дубль в download/sait_copy_3.tar.gz (зона пользовательских загрузок).
 - Проверка содержимого: db=2, upload=26, src=106, prisma=3, public=125 (без старого архива), scripts=39, tests=4; выборочно skills/emil-design-eng, mobile-native, review-animations с приложениями — на месте.
 
 Stage Summary:
