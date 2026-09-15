@@ -65,7 +65,7 @@ await shot("v16-mob-search-pop", async (p) => {
   await p.waitForTimeout(600);
   await p.locator(".search-fab").click();
   await p.waitForTimeout(700);
-  await p.fill("#global-search", "магни");
+  await p.fill("input[data-search-input]", "магни");
   await p.waitForTimeout(900);
 });
 

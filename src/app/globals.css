@@ -6,6 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-field: var(--field);
+  --color-field-strong: var(--field-strong);
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-display: var(--font-unbounded), var(--font-inter), system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -47,61 +49,68 @@
 /* ─── Тёмная тема (по умолчанию) ─────────────────────────────────────────── */
 :root {
   --radius: 1rem;
-  --brand: #11b5b0;
-  --brand-strong: #0fd6cf;
-  --brand-rgb: 17, 181, 176;
+  /* Палитра «Кобальт» (выбор владельца вместо серого/бирюзового):
+     глубокий синий в тон логотипу Askona, синеватое стекло вместо серого,
+     НИКАКОЙ бирюзы ни в обрамлении, ни в акцентах. */
+  --brand: #5b84f0;
+  --brand-strong: #7d9cf7;
+  --brand-rgb: 91, 132, 240;
 
-  --background: #0d0e10;
-  --foreground: #f2f4f5;
-  --card: rgba(21, 23, 26, 0.72);
-  --card-foreground: #f2f4f5;
-  --popover: rgba(20, 22, 25, 0.97);
-  --popover-foreground: #f2f4f5;
-  --primary: #11b5b0;
-  --primary-foreground: #06201f;
-  --secondary: rgba(255, 255, 255, 0.06);
-  --secondary-foreground: #e4e8ea;
-  --muted: rgba(255, 255, 255, 0.06);
-  --muted-foreground: #9aa3aa;
+  --background: #0b0d13;
+  --foreground: #f0f3f9;
+  --card: rgba(23, 28, 48, 0.72);
+  --card-foreground: #f0f3f9;
+  --popover: rgba(21, 26, 45, 0.97);
+  --popover-foreground: #f0f3f9;
+  --primary: #5b84f0;
+  --primary-foreground: #0a1128;
+  --secondary: rgba(114, 144, 250, 0.08);
+  --secondary-foreground: #dde4f5;
+  --muted: rgba(114, 144, 250, 0.08);
+  --muted-foreground: #96a0bc;
   --accent: rgba(var(--brand-rgb), 0.14);
-  --accent-foreground: #6fe6e2;
+  --accent-foreground: #a6bcfa;
   --destructive: #fb7185;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --input: rgba(255, 255, 255, 0.1);
+  --border: rgba(140, 160, 230, 0.1);
+  --border-strong: rgba(140, 160, 230, 0.2);
+  --input: rgba(140, 160, 230, 0.12);
   --ring: rgba(var(--brand-rgb), 0.55);
-  --chart-1: #11b5b0;
-  --chart-2: #6fe6e2;
+  --chart-1: #5b84f0;
+  --chart-2: #a6bcfa;
   --chart-3: #fbbf24;
   --chart-4: #fb7185;
   --chart-5: #a78bfa;
-  --sidebar: rgba(16, 18, 20, 0.8);
-  --sidebar-foreground: #f2f4f5;
-  --sidebar-primary: #11b5b0;
-  --sidebar-primary-foreground: #06201f;
+  --sidebar: rgba(17, 21, 38, 0.8);
+  --sidebar-foreground: #f0f3f9;
+  --sidebar-primary: #5b84f0;
+  --sidebar-primary-foreground: #0a1128;
   --sidebar-accent: rgba(var(--brand-rgb), 0.12);
-  --sidebar-accent-foreground: #6fe6e2;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #a6bcfa;
+  --sidebar-border: rgba(140, 160, 230, 0.1);
   --sidebar-ring: rgba(var(--brand-rgb), 0.5);
-  --glass: rgba(46, 51, 58, 0.55);
-  --glass-strong: rgba(56, 62, 70, 0.85);
+  /* СТЕКЛО: синеватое вместо серого (46,51,58) — тёмно-синее мутное стекло */
+  --glass: rgba(34, 42, 74, 0.55);
+  --glass-strong: rgba(40, 50, 86, 0.86);
+  /* Стеклянное поле поиска/инпутов — чуть плотнее secondary */
+  --field: rgba(91, 132, 240, 0.1);
+  --field-strong: rgba(91, 132, 240, 0.17);
   --shadow-card: 0 10px 40px -12px rgba(0, 0, 0, 0.55);
   --shadow-pop: 0 24px 70px -20px rgba(0, 0, 0, 0.7);
-  --grid-line: rgba(255, 255, 255, 0.05);
+  --grid-line: rgba(140, 160, 230, 0.05);
   /* Цвет кромки/буквбокса iOS: нижние 48px вьюпорта всегда этого цвета
      (совпадает с фоном html — системная зона неотличима от страницы) */
-  --edge: #10161a;
+  --edge: #0e1322;
   /* Стекло плавающей пилюли: обычное / при скролле (прозрачнее) / при касании (плотнее).
-     МУТНОЕ СТЕКЛО: в тёмной теме — на 2 тона СВЕТЛЕЕ фона (#0d0e10 → ~#1f2227),
+     МУТНОЕ СТЕКЛО: в тёмной теме — на 2 тона СВЕТЛЕЕ фона (#0b0d13 → ~#1c2340),
      чтобы не сливалось с фоном и фото */
-  --pill-bg: rgba(46, 51, 58, 0.46);
-  --pill-bg-dim: rgba(46, 51, 58, 0.3);
-  --pill-bg-active: rgba(56, 62, 70, 0.8);
-  /* Линза активного пункта / чип темы — нейтральное светлое стекло (без бирюзы) */
+  --pill-bg: rgba(36, 45, 80, 0.46);
+  --pill-bg-dim: rgba(36, 45, 80, 0.3);
+  --pill-bg-active: rgba(44, 55, 96, 0.8);
+  /* Линза активного пункта / чип темы — нейтральное светлое стекло */
   --lens-bg: rgba(255, 255, 255, 0.14);
   --lens-border: rgba(255, 255, 255, 0.24);
-  /* Нейтральный фокус-оринг полей (вместо бирюзового) */
-  --focus-ring: rgba(255, 255, 255, 0.12);
+  /* Фокус-оринг полей — синеватый */
+  --focus-ring: rgba(114, 144, 250, 0.16);
   /* Liquid Glass (iOS 26): спекуляр-блик на верхней кромке стеклянных поверхностей */
   --glass-spec: rgba(255, 255, 255, 0.1);
   --glass-spec-strong: rgba(255, 255, 255, 0.18);
@@ -109,47 +118,53 @@
 
 /* ─── Светлая тема ───────────────────────────────────────────────────────── */
 .light {
-  --background: #f4f7f8;
-  --edge: #eef3f4;
-  --foreground: #17242a;
+  --brand: #2a55d5;
+  --brand-strong: #3d66e6;
+  --brand-rgb: 42, 85, 213;
+  --background: #f1f4fb;
+  --edge: #e9edf8;
+  --foreground: #141d33;
   --card: rgba(255, 255, 255, 0.82);
-  --card-foreground: #17242a;
+  --card-foreground: #141d33;
   --popover: rgba(255, 255, 255, 0.98);
-  --popover-foreground: #17242a;
-  --primary: #0c9c97;
+  --popover-foreground: #141d33;
+  --primary: #2a55d5;
   --primary-foreground: #ffffff;
-  --secondary: rgba(23, 36, 42, 0.05);
-  --secondary-foreground: #2c3b42;
-  --muted: rgba(23, 36, 42, 0.05);
-  --muted-foreground: #5d6b73;
+  --secondary: rgba(42, 85, 213, 0.06);
+  --secondary-foreground: #24304d;
+  --muted: rgba(42, 85, 213, 0.06);
+  --muted-foreground: #5a6787;
   --accent: rgba(var(--brand-rgb), 0.1);
-  --accent-foreground: #0b7d79;
+  --accent-foreground: #1d40b0;
   --destructive: #ef4444;
-  --border: rgba(23, 36, 42, 0.1);
-  --border-strong: rgba(23, 36, 42, 0.2);
-  --input: rgba(23, 36, 42, 0.12);
+  --border: rgba(25, 42, 100, 0.1);
+  --border-strong: rgba(25, 42, 100, 0.2);
+  --input: rgba(25, 42, 100, 0.12);
   --ring: rgba(var(--brand-rgb), 0.45);
   --sidebar: rgba(255, 255, 255, 0.75);
-  --sidebar-foreground: #17242a;
-  --sidebar-primary: #0c9c97;
+  --sidebar-foreground: #141d33;
+  --sidebar-primary: #2a55d5;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(var(--brand-rgb), 0.09);
-  --sidebar-accent-foreground: #0b7d79;
-  --sidebar-border: rgba(23, 36, 42, 0.08);
+  --sidebar-accent-foreground: #1d40b0;
+  --sidebar-border: rgba(25, 42, 100, 0.08);
   --sidebar-ring: rgba(var(--brand-rgb), 0.4);
-  --glass: rgba(150, 160, 169, 0.38);
-  --glass-strong: rgba(148, 158, 167, 0.72);
-  --shadow-card: 0 8px 30px -14px rgba(23, 42, 51, 0.22);
-  --shadow-pop: 0 24px 60px -22px rgba(23, 42, 51, 0.3);
-  --grid-line: rgba(23, 36, 42, 0.05);
-  /* МУТНОЕ СТЕКЛО: в светлой теме — СЛЕГКА ТЕМНЕЕ фона (#f4f7f8 → ~#d8dde1),
+  /* СТЕКЛО: мягкое синеватое вместо серого (150,160,169) */
+  --glass: rgba(196, 208, 240, 0.42);
+  --glass-strong: rgba(191, 204, 238, 0.76);
+  --field: rgba(42, 85, 213, 0.07);
+  --field-strong: rgba(42, 85, 213, 0.11);
+  --shadow-card: 0 8px 30px -14px rgba(23, 42, 79, 0.22);
+  --shadow-pop: 0 24px 60px -22px rgba(23, 42, 79, 0.3);
+  --grid-line: rgba(25, 42, 100, 0.05);
+  /* МУТНОЕ СТЕКЛО: в светлой теме — СЛЕГКА ТЕМНЕЕ фона (#f1f4fb → ~#dde3f3),
      чтобы белое стекло не сливалось с белым фоном */
-  --pill-bg: rgba(150, 160, 169, 0.34);
-  --pill-bg-dim: rgba(150, 160, 169, 0.2);
-  --pill-bg-active: rgba(142, 152, 161, 0.7);
+  --pill-bg: rgba(196, 208, 240, 0.36);
+  --pill-bg-dim: rgba(196, 208, 240, 0.22);
+  --pill-bg-active: rgba(186, 199, 236, 0.72);
   --lens-bg: rgba(255, 255, 255, 0.72);
   --lens-border: rgba(255, 255, 255, 0.95);
-  --focus-ring: rgba(23, 36, 42, 0.1);
+  --focus-ring: rgba(42, 85, 213, 0.12);
   --glass-spec: rgba(255, 255, 255, 0.7);
   --glass-spec-strong: rgba(255, 255, 255, 0.9);
 }
@@ -180,7 +195,7 @@ body {
      fixed-слоёв (сбой отрисовки iOS) выглядит так же, как с ними */
   background:
     radial-gradient(720px 720px at 140px 100px, rgba(var(--brand-rgb), 0.16), transparent 62%),
-    radial-gradient(620px 620px at calc(100% + 110px) 18%, rgba(111, 230, 226, 0.09), transparent 65%),
+    radial-gradient(620px 620px at calc(100% + 110px) 18%, rgba(122, 152, 255, 0.09), transparent 65%),
     radial-gradient(560px 560px at 28% calc(100% + 280px), rgba(var(--brand-rgb), 0.08), transparent 65%),
     radial-gradient(135% 105% at 50% 40%, transparent 58%, rgba(0, 0, 0, 0.26) 100%),
     var(--background);
@@ -196,9 +211,9 @@ body {
 .light body {
   background:
     radial-gradient(720px 720px at 140px 100px, rgba(var(--brand-rgb), 0.1), transparent 62%),
-    radial-gradient(620px 620px at calc(100% + 110px) 18%, rgba(17, 181, 176, 0.06), transparent 65%),
+    radial-gradient(620px 620px at calc(100% + 110px) 18%, rgba(42, 85, 213, 0.06), transparent 65%),
     radial-gradient(560px 560px at 28% calc(100% + 280px), rgba(var(--brand-rgb), 0.05), transparent 65%),
-    radial-gradient(135% 105% at 50% 40%, transparent 58%, rgba(15, 42, 60, 0.05) 100%),
+    radial-gradient(135% 105% at 50% 40%, transparent 58%, rgba(16, 30, 70, 0.05) 100%),
     var(--background);
 }
 
@@ -268,7 +283,7 @@ body {
   height: 620px;
   right: -200px;
   top: 18%;
-  background: radial-gradient(circle, rgba(111, 230, 226, 0.045), transparent 65%);
+  background: radial-gradient(circle, rgba(122, 152, 255, 0.05), transparent 65%);
   animation: drift-b 32s ease-in-out infinite alternate;
 }
 .aurora-c {
@@ -649,7 +664,7 @@ body {
   font-family: var(--font-unbounded), var(--font-inter), system-ui, sans-serif;
 }
 .gradient-text {
-  background: linear-gradient(120deg, var(--brand-strong) 0%, #6fe6e2 55%, var(--brand) 100%);
+  background: linear-gradient(120deg, var(--brand-strong) 0%, #9db4f5 55%, var(--brand) 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -951,7 +966,7 @@ body {
     from 0deg,
     color-mix(in srgb, var(--brand) 60%, transparent),
     rgba(255, 255, 255, 0.25),
-    color-mix(in srgb, var(--brand) 45%, rgba(64, 200, 255, 0.5)),
+    color-mix(in srgb, var(--brand) 45%, rgba(120, 150, 255, 0.5)),
     color-mix(in srgb, var(--brand) 60%, transparent)
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -1023,7 +1038,10 @@ header.glass {
   transform: translateY(-6px) scale(0.98);
   pointer-events: none;
 }
-/* Панель поиска сворачивается плавно (grid-rows — без прыжков высоты) */
+/* Панель поиска сворачивается плавно (grid-rows — без прыжков высоты).
+   РАЗВЁРНУТАЯ панель: overflow visible — иначе clips-дропдаун с подсказками
+   (пользователь видел «мёртвое» поле: дропдаун открыт, но обрезан).
+   Клип нужен только пока панель сворачивается/свёрнута (.header-collapsed). */
 .search-collapse {
   display: grid;
   grid-template-rows: 1fr;
@@ -1031,13 +1049,16 @@ header.glass {
   transition: grid-template-rows 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.22s ease;
 }
 .search-collapse > div {
-  overflow: hidden;
+  overflow: visible;
   min-height: 0;
 }
 .header-collapsed .search-collapse {
   grid-template-rows: 0fr;
   opacity: 0;
   pointer-events: none;
+}
+.header-collapsed .search-collapse > div {
+  overflow: hidden;
 }
 /* Кружок поиска — появляется вместо панели при скролле, СЛЕВА (одна сторона со «Назад»).
    Единый размер с «Назад»/«наверх»: 44px, иконка 20 */
@@ -1083,7 +1104,10 @@ header.glass {
     transform: scale(1) translateY(0);
   }
 }
-/* Подвесной поиск: открылся из кружка — стеклянная карточка под шапкой */
+/* Подвесной поиск: ПРЕДСМОНТИРОВАН (в DOM всегда — фокус внутри жеста тапа
+   открывает клавиатуру iOS; flushSync-рендер запрещён — рвал AnimatePresence).
+   Скрытое состояние: visibility:hidden + прозрачность; открытие — класс .is-open
+   (вешается синхронно из portal.tsx ДО focus(), виден в том же кадре). */
 .search-pop {
   position: fixed;
   top: calc(56px + env(safe-area-inset-top));
@@ -1097,17 +1121,23 @@ header.glass {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-pop);
   padding: 8px;
-  animation: search-pop-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-10px) scale(0.98);
+  transition:
+    opacity 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 0.24s;
 }
-@keyframes search-pop-in {
-  from {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+.search-pop.is-open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 @media (min-width: 1024px) {
   .search-fab,
@@ -1168,7 +1198,7 @@ header.glass {
   height: 56%;
   width: 3px;
   border-radius: 999px;
-  background: linear-gradient(180deg, var(--brand), #6fe6e2);
+  background: linear-gradient(180deg, var(--brand), #9db4f5);
   box-shadow: 0 0 14px rgba(var(--brand-rgb), 0.8);
 }
 
@@ -1378,7 +1408,7 @@ label {
   height: 100%;
   transform: scaleX(0);
   transform-origin: 0 50%;
-  background: linear-gradient(90deg, var(--brand), #6fe6e2);
+  background: linear-gradient(90deg, var(--brand), #9db4f5);
   box-shadow: 0 0 12px rgba(var(--brand-rgb), 0.8);
   border-radius: 0 999px 999px 0;
 }

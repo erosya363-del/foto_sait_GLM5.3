@@ -106,7 +106,7 @@ ok("линза имеет ядро .nav-lens-core", (await page.locator(".nav-le
 const onColor = await items.nth(0).evaluate((el) => getComputedStyle(el).color);
 ok(
   "активный пункт чётким цветом текста (iOS-стиль, без бирюзы)",
-  onColor === "rgb(242, 244, 245)",
+  onColor === "rgb(240, 243, 249)",
   onColor
 );
 
@@ -209,8 +209,11 @@ const pop = page.locator(".search-pop");
 ok("подвесной поиск открылся", await pop.isVisible());
 const panelH2 = (await searchPanel.boundingBox())?.height ?? 0;
 ok("панельный поиск при этом свернут", panelH2 <= 2, `h=${panelH2}`);
-const focused1 = await page.evaluate(() => document.activeElement?.id);
-ok("поле поиска в фокусе (клавиатура)", focused1 === "global-search", `activeElement=${focused1}`);
+const focused1 = await page.evaluate(() => {
+  const ae = document.activeElement;
+  return Boolean(ae && ae.matches("input[data-search-input]") && ae.closest(".search-pop"));
+});
+ok("поле поиска в фокусе (клавиатура) — в ВИДИМОЙ карточке", focused1);
 // печатаем — дропдаун в подвесном формате
 await page.keyboard.type("диван");
 await page.waitForTimeout(600);
@@ -218,7 +221,8 @@ ok("дропдаун подсказок открыт", await page.locator(".sear
 // листание (в любую сторону >30px; вниз места нет — L1 max 108) — подвесной закрылся
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
 await page.waitForTimeout(500);
-ok("листание закрыло подвесной поиск", (await page.locator(".search-pop").count()) === 0);
+/* карточка предсмонтирована — закрытие = снялся класс .is-open */
+ok("листание закрыло подвесной поиск", (await page.locator(".search-pop.is-open").count()) === 0);
 // вернулись вниз — кружок снова на месте
 await page.evaluate(() => window.scrollTo({ top: 108, behavior: "instant" }));
 await page.waitForTimeout(500);
@@ -254,11 +258,11 @@ await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")
 await page.waitForTimeout(350);
 const lightBg = await settle(
   () => shell.evaluate((el) => getComputedStyle(el).backgroundColor),
-  (v) => /^rgba\(150,\s*160,\s*169/.test(v)
+  (v) => /^rgba\(196,\s*208,\s*240/.test(v)
 );
 ok(
-  "светлая тема: мутное серое стекло (темнее фона, не сливается)",
-  /^rgba\(150,\s*160,\s*169/.test(lightBg),
+  "светлая тема: мутное СИНЕВАТОЕ стекло (темнее фона, не сливается; палитра «Кобальт»)",
+  /^rgba\(196,\s*208,\s*240/.test(lightBg),
   lightBg
 );
 const lightLens = await page.locator(".nav-lens-core").evaluate((el) => getComputedStyle(el).boxShadow);
@@ -280,7 +284,7 @@ await page.screenshot({ path: "tool-results/pill-dark-scrolled.png" });
 const skirt = await page.locator(".fx-skirt").count();
 ok("фикс v3: юбка на месте", skirt === 1);
 const htmlBg = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
-ok("фикс v3: html фон --edge (#10161a)", htmlBg === "rgb(16, 22, 26)", htmlBg);
+ok("фикс v3: html фон --edge (кобальт #0e1322)", htmlBg === "rgb(14, 19, 34)", htmlBg);
 
 console.log("── 12. Десктоп: пилюля и кружок скрыты, шапка не сворачивается ──");
 await page.setViewportSize({ width: 1440, height: 900 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { usePortal } from "@/lib/store";
@@ -67,52 +67,11 @@ function popularFromLog(max = 6): string[] {
   }
 }
 
-const PHRASES = [
-  "Поиск: ткань, модель, «sky»…",
-  "«казанова» найдёт Casanova",
-  "«угловой» — все угловые диваны",
-  "«160×200» — поиск по размеру",
-];
-
-/** Печатающийся плейсхолдер: фраза вводится, пауза, стирается, следующая */
-function useTypewriter(active: boolean) {
-  const [text, setText] = useState("");
-  const ref = useRef({ phrase: 0, pos: 0, deleting: false });
-
-  useEffect(() => {
-    if (!active) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const st = ref.current;
-      const phrase = PHRASES[st.phrase % PHRASES.length];
-      if (!st.deleting) {
-        st.pos++;
-        if (st.pos > phrase.length) {
-          st.deleting = true;
-          timer = setTimeout(tick, 2000);
-          setText(phrase);
-          return;
-        }
-      } else {
-        st.pos--;
-        if (st.pos <= 0) {
-          st.deleting = false;
-          st.phrase++;
-          st.pos = 0;
-          timer = setTimeout(tick, 500);
-          setText("");
-          return;
-        }
-      }
-      setText(phrase.slice(0, st.pos));
-      timer = setTimeout(tick, st.deleting ? 22 : 55);
-    };
-    timer = setTimeout(tick, 400);
-    return () => clearTimeout(timer);
-  }, [active]);
-
-  return text;
-}
+/* Плейсхолдер — СТАТИЧНЫЙ и честный.
+   Раньше здесь был «печатающийся» плейсхолдер, который в записи владельца
+   выглядел как самопечатающий сломанный поиск («Поиск: тк…») — убран:
+   поле должно молчать, пока пользователь сам не начал печатать. */
+const PLACEHOLDER = "Ткань, модель, размер…";
 
 /**
  * Фиксированный единый поиск. Анти-джиттер:
@@ -126,6 +85,12 @@ export function SearchBar() {
   const focused = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  /* ФИКС «ПОИСК НЕ РАБОТАЕТ»: раньше у ОБОИХ экземпляров SearchBar (свёрнутая
+     панель шапки + подвесная карточка) поле было с одним и тем же id
+     "global-search" — getElementById возвращал НЕВИДИМОЕ поле, фокус уходил
+     туда, клавиатура iOS не открывалась. Теперь id уникален (useId), а портал
+     фокусирует поле по data-search-input внутри ВИДИМОГО контейнера. */
+  const inputId = useId();
 
   const searchOpen = usePortal((s) => s.searchOpen);
   const setSearchOpen = usePortal((s) => s.setSearchOpen);
@@ -150,13 +115,16 @@ export function SearchBar() {
     staleTime: 30_000,
   });
 
-  // Печатающийся плейсхолдер — только при пустом вводе
-  const typed = useTypewriter(value === "");
-
-  // Клик мимо — закрыть дропдаун
+  // Клик мимо — закрыть дропдаун. ВАЖНО: тапы внутри подвесной карточки
+  // (.search-pop) и по кружку-лупе (.search-fab) НЕ считаются «мимо» — когда
+  // открыта карточка, именно она активная поверхность; иначе экземпляр панели
+  // шапки гасил бы дропдаун карточки каждым её тапом (два экземпляра живут
+  // одновременно — панель НЕ размонтируется, чтобы не прыгала высота шапки).
   useEffect(() => {
     if (!searchOpen) return;
     const onDown = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.(".search-pop") || t?.closest?.(".search-fab")) return;
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setSearchOpen(false);
     };
     window.addEventListener("pointerdown", onDown);
@@ -187,7 +155,8 @@ export function SearchBar() {
         <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-muted-foreground" />
         <input
           ref={inputRef}
-          id="global-search"
+          id={inputId}
+          data-search-input=""
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
@@ -203,13 +172,16 @@ export function SearchBar() {
               inputRef.current?.blur();
             }
           }}
-          placeholder={typed}
+          placeholder={PLACEHOLDER}
           aria-label="Единый поиск: ткань, модель, размер"
           enterKeyHint="search"
           autoComplete="off"
           // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass: блюр 80px,
-          // фокус нейтральный (без бирюзовой обводки), текст/плейсхолдер — сплошные
-          className="h-11 w-full rounded-full border border-border bg-secondary/70 pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] transition-all placeholder:text-muted-foreground focus:border-[var(--border-strong)] focus:bg-secondary/90 focus:shadow-[inset_0_1px_0_var(--glass-spec),0_0_0_4px_var(--focus-ring)] sm:text-[14px]"
+          // синеватое стекло вместо серого, кобальтовый focus-ring.
+          // ВАЖНО: transition-all ЗАПРЕЩЁН — он транзионил унаследованный
+          // visibility (карточка открывается в кадре тапа): в первый кадр
+          // computed visibility оставался «hidden» и focus() молча отказывал.
+          className="h-11 w-full rounded-full border border-border bg-field pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] transition-[background-color,border-color,box-shadow] placeholder:text-muted-foreground focus:border-[var(--border-strong)] focus:bg-field-strong focus:shadow-[inset_0_1px_0_var(--glass-spec),0_0_0_4px_var(--focus-ring)] sm:text-[14px]"
         />
         {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
         {!(value || searchQuery) && !searchOpen && (
@@ -245,7 +217,7 @@ export function SearchBar() {
               <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
                 {(personal.length > 0
                   ? [...personal, ...(data?.popular ?? []).filter((p) => !personal.includes(p))].slice(0, 8)
-                  : (data?.popular ?? ["Трентон", "Магни", "Локо", "Ника", "sky", "casanova", "угловой", "160×200"])
+                  : (data?.popular ?? ["Локо", "Карина", "Ника", "sky", "угловой", "акция", "160×200"])
                 ).map((p) => (
                   <button
                     key={p}

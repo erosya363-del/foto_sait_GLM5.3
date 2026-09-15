@@ -95,7 +95,7 @@ const portal = (page) =>
 /* S4: поиск → Back → поиск снят */
 {
   const { ctx, page } = await fresh();
-  await page.fill("#global-search", "sky");
+  await page.fill("input[data-search-input]", "sky");
   await page.waitForTimeout(500);
   await page.keyboard.press("Enter");
   await page.waitForTimeout(900);

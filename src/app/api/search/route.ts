@@ -7,8 +7,24 @@ export const dynamic = "force-dynamic";
 /** Шаг 4: окно «новизны» — 7 дней */
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
-/** Популярные запросы для пустого дропдауна */
-const POPULAR = ["Трентон", "Магни", "Локо", "sky", "casanova", "угловой", "акция", "160×200"];
+/** Популярные запросы для пустого дропдауна — ФОЛБЭК, если БД пуста.
+     ВАЖНО: раньше список был жёстким («Трентон», «Магни»…) и разошёлся с БД —
+     владелец тапал чип и получал «Ничего не найдено» (выглядело как сломанный
+     поиск). Теперь популярные считаются из БД (см. popularFromDb). */
+const POPULAR_FALLBACK = ["Локо", "Карина", "Ника", "sky", "угловой", "акция", "160×200"];
+
+/** Топ моделей, у которых ЕСТЬ фото (единое правило «нет фото — нет узла»):
+     честные подсказки вместо протухшего жёсткого списка. */
+async function popularFromDb(): Promise<string[]> {
+  const rows = await db.productVariant.findMany({
+    where: { active: true, deletedAt: null, photos: { some: { deletedAt: null } } },
+    include: { model: { select: { name: true } } },
+  });
+  const counts = new Map<string, number>();
+  for (const v of rows) counts.set(v.model.name, (counts.get(v.model.name) ?? 0) + 1);
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name]) => name);
+  return top.length > 0 ? top : POPULAR_FALLBACK;
+}
 
 /**
  * GET /api/search?q=... — единый поиск по каталогу:
@@ -19,7 +35,7 @@ export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get("q") || "").trim();
 
   if (!q) {
-    return NextResponse.json({ popular: POPULAR, fabrics: [], variants: [] });
+    return NextResponse.json({ popular: await popularFromDb(), fabrics: [], variants: [] });
   }
 
   const rows = (
@@ -75,5 +91,5 @@ export async function GET(req: NextRequest) {
     photoCount: v.photos.length,
   }));
 
-  return NextResponse.json({ popular: POPULAR, fabrics, variants });
+  return NextResponse.json({ popular: await popularFromDb(), fabrics, variants });
 }

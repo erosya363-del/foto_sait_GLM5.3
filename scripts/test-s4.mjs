@@ -130,8 +130,8 @@ ok("прыжок: товар закрыт, уровень моделей", (awai
 console.log("── 10. Поиск: крошки + NEW ──");
 await page.locator('nav.pill-nav button:has-text("Каталог")').click();
 await page.waitForTimeout(300);
-await page.fill("#global-search", "sky");
-await page.press("#global-search", "Enter");
+await page.fill("input[data-search-input]", "sky");
+await page.press("input[data-search-input]", "Enter");
 await page.waitForTimeout(900);
 const searchCrumb = await page.locator('[role="navigation"][aria-label="Путь в каталоге"] span:has-text("Поиск:")').count();
 ok("крошка «Поиск: «sky»»", searchCrumb > 0);
@@ -158,10 +158,10 @@ const css = await page.evaluate(() => {
   const bodyBg = getComputedStyle(document.body).backgroundImage;
   return { htmlBg, skirtBg, skirtH, skirtCount: document.querySelectorAll(".fx-skirt").length, hasBodyLayers: bodyBg.split("),").length };
 });
-ok("html bg = rgb(16, 22, 26)", css.htmlBg === "rgb(16, 22, 26)", `(got ${css.htmlBg})`);
+ok("html bg = rgb(14, 19, 34)", css.htmlBg === "rgb(14, 19, 34)", `(got ${css.htmlBg})`);
 ok(".fx-skirt есть", css.skirtCount === 1);
 ok("юбка 96px", css.skirtH === "96px", `(got ${css.skirtH})`);
-ok("юбка залита --edge", /rgb\(16, 22, 26\)/.test(css.skirtBg));
+ok("юбка залита --edge", /rgb\(14, 19, 34\)/.test(css.skirtBg));
 ok("градиенты запечены в body (≥4 слоя)", css.hasBodyLayers >= 4, `(${css.hasBodyLayers})`);
 
 console.log("── 13. Консоль ──");

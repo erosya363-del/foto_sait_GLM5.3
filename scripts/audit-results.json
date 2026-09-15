@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-14T20:36:34.302Z",
+  "startedAt": "2026-09-15T12:00:01.377Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -11,7 +11,14 @@
           "Светлая (28×28)",
           "Тёмная (28×28)"
         ],
-        "overlapped": [],
+        "overlapped": [
+          {
+            "btn": "Все ткани18 тканей · 18 вариантов фото",
+            "by": "DIV.pill-shell pill-active",
+            "pos": "195,676",
+            "floating": "pill-shell"
+          }
+        ],
         "invisible": [],
         "btnCount": 36
       },
@@ -32,9 +39,7 @@
           "Скопировать название (32×32)",
           "Скопировать название (32×32)",
           "Скопировать название (32×32)",
-          "BUTTON (35×32)",
           "Скопировать название (32×32)",
-          "BUTTON (35×32)",
           "Скопировать название (32×32)",
           "Скопировать название (32×32)",
           "Скопировать название (32×32)",
@@ -50,13 +55,13 @@
           {
             "btn": "Скопировать название",
             "by": "BUTTON.pill-item",
-            "pos": "287,731",
+            "pos": "287,729",
             "floating": "pill-item"
           },
           {
             "btn": "2",
-            "by": "SPAN.text-[10px] font-semibold",
-            "pos": "337,731",
+            "by": "INPUT.pill-haptic",
+            "pos": "337,729",
             "floating": "pill-item"
           }
         ],
@@ -85,7 +90,7 @@
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 63
+        "btnCount": 62
       }
     },
     "viewports": {
@@ -134,13 +139,13 @@
       "390x760": {
         "catalog": {
           "overflowX": 0,
-          "overlapped": 0,
+          "overlapped": 1,
           "broken": 0,
           "btns": 36
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 2,
+          "overlapped": 4,
           "broken": 0,
           "btns": 59
         }
@@ -324,7 +329,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu1pemwy000tszvfpuyumarw\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu2me6md0002nhh2hyh8j2p5\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
@@ -332,12 +337,12 @@
           "navZ": "40",
           "navPos": "fixed",
           "navDisplay": "block",
-          "shellH": 64,
+          "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 62, 70, 0.9)",
-          "blur": "blur(80px) saturate(1.7)",
-          "border": "rgba(255, 255, 255, 0.16)",
+          "bg": "rgba(44, 55, 96, 0.8)",
+          "blur": "blur(80px) saturate(1.8)",
+          "border": "rgba(140, 160, 230, 0.2)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
@@ -348,12 +353,12 @@
           "navZ": "40",
           "navPos": "fixed",
           "navDisplay": "block",
-          "shellH": 64,
+          "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 62, 70, 0.9)",
-          "blur": "blur(80px) saturate(1.7)",
-          "border": "rgba(255, 255, 255, 0.16)",
+          "bg": "rgba(44, 55, 96, 0.8)",
+          "blur": "blur(80px) saturate(1.8)",
+          "border": "rgba(140, 160, 230, 0.2)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
@@ -364,12 +369,12 @@
           "navZ": "40",
           "navPos": "fixed",
           "navDisplay": "block",
-          "shellH": 64,
+          "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 62, 70, 0.9)",
-          "blur": "blur(80px) saturate(1.7)",
-          "border": "rgba(255, 255, 255, 0.16)",
+          "bg": "rgba(44, 55, 96, 0.8)",
+          "blur": "blur(80px) saturate(1.8)",
+          "border": "rgba(140, 160, 230, 0.2)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
@@ -380,12 +385,12 @@
           "navZ": "40",
           "navPos": "fixed",
           "navDisplay": "block",
-          "shellH": 64,
+          "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 62, 70, 0.9)",
-          "blur": "blur(80px) saturate(1.7)",
-          "border": "rgba(255, 255, 255, 0.16)",
+          "bg": "rgba(44, 55, 96, 0.8)",
+          "blur": "blur(80px) saturate(1.8)",
+          "border": "rgba(140, 160, 230, 0.2)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",

@@ -34,6 +34,20 @@ const IS_CHROMIUM =
 
 const WAREHOUSES: Warehouse[] = ["Обухово", "Владимир"];
 
+/** Видим ли элемент — для выбора ПРАВИЛЬного поля поиска.
+    НЕ offsetParent (у position:fixed он всегда null — а .search-pop fixed):
+    меряем геометрию + computed style.
+    БЕЗ проверки opacity: у карточки есть входная анимация (0.22s, opacity 0→1) —
+    в первые кадры opacity=0, но карточка УЖЕ та поверхность, где пользователь
+    ждёт поле; отказ из-за анимации ломал фокус (fallback успевал раньше). */
+function isShown(el: Element | null): el is Element {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  if (r.width < 8 || r.height < 8) return false;
+  const st = getComputedStyle(el);
+  return st.display !== "none" && st.visibility !== "hidden";
+}
+
 /** Селектор склада — фиксированная ширина, чтобы шапка не прыгала при смене */
 function WarehouseSelect({ className }: { className?: string }) {
   const warehouse = usePortal((s) => s.warehouse);
@@ -544,16 +558,65 @@ export function Portal() {
   }, [liquid]);
 
   /* ── Поиск: из пилюли, из кружка или по «/» ─────────────────────── */
+  /* ФИКС «ПОИСК НЕ РАБОТАЕТ» (видео владельца): раньше фокус ставился через
+     setTimeout(130мс) на getElementById("global-search") — а при скролле
+     смонтированы ДВА SearchBar (свёрнутая панель + подвесная карточка) с
+     ОДИНАКОВЫМ id, и getElementById возвращал невидимое поле свёрнутой
+     панели. Итог: фокус не там, клавиатура iOS не открывается, печатать
+     нельзя. Теперь: (1) flushSync рендерит карточку СИНХРОННО внутри жеста
+     тапа; (2) фокус ставится немедленно на ВИДИМОЕ поле [data-search-input]
+     — iOS открывает клавиатуру, т.к. focus() остаётся в жесте. */
+  const focusVisibleSearchInput = () => {
+    const pop = document.querySelector<Element>(".search-pop");
+    const panel = document.querySelector<Element>(".search-collapse");
+    // Подвесная карточка приоритетнее; из двух берём ту, что реально видна
+    const host = isShown(pop) ? pop : isShown(panel) ? panel : null;
+    const input = host?.querySelector<HTMLInputElement>("input[data-search-input]");
+    /* preventScroll ОБЯЗАТЕЛЕН: фокус на поле внутри position:fixed карточки
+       otherwise скроллит ДОКУМЕНТ к «статической позиции» фиксированного
+       элемента (в самый верх) — страница улетает наверх, скролл-хендлер видит
+       «скролл > 30px» и тут же закрывает карточку. preventScroll рвёт эту
+       связь; на открытие клавиатуры iOS он не влияет. */
+    try {
+      input?.focus({ preventScroll: true });
+    } catch {
+      input?.focus();
+    }
+    /* Страховка: если в этот же кадр computed visibility ещё «hidden»
+       (транзишены наследуются), форсируем reflow и пробуем ещё раз —
+       обе попытки остаются внутри жеста тапа (клавиатура iOS откроется) */
+    if (input && document.activeElement !== input) {
+      void input.offsetHeight;
+      try {
+        input.focus({ preventScroll: true });
+      } catch {
+        input.focus();
+      }
+    }
+    return Boolean(input);
+  };
   const openSearch = () => {
     const s = usePortal.getState();
     playTick(); // звук + хаптика (движок)
     if (s.productId) dismissProduct();
     if (s.view !== "catalog" && s.view !== "stock") s.setView("catalog");
-    if (scrolled) setSearchFabOpen(true);
-    window.setTimeout(
-      () => (document.getElementById("global-search") as HTMLInputElement | null)?.focus(),
-      scrolled ? 130 : 80
-    );
+    /* Подвесная карточка — только на мобиле (на lg она display:none, там панель
+       поиска в шапке не сворачивается никогда).
+       ТЕХНИКА «ПРЕДСМОНТИРОВАННАЯ КАРТОЧКА» (flushSync запрещён — он рвал
+       AnimatePresence: контент исчезал на кадр, документ схлопывался и iOS
+       сбрасывал скролл в 0): карточка в DOM всегда, скрыта visibility:hidden.
+       Открытие: (1) класс is-open СИНХРОННО — видна в этом же кадре;
+       (2) focus() В ЖЕСТЕ тапа — iOS открывает клавиатуру;
+       (3) setSearchFabOpen — React-состояние для слушателей. */
+    const isDesktop = window.matchMedia?.("(min-width: 1024px)")?.matches ?? false;
+    if (!isDesktop && scrolled) {
+      document.querySelector(".search-pop")?.classList.add("is-open");
+      focusVisibleSearchInput();
+      setSearchFabOpen(true);
+    } else if (!focusVisibleSearchInput()) {
+      // страховка для редких гонок (например, открытие по «/» с другой вью)
+      window.setTimeout(focusVisibleSearchInput, 120);
+    }
   };
 
   useEffect(() => {
@@ -574,6 +637,18 @@ export function Portal() {
     window.addEventListener("pointerdown", onDown);
     return () => window.removeEventListener("pointerdown", onDown);
   }, [searchFabOpen]);
+
+  // Поиск применён (Enter/чип/ткань) → подвесная карточка сворачивается в кружок:
+  // результат виден в каталоге, а applied-чип с «сбросить» живёт в панели шапки
+  const appliedQueryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (searchQuery && searchQuery !== appliedQueryRef.current) {
+      appliedQueryRef.current = searchQuery;
+      setSearchFabOpen(false);
+      usePortal.getState().setSearchOpen(false);
+    }
+    if (!searchQuery) appliedQueryRef.current = null;
+  }, [searchQuery]);
 
   // ── History API: каждый новый слой/раздел — отдельная запись ─────
   // ФИКС F-001: в deps включены ВСЕ слои (cat*/searchQuery) — раньше запись
@@ -904,10 +979,12 @@ export function Portal() {
         </button>
       )}
 
-      {/* Подвесной поиск — стеклянная карточка (не панель): открыт из кружка или по «/» при скролле.
+      {/* Подвесной поиск — стеклянная карточка: ПРЕДСМОНТИРОВАНА (скрыта
+          visibility:hidden), открывается из кружка или по «/» при скролле
+          синхронным классом is-open + фокусом в жесте (клавиатура iOS).
           Листание (>30px) сжимает обратно в кружок. */}
-      {searchVisible && searchFabOpen && (
-        <div className="search-pop lg:hidden">
+      {searchVisible && (
+        <div className={cn("search-pop lg:hidden", searchFabOpen && "is-open")}>
           <SearchBar />
         </div>
       )}

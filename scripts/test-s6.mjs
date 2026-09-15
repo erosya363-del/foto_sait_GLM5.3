@@ -233,7 +233,7 @@ await page.evaluate(() => {
 });
 await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(800);
-await page.click("#global-search");
+await page.click("input[data-search-input]");
 await page.waitForTimeout(400);
 const dd = page.locator(".search-collapse .absolute.z-50").first();
 ok("дропдаун открылся", await dd.isVisible());
@@ -241,13 +241,13 @@ const ddBg = await dd.evaluate((el) => getComputedStyle(el).backgroundColor);
 ok("дропдаун полупрозрачный (~85%)", Math.abs(alphaOf(ddBg) - 0.85) < 0.06, ddBg);
 const ddBlur = await dd.evaluate((el) => getComputedStyle(el).backdropFilter);
 ok("фон за дропдауном размыт", /blur/.test(ddBlur), ddBlur);
-const input = page.locator("#global-search");
+const input = page.locator("input[data-search-input]").first(); // 2 инпута: панель + предсмонтированная карточка
 const inpStyle = await input.evaluate((el) => {
   const cs = getComputedStyle(el);
   return { bw: cs.borderWidth, bs: cs.borderStyle, bg: cs.backgroundColor, anim: cs.animationName };
 });
 ok("тонкая рамка 1px", inpStyle.bw === "1px" && inpStyle.bs === "solid", JSON.stringify(inpStyle));
-ok("поле серое полупрозрачное (80%)", Math.abs(alphaOf(inpStyle.bg) - 0.048) < 0.02, inpStyle.bg);
+ok("поле синеватое стекло (фокус = --field-strong ~0.17; палитра «Кобальт»)", Math.abs(alphaOf(inpStyle.bg) - 0.17) < 0.03, inpStyle.bg);
 ok("нет анимаций на поле (не мигает)", inpStyle.anim === "none", inpStyle.anim);
 ok("старая мигающая рамка .search-frame удалена", (await page.locator(".search-frame").count()) === 0);
 const chips = await page.locator(".search-collapse .absolute button").allTextContents();
@@ -256,7 +256,7 @@ ok("«магни» в популярных", chips.includes("магни"), chips
 ok("запрос старше 7 дней не показан", !chips.includes("старьё"), chips.join("|"));
 const ddLabel = await page.locator(".search-collapse .absolute p").first().textContent();
 ok("заголовок «Популярные за 7 дней»", /за 7 дней/.test(ddLabel ?? ""), ddLabel ?? "");
-await page.fill("#global-search", "sky");
+await page.fill("input[data-search-input]", "sky");
 await page.keyboard.press("Enter");
 await page.waitForTimeout(500);
 const logAfter = await page.evaluate(() => JSON.parse(localStorage.getItem("skovo-search-log") || "{}"));
@@ -390,11 +390,11 @@ await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")
    пойман однажды — это середина перехода, ждём целевое значение) */
 const lightShell = await settle(
   () => shell.evaluate((el) => getComputedStyle(el).backgroundColor),
-  (v) => /^rgba\(150,\s*160,\s*169/.test(v)
+  (v) => /^rgba\(196,\s*208,\s*240/.test(v)
 );
 ok(
-  "светлая пилюля — мутное серое стекло (темнее фона)",
-  /^rgba\(150,\s*160,\s*169/.test(lightShell),
+  "светлая пилюля — мутное СИНЕВАТОЕ стекло (палитра «Кобальт»)",
+  /^rgba\(196,\s*208,\s*240/.test(lightShell),
   lightShell
 );
 await page.evaluate(() => {
