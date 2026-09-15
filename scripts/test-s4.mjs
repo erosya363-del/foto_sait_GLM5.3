@@ -158,10 +158,10 @@ const css = await page.evaluate(() => {
   const bodyBg = getComputedStyle(document.body).backgroundImage;
   return { htmlBg, skirtBg, skirtH, skirtCount: document.querySelectorAll(".fx-skirt").length, hasBodyLayers: bodyBg.split("),").length };
 });
-ok("html bg = rgb(14, 19, 34)", css.htmlBg === "rgb(14, 19, 34)", `(got ${css.htmlBg})`);
+ok("html bg = rgb(28, 28, 30)", css.htmlBg === "rgb(28, 28, 30)", `(got ${css.htmlBg})`);
 ok(".fx-skirt есть", css.skirtCount === 1);
 ok("юбка 96px", css.skirtH === "96px", `(got ${css.skirtH})`);
-ok("юбка залита --edge", /rgb\(14, 19, 34\)/.test(css.skirtBg));
+ok("юбка залита --edge", /rgb\(28, 28, 30\)/.test(css.skirtBg));
 ok("градиенты запечены в body (≥4 слоя)", css.hasBodyLayers >= 4, `(${css.hasBodyLayers})`);
 
 console.log("── 13. Консоль ──");

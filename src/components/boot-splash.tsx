@@ -93,7 +93,7 @@ export function BootSplash() {
 
             <div className="h-[3px] w-28 overflow-hidden rounded-full bg-secondary">
               <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-[var(--brand)] to-[#9db4f5]"
+                className="h-full rounded-full bg-gradient-to-r from-[var(--brand)] to-[var(--sand)]"
                 initial={{ width: "8%" }}
                 animate={{ width: `${progress}%` }}
                 transition={{ duration: 0.4, ease: [0.22, 0.61, 0.36, 1] }}

@@ -129,7 +129,7 @@ await page.waitForTimeout(450);
 const shell = page.locator(".pill-shell");
 ok("pill-dim включён", await shell.evaluate((el) => el.classList.contains("pill-dim")));
 const dimBg = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
-ok("фон панели сильно прозрачнее (30%)", Math.abs(alphaOf(dimBg) - 0.3) < 0.03, dimBg);
+ok("фон панели сильно прозрачнее при скролле (dim 0.26)", Math.abs(alphaOf(dimBg) - 0.26) < 0.03, dimBg);
 /* рамка растворяется transition'ом 0.28s — под нагрузкой 450мс не всегда хватает */
 let borderGone = true;
 try {
@@ -247,7 +247,7 @@ const inpStyle = await input.evaluate((el) => {
   return { bw: cs.borderWidth, bs: cs.borderStyle, bg: cs.backgroundColor, anim: cs.animationName };
 });
 ok("тонкая рамка 1px", inpStyle.bw === "1px" && inpStyle.bs === "solid", JSON.stringify(inpStyle));
-ok("поле синеватое стекло (фокус = --field-strong ~0.17; палитра «Кобальт»)", Math.abs(alphaOf(inpStyle.bg) - 0.17) < 0.03, inpStyle.bg);
+ok("поле нейтральное графит-стекло (фокус = --field-strong ~0.15; палитра «Изумруд»)", Math.abs(alphaOf(inpStyle.bg) - 0.15) < 0.03, inpStyle.bg);
 ok("нет анимаций на поле (не мигает)", inpStyle.anim === "none", inpStyle.anim);
 ok("старая мигающая рамка .search-frame удалена", (await page.locator(".search-frame").count()) === 0);
 const chips = await page.locator(".search-collapse .absolute button").allTextContents();
@@ -390,11 +390,11 @@ await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")
    пойман однажды — это середина перехода, ждём целевое значение) */
 const lightShell = await settle(
   () => shell.evaluate((el) => getComputedStyle(el).backgroundColor),
-  (v) => /^rgba\(196,\s*208,\s*240/.test(v)
+  (v) => /^rgba\(255,\s*255,\s*255/.test(v)
 );
 ok(
-  "светлая пилюля — мутное СИНЕВАТОЕ стекло (палитра «Кобальт»)",
-  /^rgba\(196,\s*208,\s*240/.test(lightShell),
+  "светлая пилюля — белое translucent стекло v4 (палитра «Изумруд»)",
+  /^rgba\(255,\s*255,\s*255/.test(lightShell),
   lightShell
 );
 await page.evaluate(() => {

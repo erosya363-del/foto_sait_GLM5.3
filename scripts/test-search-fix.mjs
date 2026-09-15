@@ -173,14 +173,14 @@ const probeColor = (page, cssVar, withClass) =>
   );
 const brandDark = await probeColor(page, "--brand", "");
 ok(
-  "тёмная тема: --brand кобальт rgb(91,132,240)",
-  /91,\s*132,\s*240/.test(brandDark),
+  "тёмная тема: --brand изумруд rgb(20,184,166)",
+  /20,\s*184,\s*166/.test(brandDark),
   brandDark
 );
 const glassDark = await probeColor(page, "--glass", "");
 ok(
   "тёмная тема: стекло синеватое (34,42,74), не серое (46,51,58)",
-  /34,\s*42,\s*74/.test(glassDark) && !/46,\s*51,\s*58/.test(glassDark),
+  /44,\s*44,\s*46/.test(glassDark) && !/46,\s*51,\s*58/.test(glassDark),
   glassDark
 );
 // переключаем светлую тему так же, как ThemeSwitch (класс light на <html>)
@@ -190,14 +190,14 @@ await page.evaluate(() => {
 await page.waitForTimeout(250);
 const brandLight = await probeColor(page, "--brand", "light");
 ok(
-  "светлая тема: --brand кобальт rgb(42,85,213)",
-  /42,\s*85,\s*213/.test(brandLight),
+  "светлая тема: --brand изумруд rgb(15,118,110)",
+  /15,\s*118,\s*110/.test(brandLight),
   brandLight
 );
 const glassLight = await probeColor(page, "--glass", "light");
 ok(
-  "светлая тема: стекло синеватое (196,208,240), не серое (150,160,169)",
-  /196,\s*208,\s*240/.test(glassLight) && !/150,\s*160,\s*169/.test(glassLight),
+  "светлая тема: стекло белое translucent (255,255,255), не серое (150,160,169)",
+  /255,\s*255,\s*255/.test(glassLight) && !/150,\s*160,\s*169/.test(glassLight),
   glassLight
 );
 ok("бирюзовый #11b5b0 нигде не остался брендом", !/17,\s*181,\s*176/.test(brandDark + brandLight));
@@ -209,7 +209,7 @@ const lightField = await page.evaluate(() => {
   if (!input) return "no-input";
   return getComputedStyle(input).backgroundColor;
 });
-ok("светлая тема: поле имеет синеватый фон (не серый)", /rgba\(42, 85, 213/.test(lightField), lightField);
+ok("светлая тема: поле имеет нейтральный фон (не синий)", /rgba\(60, 60, 67/.test(lightField), lightField);
 
 console.log("\n— 7. Консоль —");
 ok("консоль чиста (0 ошибок)", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));

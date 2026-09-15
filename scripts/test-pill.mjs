@@ -70,7 +70,7 @@ const shellStyle = await shell.evaluate((el) => {
   };
 });
 ok("капсула fully-rounded (999px)", shellStyle.radius === "999px", shellStyle.radius);
-ok("стекло blur 80px (мутное стекло)", /80px/.test(shellStyle.blur), shellStyle.blur);
+ok("стекло v4: blur 56px + saturate/brightness (подстройка под фон)", /56px/.test(shellStyle.blur) && /saturate/.test(shellStyle.blur) && /brightness/.test(shellStyle.blur), shellStyle.blur);
 ok("переливание — блик-анимация на стекле (::after)", shellStyle.sheenAnim === "pill-sheen", shellStyle.sheenAnim);
 ok("линза на уровне капсулы (position absolute)", (await page.locator(".pill-shell > .nav-lens").count()) === 1);
 
@@ -106,7 +106,7 @@ ok("линза имеет ядро .nav-lens-core", (await page.locator(".nav-le
 const onColor = await items.nth(0).evaluate((el) => getComputedStyle(el).color);
 ok(
   "активный пункт чётким цветом текста (iOS-стиль, без бирюзы)",
-  onColor === "rgb(240, 243, 249)",
+  onColor === "rgb(245, 245, 247)",
   onColor
 );
 
@@ -258,11 +258,11 @@ await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")
 await page.waitForTimeout(350);
 const lightBg = await settle(
   () => shell.evaluate((el) => getComputedStyle(el).backgroundColor),
-  (v) => /^rgba\(196,\s*208,\s*240/.test(v)
+  (v) => /^rgba\(255,\s*255,\s*255/.test(v)
 );
 ok(
-  "светлая тема: мутное СИНЕВАТОЕ стекло (темнее фона, не сливается; палитра «Кобальт»)",
-  /^rgba\(196,\s*208,\s*240/.test(lightBg),
+  "светлая тема: белое translucent стекло v4 (фон просвечивает; палитра «Изумруд»)",
+  /^rgba\(255,\s*255,\s*255/.test(lightBg),
   lightBg
 );
 const lightLens = await page.locator(".nav-lens-core").evaluate((el) => getComputedStyle(el).boxShadow);
@@ -284,7 +284,7 @@ await page.screenshot({ path: "tool-results/pill-dark-scrolled.png" });
 const skirt = await page.locator(".fx-skirt").count();
 ok("фикс v3: юбка на месте", skirt === 1);
 const htmlBg = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
-ok("фикс v3: html фон --edge (кобальт #0e1322)", htmlBg === "rgb(14, 19, 34)", htmlBg);
+ok("фикс v3: html фон --edge (графит #1c1c1e)", htmlBg === "rgb(28, 28, 30)", htmlBg);
 
 console.log("── 12. Десктоп: пилюля и кружок скрыты, шапка не сворачивается ──");
 await page.setViewportSize({ width: 1440, height: 900 });

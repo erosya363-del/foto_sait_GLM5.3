@@ -922,6 +922,9 @@ export function Portal() {
           )}
           onPointerDown={onShellPointerDown}
         >
+          {/* Хроматическая кромка v4 («искажение по краям», как на картинке):
+              тонкое тёплое/холодное преломление на самой кромке стекла */}
+          <span className="pill-rim" aria-hidden="true" />
           {/* Линза-«жидкость»: тянется за пальцем (x/width через motion-пружины) */}
           <motion.span
             className={cn("nav-lens", dragKey && "is-drag", liquid && "is-squash")}

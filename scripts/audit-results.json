@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-15T12:00:01.377Z",
+  "startedAt": "2026-09-15T13:00:15.512Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -15,7 +15,7 @@
           {
             "btn": "Все ткани18 тканей · 18 вариантов фото",
             "by": "DIV.pill-shell pill-active",
-            "pos": "195,676",
+            "pos": "195,675",
             "floating": "pill-shell"
           }
         ],
@@ -54,14 +54,14 @@
         "overlapped": [
           {
             "btn": "Скопировать название",
-            "by": "BUTTON.pill-item",
-            "pos": "287,729",
+            "by": "INPUT.pill-haptic",
+            "pos": "287,728",
             "floating": "pill-item"
           },
           {
             "btn": "2",
             "by": "INPUT.pill-haptic",
-            "pos": "337,729",
+            "pos": "337,728",
             "floating": "pill-item"
           }
         ],
@@ -329,7 +329,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu2me6md0002nhh2hyh8j2p5\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu2ojn9h0003nh6bgmmkailo\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
@@ -340,9 +340,9 @@
           "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(44, 55, 96, 0.8)",
-          "blur": "blur(80px) saturate(1.8)",
-          "border": "rgba(140, 160, 230, 0.2)",
+          "bg": "rgba(52, 52, 56, 0.78)",
+          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "border": "rgba(255, 255, 255, 0.18)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
@@ -356,9 +356,9 @@
           "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(44, 55, 96, 0.8)",
-          "blur": "blur(80px) saturate(1.8)",
-          "border": "rgba(140, 160, 230, 0.2)",
+          "bg": "rgba(52, 52, 56, 0.78)",
+          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "border": "rgba(255, 255, 255, 0.18)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
@@ -372,9 +372,9 @@
           "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(44, 55, 96, 0.8)",
-          "blur": "blur(80px) saturate(1.8)",
-          "border": "rgba(140, 160, 230, 0.2)",
+          "bg": "rgba(52, 52, 56, 0.78)",
+          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "border": "rgba(255, 255, 255, 0.18)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
@@ -388,9 +388,9 @@
           "shellH": 76,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(44, 55, 96, 0.8)",
-          "blur": "blur(80px) saturate(1.8)",
-          "border": "rgba(140, 160, 230, 0.2)",
+          "bg": "rgba(52, 52, 56, 0.78)",
+          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "border": "rgba(255, 255, 255, 0.18)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
