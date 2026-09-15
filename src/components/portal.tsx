@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { motion, AnimatePresence, animate, useMotionValue } from "framer-motion";
 import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck } from "lucide-react";
 import {
   usePortal, snapshot, dismissProduct, isPushSuppressed,
   type View, type Warehouse, type PortalSnapshot,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { playTick, playStep, haptic } from "@/lib/tick";
+import { playTick, playStep, vibrateSupported } from "@/lib/tick";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { BootSplash } from "@/components/boot-splash";
 import { SearchBar } from "@/components/search-bar";
@@ -76,12 +76,14 @@ function useHeaderTitle() {
  * Из другого раздела — обычный переход, но с тем же tick-откликом, что и у
  * остальных пунктов пилюли (иначе тап «Каталог» — единственный без звука).
  */
-function goCatalog(btn?: HTMLElement | null) {
+function goCatalog(btn?: HTMLElement | null, fromPill = false) {
   const s = usePortal.getState();
+  /* iOS: системную хаптику уже сыграл нативный switch (.pill-haptic) под пальцем —
+     движок дублировал бы тик; на Android (и в сайдбаре) вибрируем как обычно. */
+  const hapticOn = fromPill ? vibrateSupported() : undefined;
   if (s.view === "catalog") {
     s.resetCatalog();
-    playTick();
-    haptic(12);
+    playTick("tap", { hapticOn });
     if (btn) {
       btn.classList.remove("nav-pulse");
       void btn.offsetWidth; // перезапуск анимации
@@ -90,8 +92,7 @@ function goCatalog(btn?: HTMLElement | null) {
     }
   } else {
     s.setView("catalog");
-    playTick();
-    haptic(10);
+    playTick("tap", { hapticOn });
   }
 }
 
@@ -257,19 +258,116 @@ export function Portal() {
   const searchVisible = view === "catalog" || view === "stock";
   useWowEffects();
 
-  /* ── Пилюля: бег линзы за пальцем (drag-to-select, как на iPhone) ───── */
+  /* ── Пилюля: Liquid Glass v3 — «жидкая» линза, как в iOS 26 ──────────────
+     Линза живёт НА УРОВНЕ КАПСУЛЫ и ТЯНЕТСЯ от опорного пункта к пальцу,
+     охватывая 2 блока/ряд (растягивание, как в видео), затем пружиной
+     собирается в пункт. Пункт под пальцем магнитно увеличивается и
+     подсвечивается фирменным цветом (эффект «магнитной линзы»).
+     Хаптика: нативный switch (.pill-haptic) в каждом пункте играет системный
+     тик на iOS при прямом тапе; Android вибрирует через navigator.vibrate. */
   const itemRefs = useRef(new Map<string, HTMLButtonElement>());
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const rectsRef = useRef(new Map<string, { left: number; width: number }>());
+  const anchorRef = useRef<string | null>(null);
+  const lensX = useMotionValue(0);
+  const lensW = useMotionValue(0);
   const dragRef = useRef<{ on: boolean; key: string | null }>({ on: false, key: null });
   const suppressClickRef = useRef(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
+  const reduceMotion = useRef(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!mq) return;
+    const apply = () => {
+      reduceMotion.current = mq.matches;
+    };
+    apply();
+    mq.addEventListener?.("change", apply);
+    return () => mq.removeEventListener?.("change", apply);
+  }, []);
+
+  const DRAG_SPRING = { type: "spring", stiffness: 620, damping: 48 } as const;
+  const SETTLE_SPRING = { type: "spring", stiffness: 470, damping: 34 } as const;
+
+  const measurePill = () => {
+    const m = new Map<string, { left: number; width: number }>();
+    for (const [key, el] of itemRefs.current) m.set(key, { left: el.offsetLeft, width: el.offsetWidth });
+    rectsRef.current = m;
+  };
+
+  const placeLens = (key: string, anim = true) => {
+    const r = rectsRef.current.get(key);
+    if (!r) return;
+    animate(lensX, r.left, anim ? SETTLE_SPRING : { duration: 0 });
+    animate(lensW, r.width, anim ? SETTLE_SPRING : { duration: 0 });
+  };
+
+  const collapseLens = (anim = true) => {
+    animate(lensW, 0, anim ? SETTLE_SPRING : { duration: 0 });
+  };
+
+  /* Капсула тянется от опорного пункта к пальцу — «захват 2 блоков или ряда»:
+     пункт под пальцем поглощается ЦЕЛИКОМ, между пунктами капсула тянется
+     за пальцем с упругим «хвостом» (12px) */
+  const stretchLensTo = (clientX: number) => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const anchor = rectsRef.current.get(anchorRef.current ?? "catalog");
+    if (!anchor) return;
+    const sw = shell.clientWidth;
+    const fx = clientX - shell.getBoundingClientRect().left;
+    const aL = anchor.left;
+    const aR = anchor.left + anchor.width;
+    const cur = dragRef.current.key ? rectsRef.current.get(dragRef.current.key) : null;
+    let left = Math.min(aL, fx);
+    let right = Math.max(aR, fx);
+    if (cur) {
+      left = Math.min(left, cur.left);
+      right = Math.max(right, cur.left + cur.width);
+    } else if (fx > aR) {
+      right = fx + 12;
+    } else if (fx < aL) {
+      left = fx - 12;
+    }
+    left = Math.max(6, left);
+    right = Math.min(sw - 6, right);
+    if (right - left < anchor.width) right = left + anchor.width; // минимум — пункт
+    animate(lensX, left, DRAG_SPRING);
+    animate(lensW, right - left, DRAG_SPRING);
+  };
+
+  /* Магнитная линза: пункт под пальцем увеличивается и подсвечивается (cyan, как в видео) */
+  const magnifyAt = (clientX: number) => {
+    if (reduceMotion.current) return;
+    for (const [, el] of itemRefs.current) {
+      const r = el.getBoundingClientRect();
+      const d = Math.abs(clientX - (r.left + r.width / 2));
+      const inf = Math.max(0, 1 - d / 90);
+      const icon = el.querySelector("svg");
+      const label = el.querySelector<HTMLElement>(".pill-label");
+      if (icon) icon.style.transform = inf > 0.02 ? `scale(${(1 + 0.34 * inf).toFixed(3)})` : "";
+      if (label) label.style.transform = inf > 0.02 ? `translateY(${(-2 * inf).toFixed(1)}px)` : "";
+      el.style.color = inf > 0.45 ? "var(--brand)" : "";
+    }
+  };
+  const resetMagnify = () => {
+    for (const [, el] of itemRefs.current) {
+      const icon = el.querySelector("svg");
+      const label = el.querySelector<HTMLElement>(".pill-label");
+      if (icon) icon.style.transform = "";
+      if (label) label.style.transform = "";
+      el.style.color = "";
+    }
+  };
 
   const pillActivate = (key: string) => {
     if (key === "catalog") {
-      goCatalog(itemRefs.current.get("catalog") ?? null);
+      goCatalog(itemRefs.current.get("catalog") ?? null, true);
     } else {
       usePortal.getState().setView(key as View);
-      playTick();
-      haptic(10);
+      // iOS: системную хаптику уже сыграл .pill-haptic под пальцем — не дублируем
+      playTick("tap", { hapticOn: vibrateSupported() });
     }
   };
 
@@ -284,38 +382,56 @@ export function Portal() {
 
   const onShellPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    /* Guard: синтетический pointerdown (тесты/код) может прийти без координат —
+       вне капсулы drag не начинаем, чтобы не растянуть линзу фантомно */
+    const shellBox = e.currentTarget.getBoundingClientRect();
+    if (e.clientX === 0 && e.clientY === 0) return;
+    if (e.clientX < shellBox.left - 1 || e.clientX > shellBox.right + 1 || e.clientY < shellBox.top - 1 || e.clientY > shellBox.bottom + 1) return;
     const key = keyAtPoint(e.clientX, e.clientY);
     dragRef.current = { on: true, key };
+    anchorRef.current = key ?? view;
     setDragKey(key);
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* старые браузеры без capture — drag просто не сработает */
-    }
-  };
-
-  const onShellPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.on) return;
-    const key = keyAtPoint(e.clientX, e.clientY);
-    if (key && key !== dragRef.current.key) {
-      dragRef.current.key = key;
-      setDragKey(key);
-      playStep(); // тихий tick + лёгкая вибрация на каждом пункте
-    }
-  };
-
-  const onShellPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current.on) return;
-    dragRef.current.on = false;
-    const key = keyAtPoint(e.clientX, e.clientY) ?? dragRef.current.key;
-    setDragKey(null);
-    if (!key) return;
-    // активация здесь: синтетический click подавляем (сработал бы на старом пункте)
-    suppressClickRef.current = true;
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 500);
-    pillActivate(key);
+    stretchLensTo(e.clientX);
+    magnifyAt(e.clientX);
+    /* БЕЗ setPointerCapture: capture ретаргетит click на капсулу — нативный
+       switch .pill-haptic не получил бы клик, и iOS 26.5+ не сыграл бы хаптику.
+       Слушатели на window ведут палец даже за пределами пилюли. */
+    const onMove = (ev: PointerEvent) => {
+      const k = keyAtPoint(ev.clientX, ev.clientY);
+      if (k && k !== dragRef.current.key) {
+        dragRef.current.key = k;
+        setDragKey(k);
+        playStep(); // тихий tick + лёгкая вибрация на каждом пункте
+      }
+      stretchLensTo(ev.clientX);
+      magnifyAt(ev.clientX);
+    };
+    const onEnd = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+      if (!dragRef.current.on) return;
+      dragRef.current.on = false;
+      anchorRef.current = null;
+      const k = keyAtPoint(ev.clientX, ev.clientY) ?? dragRef.current.key;
+      setDragKey(null);
+      resetMagnify();
+      if (!k) {
+        placeLens(view); // палец ушёл с пилюли — линза возвращается к активному
+        return;
+      }
+      // активация здесь: синтетический click подавляем (сработал бы на старом пункте)
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 500);
+      pillActivate(k);
+      // страховка: если view не изменился (повторный тап) — линза всё равно собирается
+      placeLens(k);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
   };
 
   /* ── Шапка/пилюля: реакция на скролл и касание ────────────────────── */
@@ -368,7 +484,7 @@ export function Portal() {
     return () => document.removeEventListener("pointerdown", onDown);
   }, []);
 
-  // Жидкий эффект: запуск на смену активного пункта пилюли
+  // Жидкий эффект: запуск на смену активного пункта пилюли + переезд/схлопывание линзы
   const activeKey = productId ? `product:${productId}` : view;
   const prevActiveKey = useRef(activeKey);
   useEffect(() => {
@@ -376,8 +492,29 @@ export function Portal() {
     prevActiveKey.current = activeKey;
     setLiquid(true);
     const t = window.setTimeout(() => setLiquid(false), 500);
+    if (!dragRef.current.on) {
+      // открыт товар — линза жидко схлопывается; вернулись в раздел — перетекает на пункт
+      if (productId) collapseLens(true);
+      else placeLens(view, true);
+    }
     return () => window.clearTimeout(t);
-  }, [activeKey]);
+  }, [activeKey, productId, view]);
+
+  // Геометрия пилюли: первичное размещение линзы (без анимации) + повороты/ресайз
+  const viewRef = useRef(view);
+  const productIdRef = useRef(productId);
+  viewRef.current = view;
+  productIdRef.current = productId;
+  const syncLensInstant = () => {
+    measurePill();
+    if (productIdRef.current) collapseLens(false);
+    else placeLens(viewRef.current, false);
+  };
+  useLayoutEffect(() => {
+    syncLensInstant();
+    window.addEventListener("resize", syncLensInstant);
+    return () => window.removeEventListener("resize", syncLensInstant);
+  }, []);
 
   // rAF-анимация SVG-фильтра (feTurbulence/feDisplacementMap) за 480 мс — только Chromium
   const turbRef = useRef<SVGFETurbulenceElement>(null);
@@ -409,8 +546,7 @@ export function Portal() {
   /* ── Поиск: из пилюли, из кружка или по «/» ─────────────────────── */
   const openSearch = () => {
     const s = usePortal.getState();
-    playTick();
-    haptic(12);
+    playTick(); // звук + хаптика (движок)
     if (s.productId) dismissProduct();
     if (s.view !== "catalog" && s.view !== "stock") s.setView("catalog");
     if (scrolled) setSearchFabOpen(true);
@@ -693,13 +829,16 @@ export function Portal() {
         </div>
       </main>
 
-      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass, как в iOS 26).
-          «Линза» перетекает между вкладками (layoutId, spring 430) с жидким сквошем;
-          если палец НЕ отрывается — линза бежит за пальцем по пунктам (drag-to-select).
-          Реакция: листают — стекло растворяется (pill-dim), активный пункт горит;
-          коснулись пилюли — плотное активное стекло (pill-active) до тапа мимо. */}
+      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass v3, iOS 26).
+          Линза-«жидкость» живёт на уровне капсулы: тянется за пальцем, охватывая
+          2 блока/ряд (drag-to-select), магнитно увеличивает пункт под пальцем
+          и пружиной собирается при отпускании. Нативные switch (.pill-haptic)
+          в пунктах дают системную хаптику на iOS при прямом тапе.
+          Реакция: листают — стекло растворяется (pill-dim); коснулись —
+          плотное активное стекло (pill-active) до тапа мимо. */}
       <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
         <div
+          ref={shellRef}
           className={cn(
             "pill-shell",
             scrolled && !pillTouched && "pill-dim",
@@ -707,13 +846,18 @@ export function Portal() {
             liquid && IS_CHROMIUM && "is-liquid"
           )}
           onPointerDown={onShellPointerDown}
-          onPointerMove={onShellPointerMove}
-          onPointerUp={onShellPointerEnd}
-          onPointerCancel={onShellPointerEnd}
         >
+          {/* Линза-«жидкость»: тянется за пальцем (x/width через motion-пружины) */}
+          <motion.span
+            className={cn("nav-lens", dragKey && "is-drag", liquid && "is-squash")}
+            style={{ x: lensX, width: lensW }}
+            aria-hidden="true"
+          >
+            <span className="nav-lens-core" />
+          </motion.span>
           {NAV.map(({ key, short, Icon }) => {
             const on = view === key && !productId;
-            const lensHere = dragKey ? dragKey === key : on;
+            const drag = dragKey === key && !on;
             return (
               <button
                 key={key}
@@ -724,27 +868,24 @@ export function Portal() {
                 }}
                 onClick={(e) => {
                   if (suppressClickRef.current) return; // активация уже сделана в pointerup
-                  if (key === "catalog") goCatalog(e.currentTarget);
+                  if (key === "catalog") goCatalog(e.currentTarget, true);
                   else {
                     usePortal.getState().setView(key);
-                    playTick();
-                    haptic(10);
+                    // iOS: хаптику сыграл .pill-haptic; Android — вибрируем
+                    playTick("tap", { hapticOn: vibrateSupported() });
                   }
                 }}
-                className={cn("pill-item", on && "is-on", dragKey === key && !on && "is-drag")}
+                className={cn("pill-item", on && "is-on", drag && "is-drag")}
                 aria-current={on ? "page" : undefined}
               >
-                {lensHere && (
-                  <motion.span
-                    layoutId="nav-lens"
-                    className={cn("nav-lens", liquid && "is-squash")}
-                    transition={{ type: "spring", stiffness: 430, damping: 36 }}
-                  >
-                    <span className="nav-lens-core" />
-                  </motion.span>
-                )}
-                <Icon size={21} strokeWidth={2.1} />
-                <span className="text-[10px] font-semibold">{short}</span>
+                {/* Нативный switch под пальцем (Safari 17.4+): прямой тап = системная
+                    хаптика на iOS ЛЮБОЙ версии, включая 26.5+, где программные тики
+                    запрещены Apple. Невидим (opacity 0 + clip-path), appearance НЕ
+                    трогаем — без нативного вида iOS не играет хаптику. Атрибут
+                    switch передаётся spread'ом: его ещё нет в React-типах. */}
+                <input type="checkbox" {...{ switch: "" }} className="pill-haptic" aria-hidden="true" tabIndex={-1} />
+                <Icon size={24} strokeWidth={2.1} />
+                <span className="pill-label">{short}</span>
               </button>
             );
           })}

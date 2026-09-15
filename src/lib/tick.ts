@@ -1,36 +1,60 @@
 "use client";
 
 /**
- * Звуковой «tick» (Web Audio) + вибрация на всех телефонах, где ОНА ВОЗМОЖНА.
+ * Звуковой «tick» (Web Audio) + хаптика на ВСЕХ платформах, где она возможна.
  *
- * Правда про iPhone: Apple НЕ даёт веб-страницам и PWA доступ к вибромотору —
- * navigator.vibrate в Safari/Home-Screen-PWA просто отсутствует, и никакой код
- * физически не может заставить iPhone вибрировать. Поэтому универсальный отклик:
- *  — Android/Chrome: navigator.vibrate (настоящая вибрация) + tick;
- *  — iPhone: короткий «tick» (щелчок, как у системных клавиш) + визуальный пульс —
- *    это максимум, который iOS технически позволяет.
- * AudioContext ленивый, создаётся в жесте тапа.
+ * ТРИ УРОВНЯ отклика (решение «вибрация критична», 2026):
+ *  1. Android/Chromium: navigator.vibrate — настоящая вибрация, любые паттерны.
+ *     Длительности ≥16 мс: короткие 4–10 мс на многих телефонах НЕ ОЩУЩАЮТСЯ.
+ *  2. iPhone iOS 17.4–26.4 и iOS 27+: паттерны эмулируются через скрытый нативный
+ *     <input type="checkbox" switch> (каждое переключение = системный haptic-тик).
+ *     Это делает движок web-haptics (см. ниже) — программные тики здесь работают.
+ *  3. iPhone iOS 26.5+ (Apple временно заблокировала программные тики): настоящий
+ *     отклик дают НЕВИДИМЫЕ нативные switch'ы (.pill-haptic), наложенные прямо на
+ *     пункты нижней пилюли — палец тапает сам switch, iOS играет системную хаптику.
+ *     Это работает на ЛЮБОЙ версии iOS 17.4+, включая 26.5+.
+ *  Аудиоти́к остаётся универсальным откликом везде (щелчок, как у системных клавиш).
+ *
+ * Движок: npm-пакет web-haptics (MIT) — navigator.vibrate там, где он есть,
+ * и switch-эмуляция паттернов на остальных. DOM-элементы создаёт сам (скрыты).
  *
  * Троттл 60 мс: глобальный click-делегат (portal.tsx) и явные вызовы компонентов
- * схлопываются в ОДИН звук/вибро на физический тап, а рябь «step» при быстром
- * drag по пилюле почти не режется.
+ * схлопываются в ОДИН отклик на физический тап, а рябь «step» при быстром drag
+ * по пилюле почти не режется.
  */
+import { WebHaptics } from "web-haptics";
+
 let ctx: AudioContext | null = null;
 let lastTickAt = 0;
 let lastHapticAt = 0;
 
+/** Ленивый синглтон движка (DOM-switch создаётся при первом trigger) */
+let engine: WebHaptics | null = null;
+function hapticsEngine(): WebHaptics | null {
+  if (typeof window === "undefined") return null;
+  if (!engine) {
+    try {
+      engine = new WebHaptics();
+    } catch {
+      engine = null;
+    }
+  }
+  return engine;
+}
+
 type TickKind = "tap" | "step";
 
-export function playTick(kind: TickKind = "tap") {
+/**
+ * playTick — звук + хаптика одним вызовом.
+ * opts.hapticOn === false — пропустить движок (пилюля на iOS уже сыграла
+ * нативную хаптику через .pill-haptic; повторный тик ощущался бы двойным).
+ */
+export function playTick(kind: TickKind = "tap", opts?: { hapticOn?: boolean }) {
   const now = Date.now();
   if (now - lastTickAt < 60) return;
   lastTickAt = now;
-  // Нет вибромотора (iPhone) — физический отклик даёт низкочастотный «толчок».
-  // Решение — по НАЛИЧИЮ API (не по троттлу): на Android — настоящая вибрация.
-  const canVibrate = vibrateSupported();
-  haptic(kind === "step" ? 4 : 12);
+  if (opts?.hapticOn !== false) haptic(kind === "step" ? 10 : 22);
   if (typeof window === "undefined") return;
-  if (!canVibrate && kind === "tap") audioThump();
   try {
     const AC =
       window.AudioContext ||
@@ -69,24 +93,30 @@ export function playStep() {
   playTick("step");
 }
 
-/** Вибрация на всех телефонах, где есть navigator.vibrate (iOS игнорирует молча). */
-export function haptic(ms = 12) {
+/**
+ * Хаптика: Android — navigator.vibrate (движок); iOS — switch-эмуляция паттернов
+ * (iOS 17.4–26.4, iOS 27+; на 26.5+ программные тики заблокированы Apple — там
+ * пилюлю спасают нативные .pill-haptic switch'ы под пальцем).
+ * Минимум 16 мс: всё, что короче, часть телефонов просто не отыгрывает.
+ */
+export function haptic(ms = 22) {
   if (typeof navigator === "undefined") return;
   const now = Date.now();
   if (now - lastHapticAt < 60) return;
   lastHapticAt = now;
   try {
-    navigator.vibrate?.(ms);
+    const e = hapticsEngine();
+    e?.trigger(Math.max(16, Math.round(ms)));
   } catch {
-    /* нет vibrate — ок */
+    /* нет ни vibrate, ни switch — ок */
   }
 }
 
 /**
- * АУДИО-«ТОЛЧОК» для устройств БЕЗ вибромотора (iPhone — Apple запрещает
- * navigator.vibrate). Низкочастотный импульс ~78→48 Гц: динамик на такой частоте
- * физически «бубнит» корпус — ладонь ощущает короткий тычок, максимально
- * близкий к вибрации из доступного в вебе на iOS.
+ * АУДИО-«ТОЛЧОК» — резервный физический отклик: низкочастотный импульс ~78→48 Гц
+ * заставляет динамик «бубнить» корпус, ладонь ощущает короткий тычок.
+ * Используется кнопкой «Тест вибрации» в админке как гарантированно слышимый
+ * отклик на устройствах, где вибрация недоступна.
  */
 export function hapticThump() {
   audioThump();
@@ -135,16 +165,18 @@ export function vibrateSupported(): boolean {
 
 /**
  * Самопроверка вибрации (кнопка «Тест вибрации» в админке).
- * Шлёт усиленный паттерн [45, 60, 45, 60, 150] — три явных толчка.
- * Возвращает, была ли команда вообще возможна: на iOS вернёт false — это НЕ баг
- * сайта (Apple запрещает) — тогда кнопка проигрывает аудио-«толчок».
+ *  — Android: усиленный паттерн [45,60,45,60,150] — три явных толчка → true.
+ *  — iOS: движок пытается сыграть паттерн через switch-эмуляцию (работает на
+ *    17.4–26.4/27), плюс аудио-«толчок» как слышимое подтверждение → false
+ *    (это НЕ баг сайта: navigator.vibrate на iOS Apple не даёт в принципе).
  */
 export function vibrateTest(): boolean {
-  if (!vibrateSupported()) return false;
   try {
-    navigator.vibrate?.([45, 60, 45, 60, 150]);
-    return true;
+    hapticsEngine()?.trigger([45, 60, 45, 60, 150]);
   } catch {
-    return false;
+    /* пусто */
   }
+  if (vibrateSupported()) return true;
+  audioThump();
+  return false;
 }

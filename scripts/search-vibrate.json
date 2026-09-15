@@ -1,0 +1,56 @@
+[
+  {
+    "url": "https://developer.mozilla.org",
+    "name": "Vibration API - MDN Web Docs - Mozilla",
+    "snippet": "Apr 11, 2024 — The Vibration API offers Web apps the ability to access this hardware, if it exists, and does nothing if the device doesn't support it. Safari ...",
+    "host_name": "developer.mozilla.org",
+    "rank": 0,
+    "date": "Apr 11, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com",
+    "name": "navigator.vibrate - works on iOS Safari · Issue #29166",
+    "snippet": "Mar 3, 2026 — Navigator's vibrate functionality works on iOS Safari now . Tested on iPhone on this site that https://haptics.lochie.me/ No vibration pattern ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "Mar 3, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://swmansion.com",
+    "name": "Web Haptic Feedback: Why It Refuses to Be More Tactile",
+    "snippet": "Aug 17, 2026 — the vibration API is effectively limited to Chromium-based browsers. Safari doesn't implement it , and Firefox no longer supports it, making  ...",
+    "host_name": "swmansion.com",
+    "rank": 2,
+    "date": "Aug 17, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://discussions.apple.com",
+    "name": "Remove haptic touch only but keep vibrati",
+    "snippet": "Feb 26, 2020 — Hi, I can't stand the single click vibration of haptic touch, particularly when opening a new tab in Safari, which I do multiple times a day. \n\nI turned ...",
+    "host_name": "discussions.apple.com",
+    "rank": 3,
+    "date": "Feb 26, 2020",
+    "favicon": ""
+  },
+  {
+    "url": "https://progressier.com",
+    "name": "Vibration API - PWA Demo",
+    "snippet": "Sep 4, 2026 — The Vibration API allows your PWA to access a device's vibration capabilities, enabling you to create haptic feedback and vibration effects ...",
+    "host_name": "progressier.com",
+    "rank": 4,
+    "date": "Sep 4, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://w3c.github.io",
+    "name": "Vibration API - Implementation Report",
+    "snippet": "May 21, 2026 — This is an implementation report for the [vibration] specification, produced in response to the W3C Council recommendation ( Vibration API ...",
+    "host_name": "w3c.github.io",
+    "rank": 5,
+    "date": "May 21, 2026",
+    "favicon": ""
+  }
+]

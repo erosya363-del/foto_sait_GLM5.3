@@ -54,16 +54,25 @@ const shell = page.locator(".pill-shell");
 ok(".pill-shell видна", await shell.isVisible());
 
 const shellBox = await shell.boundingBox();
-ok("пилюля не на всю ширину (max-width 460 + поля)", shellBox.width <= 460 + 1, `w=${shellBox.width}`);
+ok("пилюля не на всю ширину (max-width 500 + поля)", shellBox.width <= 500 + 1, `w=${shellBox.width}`);
 ok("пилюля по центру", Math.abs(shellBox.x + shellBox.width / 2 - 195) < 3, `x=${shellBox.x}`);
-ok("высота капсулы 64px", Math.abs(shellBox.height - 64) < 2, `h=${shellBox.height}`);
+ok("высота капсулы 76px (v3 крупнее)", Math.abs(shellBox.height - 76) < 2, `h=${shellBox.height}`);
 
 const shellStyle = await shell.evaluate((el) => {
   const cs = getComputedStyle(el);
-  return { radius: cs.borderRadius, pos: cs.position, blur: cs.backdropFilter || cs.webkitBackdropFilter, bg: cs.backgroundColor };
+  const after = getComputedStyle(el, "::after");
+  return {
+    radius: cs.borderRadius,
+    pos: cs.position,
+    blur: cs.backdropFilter || cs.webkitBackdropFilter,
+    bg: cs.backgroundColor,
+    sheenAnim: after.animationName,
+  };
 });
 ok("капсула fully-rounded (999px)", shellStyle.radius === "999px", shellStyle.radius);
 ok("стекло blur 80px (мутное стекло)", /80px/.test(shellStyle.blur), shellStyle.blur);
+ok("переливание — блик-анимация на стекле (::after)", shellStyle.sheenAnim === "pill-sheen", shellStyle.sheenAnim);
+ok("линза на уровне капсулы (position absolute)", (await page.locator(".pill-shell > .nav-lens").count()) === 1);
 
 const navStyle = await nav.evaluate((el) => {
   const cs = getComputedStyle(el);
@@ -81,7 +90,14 @@ ok("подписи на месте, без «Поиск»", /Каталог/.tes
 
 ok("SVG-фильтр #nav-liquid в DOM", (await page.locator("#nav-liquid").count()) === 1);
 const lensCount = await page.locator(".nav-lens").count();
-ok("линза одна (только у активного)", lensCount === 1);
+ok("линза одна (живёт на уровне капсулы)", lensCount === 1);
+const hapticSwitches = await page.locator(".pill-haptic").count();
+ok("нативных switch для хаптики — по одному на пункт (iOS)", hapticSwitches === 4, `got ${hapticSwitches}`);
+const hsStyle = await page.locator(".pill-haptic").first().evaluate((el) => {
+  const cs = getComputedStyle(el);
+  return { op: cs.opacity, clip: cs.clipPath, app: cs.appearance };
+});
+ok("switch невидим, но appearance нативный (иначе iOS не сыграет)", Number(hsStyle.op) === 0 && /inset/.test(hsStyle.clip) && !/none/.test(hsStyle.app), JSON.stringify(hsStyle));
 const lensBox1 = await page.locator(".nav-lens").boundingBox();
 const item1 = await items.nth(0).boundingBox();
 ok("линза внутри активного пункта «Каталог»", Math.abs(lensBox1.x - item1.x) < 3 && Math.abs(lensBox1.width - item1.width) < 3, JSON.stringify(lensBox1));

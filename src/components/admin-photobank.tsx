@@ -291,7 +291,7 @@ export function PhotoBank() {
       {/* Панель действий над выбранным — ВЫШЕ нижней пилюли навигации
           (иначе «Снять»/«В корзину» прячутся под ней, просьба пользователя) */}
       {selCount > 0 && (
-        <div className="sticky bottom-[calc(86px+env(safe-area-inset-bottom))] z-30 mt-3 flex items-center gap-2 glass rounded-2xl px-3 py-2.5 lg:bottom-2">
+        <div className="sticky bottom-[calc(98px+env(safe-area-inset-bottom))] z-30 mt-3 flex items-center gap-2 glass rounded-2xl px-3 py-2.5 lg:bottom-2">
           <span className="flex-1 text-[12.5px] font-semibold">
             Выбрано: <span className="text-[color:var(--brand)]">{selCount}</span>
           </span>

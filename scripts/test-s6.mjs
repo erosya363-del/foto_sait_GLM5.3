@@ -35,6 +35,17 @@ function alphaOf(color) {
   return legacy ? Number(legacy[1]) : 1;
 }
 
+/** Дождаться завершения CSS-перехода: опрашиваем значение до 2.5с (флаки под нагрузкой) */
+async function settle(poll, pred, timeout = 2500) {
+  const t0 = Date.now();
+  let v = await poll();
+  while (!pred(v) && Date.now() - t0 < timeout) {
+    await page.waitForTimeout(120);
+    v = await poll();
+  }
+  return v;
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 760 } });
 const consoleErrors = [];
@@ -77,17 +88,31 @@ const b2 = await items.nth(2).boundingBox();
 await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2);
 await page.mouse.down();
 await page.mouse.move(b1.x + b1.width / 2, b1.y + b1.height / 2, { steps: 6 });
-await page.waitForTimeout(120);
+await page.waitForTimeout(160);
 const lensMid = await page.locator(".nav-lens").boundingBox();
-ok("линза переехала на «Остатки» ещё ДОМ отпускания", Math.abs(lensMid.x - b1.x) < 6, JSON.stringify(lensMid));
+ok(
+  "линза ТЯНЕТСЯ от «Каталог» к «Остатки» — захват 2 блоков ещё ДО отпускания",
+  lensMid.x <= b0.x + 8 && lensMid.x + lensMid.width >= b1.x + b1.width - 8 && lensMid.width > b1.width * 1.4,
+  JSON.stringify(lensMid)
+);
+const scale1 = await items.nth(1).evaluate((el) => {
+  const m = getComputedStyle(el.querySelector("svg")).transform; // matrix(a,0,0,a,e,f)
+  return m && m !== "none" ? parseFloat(m.slice(7)) : 1;
+});
+ok("магнитное увеличение иконки под пальцем", scale1 > 1.1, `scale=${scale1}`);
 await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2, { steps: 6 });
-await page.waitForTimeout(120);
+await page.waitForTimeout(160);
 const drag2 = await items.nth(2).evaluate((el) => el.classList.contains("is-drag"));
 ok("пункт под пальцем подсвечен (is-drag)", drag2);
 await page.mouse.up();
-await page.waitForTimeout(500);
+await page.waitForTimeout(600);
 ok("отпускание активировало «Загрузка»", (await headerTitle()) === "Askona Загрузка фото", await headerTitle());
 ok("is-drag снят после отпускания", !(await items.nth(2).evaluate((el) => el.classList.contains("is-drag"))));
+const scaleReset = await items.nth(1).evaluate((el) => {
+  const m = getComputedStyle(el.querySelector("svg")).transform;
+  return m && m !== "none" ? parseFloat(m.slice(7)) : 1;
+});
+ok("магнит-увеличение снято после отпускания", Math.abs(scaleReset - 1) < 0.03, `scale=${scaleReset}`);
 // сброс pillTouched (остался от тапов по пилюле) — иначе dim не включится
 await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
 await page.waitForTimeout(250);
@@ -104,8 +129,25 @@ await page.waitForTimeout(450);
 const shell = page.locator(".pill-shell");
 ok("pill-dim включён", await shell.evaluate((el) => el.classList.contains("pill-dim")));
 const dimBg = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
-ok("фон панели сильно прозрачнее (50%)", Math.abs(alphaOf(dimBg) - 0.38) < 0.03, dimBg);
-ok("рамка панели исчезла", alphaOf(await shell.evaluate((el) => getComputedStyle(el).borderColor)) === 0);
+ok("фон панели сильно прозрачнее (30%)", Math.abs(alphaOf(dimBg) - 0.3) < 0.03, dimBg);
+/* рамка растворяется transition'ом 0.28s — под нагрузкой 450мс не всегда хватает */
+let borderGone = true;
+try {
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector(".pill-shell");
+      if (!el) return false;
+      const c = getComputedStyle(el).borderTopColor;
+      const m = /rgba?\(([^)]+)\)/.exec(c);
+      const a = m ? parseFloat(m[1].split(",")[3] ?? "1") : 1;
+      return a === 0;
+    },
+    { timeout: 2000 }
+  );
+} catch {
+  borderGone = false;
+}
+ok("рамка панели исчезла", borderGone);
 const opItem0 = await items.nth(0).evaluate((el) => Number(getComputedStyle(el).opacity));
 const opItem1 = await items.nth(1).evaluate((el) => Number(getComputedStyle(el).opacity));
 ok("неактивные пункты чёткие (opacity 1, текст без прозрачности)", Math.abs(opItem0 - 1) < 0.02, `got ${opItem0}`);
@@ -128,7 +170,7 @@ try {
       if (!el) return false;
       const m = getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
       const a = m ? parseFloat(m[1].split(",")[3] ?? "1") : 1;
-      return a >= 0.88;
+      return a >= 0.78;
     },
     { timeout: 2000 }
   );
@@ -136,7 +178,7 @@ try {
   activeSettled = false;
 }
 const activeBg = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
-ok("активное стекло плотное (0.9)", activeSettled && Math.abs(alphaOf(activeBg) - 0.9) < 0.02, activeBg);
+ok("активное стекло плотное (0.8)", activeSettled && Math.abs(alphaOf(activeBg) - 0.8) < 0.03, activeBg);
 await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
 await page.waitForTimeout(250);
 ok("тап мимо → pill-active снялся", !(await shell.evaluate((el) => el.classList.contains("pill-active"))));
@@ -344,8 +386,12 @@ await page.evaluate(() => {
 await page.waitForTimeout(500);
 // снять pill-active (тап по пилюле выше) — читаем БАЗОВОЕ стекло светлой темы
 await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
-await page.waitForTimeout(350);
-const lightShell = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
+/* переход фона темы 280мс: читаем с settle (полноцветный кадр 149/159/168 · 0.353
+   пойман однажды — это середина перехода, ждём целевое значение) */
+const lightShell = await settle(
+  () => shell.evaluate((el) => getComputedStyle(el).backgroundColor),
+  (v) => /^rgba\(150,\s*160,\s*169/.test(v)
+);
 ok(
   "светлая пилюля — мутное серое стекло (темнее фона)",
   /^rgba\(150,\s*160,\s*169/.test(lightShell),

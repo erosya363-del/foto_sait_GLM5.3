@@ -1,0 +1,47 @@
+[
+  {
+    "url": "https://caniuse.com",
+    "name": "Vibration API | Can I use Support tables for HTML5, CSS3",
+    "snippet": "\"Can I use\" provides up-to-date browser support tables for support of front-end web technologies on desktop and mobile web browsers.",
+    "host_name": "caniuse.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://github.com",
+    "name": "navigator.vibrate - works on iOS Safari · Issue #29166",
+    "snippet": "Mar 3, 2026 — Navigator's vibrate functionality works on iOS Safari now . No vibration pattern on iOS Safari, as mentioned on https://caniuse.com/mdn-api_ ...",
+    "host_name": "github.com",
+    "rank": 1,
+    "date": "Mar 3, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://w3c.github.io",
+    "name": "Vibration API - Implementation Report",
+    "snippet": "May 21, 2026 — This is an implementation report for the [vibration] specification, produced in response to the W3C Council recommendation ( Vibration API ...",
+    "host_name": "w3c.github.io",
+    "rank": 2,
+    "date": "May 21, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://developer.mozilla.org",
+    "name": "Vibration API - MDN Web Docs - Mozilla",
+    "snippet": "Apr 11, 2024 — The Vibration API offers Web apps the ability to access this hardware, if it exists, and does nothing if the device doesn't support it.  ...",
+    "host_name": "developer.mozilla.org",
+    "rank": 3,
+    "date": "Apr 11, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.testmuai.com",
+    "name": "Vibration API: Browser Support, Patterns, Limitations",
+    "snippet": "May 1, 2026 — Vibration API compatibility in Safari. Safari does not support the Vibration API on macOS, iPadOS, or iOS in any version. Apple WebKit has not ... Read more",
+    "host_name": "www.testmuai.com",
+    "rank": 4,
+    "date": "May 1, 2026",
+    "favicon": ""
+  }
+]
