@@ -83,3 +83,6 @@ sait_copy_1
 sait_copy_2
 /download/sait_copy_1.tar.gz
 /download/sait_copy_2.tar.gz
+
+# Бэкап-копия №3 (146МБ > лимита GitHub 100МБ — в git не кладём, живёт в public/)
+/public/sait_copy_3.tar.gz

@@ -612,3 +612,19 @@ Stage Summary:
 - Скорость: стартовые картинки −76% (127КБ), товар −53% (392КБ); конвейер thumbs/optimized теперь покрывает и сид-каталог; свежий env: seed → make-catalog-thumbs.mjs (документировано в шапке скрипта).
 - Повседневность: «Новинки» — карточка на вариант (без 6× дублей), горизонтальная лента не дёргает страницу.
 - Вне рамок (наблюдения): logo-askona.png 103КБ (можно ужать), texture-* на странице товара показываются full-width как «Образец ткани» (кандидат на компактный чип), пинч-зум фото в просмотрщике — будущая фича (touch-action:pinch-zoom opt-in в viewer).
+
+---
+Task ID: 34 (копия №3 проекта)
+Agent: main (Super Z)
+Task: Полная копия всего проекта ВКЛЮЧАЯ скиллы — sait_copy_3.tar.gz (по образцу копии №2).
+
+Work Log:
+- Формат копии №2 изучен (public/sait_copy_2.tar.gz, 35М, 857 записей, префикс sait_copy_2/): исходники + .git + .env + db + upload + public, без node_modules/.next.
+- Создан public/sait_copy_3.tar.gz (146МБ, 3200 записей, префикс sait_copy_3/, gzip -t OK) — РАСШИРЕННЫЙ состав: всё из копии №2 (включая .git 1208 файлов, .env, .zscripts) ПЛЮС skills/ (1536 файлов, все 13 скиллов Emil Kowalski с приложениями RECIPES/STANDARDS/AUDIT/PICKER/API), data/skills/ + agent/skills/ (35+35 файлов), download/ (54 файла: скриншоты, snapshots, logs), CHECKPOINT.md, skills-lock.json.
+- Исключено (регенерируемое/мусор): node_modules (1.2G), .next (405M), dev.log/server.log, tool-results (26M), tsconfig.tsbuildinfo, ~50 агентских dot-папок (.claude, .codex…), старый sait_copy_2.tar.gz (вложение бэкапа в бэкап).
+- .gitignore: + /public/sait_copy_3.tar.gz (146МБ > жёсткого лимита GitHub 100МБ — в git НЕ коммитить, копия №2 была меньше и попала в историю).
+- Проверка содержимого: db=2, upload=26, src=106, prisma=3, public=125 (без старого архива), scripts=39, tests=4; выборочно skills/emil-design-eng, mobile-native, review-animations с приложениями — на месте.
+
+Stage Summary:
+- Точка восстановления №3: /home/z/my-project/public/sait_copy_3.tar.gz (v2.7, main=f1611f6 + worklog 33-34). Восстановление: tar -xzf sait_copy_3.tar.gz (получим папку sait_copy_3/), затем bun install && bun run build.
+- Скиллы Emil Kowalski теперь переживают сброс песочницы внутри копии №3 (в git их нет — /skills/ в .gitignore).
