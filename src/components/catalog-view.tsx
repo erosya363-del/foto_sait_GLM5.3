@@ -121,18 +121,31 @@ function FreshStrip() {
 
   if (!data?.items?.length) return null;
 
+  /* АУДИТ v2.7 (повседневное пользование): лента дублировала модели — каждое
+     свежее ФОТО варианта давало отдельную карточку (Pola Nova ×6 подряд).
+     Оставляем ОДНУ карточку на вариант (первое/свежее фото) — лента читается
+     как «новинки», а не «повторения»; счётчик — число вариантов. */
+  const seen = new Set<string>();
+  const unique = data.items.filter((p) => {
+    if (!p.variantId || seen.has(p.variantId)) return false;
+    seen.add(p.variantId);
+    return true;
+  });
+
   return (
     <section className="flex flex-col gap-2" aria-label="Новинки за 7 дней">
       <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
         <Sparkles size={13} strokeWidth={2.4} className="text-[color:var(--brand)]" />
         Новинки за 7 дней
         <span className="rounded-full bg-[color:var(--brand)]/15 px-1.5 py-px text-[10px] font-extrabold text-[color:var(--brand)]">
-          {data.total}
+          {unique.length}
         </span>
       </p>
-      <div className="no-scrollbar -mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+      {/* АУДИТ v2.7: overscroll-x-contain — горизонтальный конец ленты не
+          дёргает страницу (цепной rubber-band iOS) */}
+      <div className="no-scrollbar -mx-4 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:mx-0 sm:px-0">
         <div className="mx-auto flex w-max snap-x gap-2 sm:gap-2.5">
-          {data.items.map((p, i) => (
+          {unique.map((p, i) => (
             <motion.button
               key={p.photoId}
               type="button"

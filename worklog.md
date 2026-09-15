@@ -590,3 +590,25 @@ Stage Summary:
 - GitHub синхронизирован: main = 979f8fd (v2.6), тег snap/v2.6-audit-glass на месте.
 - Скиллы Emil Kowalski установлены в /home/z/my-project/skills/ — наиболее релевантные проекту: mobile-native (iPhone-аудит пилюли/поиска), apple-design + animate (Liquid Glass полировка), review-animations/improve-animations (аудит morph-анимаций линзы).
 - Применение: при следующих итерациях нижней панели/поиска/жестов — прогонять через emil-design-eng + review-animations; mobile-native — для чеклиста iPhone-фиксов (этап 21, реальное устройство).
+
+---
+Task ID: 33 (v2.7: аудит по скиллам Emil Kowalski — mobile-native + emil-design-eng + review-animations)
+Agent: main (Super Z)
+Task: Аудит интерфейса по скиллам emilkowalski/skills: проблемы ежедневного пользования, скорость/загрузка (цель — будущее приложение), жалоба №2 «зумирование: в каталоге в конце фото выходят за рамки; зажимаешь палец и водишь — всё водится».
+
+Work Log:
+- Прочитаны скиллы полностью: mobile-native (симптом-таблица, baseline, never-ship), emil-design-eng (framework анимаций, perf-правила), review-animations (10 стандартов), apple-design (fluid interfaces), improve-animations/AUDIT.md.
+- ДИАГНОЗ жалобы №2 (главный баг): страница товара — grid items с min-width:auto; строки truncate (nowrap) в инфопанели задавали min-content = всей длине текста → трек сетки раздувался до 418px при вьюпорте 393 (scrollWidth 434!) — лента фото и панель ВЫЛЕЗАЛИ за правый край экрана. Локально воспроизведено и измерено (dbg-photo-overflow.mjs). Кластер «зажал палец — всё водится»: img draggable + iOS-коллаут («Сохранить изображение») на фото-кнопках + страничная резинка (overscroll не выключен) + пинч-зум страницы (Safari-браузер игнорирует user-scalable=no, зум ломал fixed-слои).
+- ФИКСЫ (src/app/globals.css): html — tap-highlight:transparent + overscroll-behavior:none; body — touch-action:pan-x pan-y (пинч страницы запрещён касанием, скролл сохранён; standalone прикрывает user-scalable=no); .photo-frame — max-width:100%, touch-callout/user-select none, will-change:transform УБРАН с каждого фото (композиторные слои = давление на GPU iOS); baseline: button/a/[role=button] user-select:none, картинки в тапабельных поверхностях — без коллаута/drag-превью; ВСЕ 14 сырых :hover-правил (card-hover, chip, shine, photo-frame, viewer-nav, side-link, btn-brand/ghost, lg-row/iconbtn, spot, badge-pop) консолидированы в @media (hover:hover) and (pointer:fine) в конце файла — липкие hover-состояния после тапа на iPhone устранены; :active-пружины сохранены.
+- ФИКСЫ (tsx): product-view — [&>*]:min-w-0 + min-w-0 на aside/фотоколонке (переполнение устранено: scrollWidth 393=393, рамка 361px, offenders[]); catalog-view FreshStrip — дедуп по variantId (было 14 карточек = Pola Nova ×6; стало 7 по вариантам) + overscroll-x-contain на горизонтальной ленте.
+- СКОРОСТЬ: сид-фото /catalog/*.jpg (38 шт, thumbUrl==url, превью 78–92px качали 1344×768) → scripts/make-catalog-thumbs.mjs (sharp: optimized ≤1600 q78 → 3.7МБ, thumbs ≤420 q70 → 420КБ; идемпотентен) + ремап БД Photo.url/thumbUrl и Material.swatchUrl на /uploads/* (структура БД не менялась). Стартовая: картинки 534→127КБ; страница товара: 827→392КБ.
+- РЕГРЕССИЯ БЕЗОПАСНОСТИ ДАННЫХ (поймал test-s5): purge корзины раньше защищал сид-фото префиксом /catalog/ в url; после ремапа сид-файлы (общие для вариантов!) стали стираемыми. photo-fs.ts: isSeedFile() — файл с именем из public/catalog/ не удаляется независимо от префикса в БД (unlink остался async). test-s5 адаптирован (сид-фото ищется по /uploads/optimized/, новая загрузка — диффом фото до/после, т.к. upload переименовывает файлы).
+- build: Turbopack — JSX-ошибка {/* комментарий */} внутри тернарника (две expression) → JS-комментарий. public/uploads/optimized+thumbs добавлены в git_force (gitignore обходит) — пара к committed db/custom.db, иначе после сброса песочницы БД ссылалась бы на несуществующие файлы.
+- ТЕСТЫ: pill 70/70, s4 34/34, s6 70/70, search-fix 25/25, tick 9/9, s5 40/40 (после адаптации), audit-back ВСЕ OK, audit-full 0, lint 0, tsc 0 (кроме старого seed.ts), build OK, рестарт OK.
+- Скриншоты: tool-results/v27-product-fixed.png (рамка 361px, всё в экране), v27-start.png.
+
+Stage Summary:
+- Жалоба №2 закрыта на уровне кода: переполнение сетки (418→361px), drag/коллаут фото, страничная резинка, пинч-зум страницы, липкий hover, will-change. НА РЕАЛЬНОМ iPhone проверить: коллаут на долгом тапе фото, резинку в концах списков, поведение пилюли после пинча (touch-action в Safari 13+), хаптику.
+- Скорость: стартовые картинки −76% (127КБ), товар −53% (392КБ); конвейер thumbs/optimized теперь покрывает и сид-каталог; свежий env: seed → make-catalog-thumbs.mjs (документировано в шапке скрипта).
+- Повседневность: «Новинки» — карточка на вариант (без 6× дублей), горизонтальная лента не дёргает страницу.
+- Вне рамок (наблюдения): logo-askona.png 103КБ (можно ужать), texture-* на странице товара показываются full-width как «Образец ткани» (кандидат на компактный чип), пинч-зум фото в просмотрщике — будущая фича (touch-action:pinch-zoom opt-in в viewer).

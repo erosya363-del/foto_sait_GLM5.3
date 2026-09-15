@@ -50,17 +50,22 @@ export function ProductView() {
       </div>
 
       {isLoading || !data ? (
-        <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+        <div className="grid gap-4 [&>*]:min-w-0 lg:grid-cols-[340px_1fr]">
           <div className="skeleton h-48 lg:h-72" />
           <div className="skeleton h-96" />
         </div>
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[340px_1fr]">
+        /* АУДИТ v2.7: [&>*]:min-w-0 — grid-элементы с min-width:auto
+           (строки truncate = nowrap → min-content по всей длине текста)
+           раздували трек до ширины длинной строки: колонки (вместе с лентой
+           фото) вылезали за правый край iPhone (scrollWidth 434 при 393) —
+           «фото выходят за рамки» на самом глубоком уровне каталога */
+        <div className="grid items-start gap-4 [&>*]:min-w-0 lg:grid-cols-[340px_1fr]">
           {/* Инфопанель — АУДИТ v2.6 («большая карточка — делай строкой, описание
               лишнее»): компактный блок — заголовок В ОДНУ строку, вариант/
               ткань/размер одной строкой, описание удалено, крупная стеклянная
               карточка ужата (p-4, gap-2.5) */}
-          <aside className="glass flex flex-col gap-2.5 rounded-2xl p-4 lg:sticky lg:top-6">
+          <aside className="glass flex min-w-0 flex-col gap-2.5 rounded-2xl p-4 lg:sticky lg:top-6">
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-[10.5px] font-bold uppercase tracking-[0.16em] text-[color:var(--brand)]">
                 {data.categoryName}
@@ -91,7 +96,7 @@ export function ProductView() {
           </aside>
 
           {/* Вертикальная фотолента */}
-          <div className="flex flex-col gap-4">
+          <div className="flex min-w-0 flex-col gap-4">
             {data.photos.map((p, i) => (
               <figure
                 key={p.id}

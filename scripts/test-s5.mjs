@@ -130,12 +130,15 @@ check("файл стёрт с диска", !fs.existsSync(fileOnDisk));
 trash = await (await fetch(`${BASE}/api/admin?view=trash`)).json();
 check("строка исчезла из корзины", !trash.items.some((p) => p.id === photoA.id));
 
-// Защита сид-фото: /catalog/* физически не удаляется
-const item2 = catalog.items.find((i) => i.photos.some((p) => p.url.startsWith("/catalog/")));
-const seedPhoto = item2.photos.find((p) => p.url.startsWith("/catalog/"));
+// Защита сид-фото: файлы, чьё имя есть в public/catalog/, физически не удаляются.
+// АУДИТ v2.7: сид-фото переехали с префикса /catalog/ на конвейер /uploads/optimized
+// + /uploads/thumbs (thumbUrl==url больше нет), защита теперь по НАЛИЧИЮ имени
+// в public/catalog (см. photo-fs.isSeedFile), а не по префиксу url.
+const item2 = catalog.items.find((i) => i.photos.some((p) => p.url.startsWith("/uploads/optimized/")));
+const seedPhoto = item2.photos.find((p) => p.url.startsWith("/uploads/optimized/"));
 await fetch(`${BASE}/api/admin?photoId=${seedPhoto.id}`, { method: "DELETE" });
 const purgeSeed = await api({ action: "purgePhoto", id: seedPhoto.id });
-check("сид-фото /catalog/ защищено (файл остался)", purgeSeed.json.filesRemoved === false && fs.existsSync(path.join(ROOT, "public", seedPhoto.url)));
+check("сид-фото (uploads/optimized, имя из catalog) защищено (файл остался)", purgeSeed.json.filesRemoved === false && fs.existsSync(path.join(ROOT, "public", seedPhoto.url)));
 await api({ action: "restoreFromTrash", id: seedPhoto.id });
 
 // ────────────────────────────────────────────────────────────────
@@ -146,10 +149,15 @@ fd2.append("photos", new File([await makePng({ r: 90, g: 30, b: 200 })], "t3.png
 fd2.append("categoryId", qc.json.categoryId);
 fd2.append("modelId", qc.json.modelId);
 fd2.append("materialId", dicts.materials[0].id);
+/* АУДИТ v2.7: сид-фото теперь тоже /uploads/optimized/* — новый файл опознаём
+   диффом фото варианта до/после загрузки (upload переименовывает файлы) */
+const beforeUp = (await (await fetch(`${BASE}/api/catalog`)).json()).items.find((i) => i.id === qc.json.variantId)?.photos.map((p) => p.id) ?? [];
 const up2 = await (await fetch(`${BASE}/api/upload`, { method: "POST", body: fd2 })).json();
 if (!up2.ok) console.log("DEBUG up2:", JSON.stringify(up2));
 const cat3 = await (await fetch(`${BASE}/api/catalog`)).json();
-const p3 = cat3.items.find((i) => i.id === qc.json.variantId).photos.find((p) => p.url.startsWith("/uploads/"));
+const afterPhotos = cat3.items.find((i) => i.id === qc.json.variantId).photos;
+const p3 = afterPhotos.find((p) => !beforeUp.includes(p.id));
+check("новая загрузка опознана диффом", !!p3 && p3.url.startsWith("/uploads/optimized/"), JSON.stringify(p3 ?? {}));
 await fetch(`${BASE}/api/admin?photoId=${p3.id}`, { method: "DELETE" });
 const pt = await api({ action: "purgeTrash" });
 check("purgeTrash ok", pt.json.ok === true && pt.json.purged >= 1, JSON.stringify(pt.json));
