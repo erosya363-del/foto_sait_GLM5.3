@@ -148,7 +148,7 @@ export function StockView() {
     <div className="flex flex-col gap-3.5">
       {/* Заголовок + статистика */}
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="font-display text-xl font-bold leading-tight sm:text-2xl">
             Остатки <span className="gradient-text">склада</span>
           </h1>
@@ -156,8 +156,6 @@ export function StockView() {
             {warehouse} · {data?.meta.total ?? "…"} позиций · {data?.meta.units ?? "…"} шт
             {(data?.meta.saleCount ?? 0) > 0 && <> · {data!.meta.saleCount} в распродаже</>}
           </p>
-          {/* Шаг 1 v1.5: пружинный сегмент-контрол складов */}
-          <WarehouseSegmented className="mt-2.5" />
         </div>
         <div className="mode-switch flex items-center gap-0.5 rounded-xl border border-border bg-secondary/60 p-0.5">
           <button
@@ -188,6 +186,9 @@ export function StockView() {
           </button>
         </div>
       </div>
+
+      {/* Разбор §3: переключение склада — заметнее (своя строка, крупнее тап-зоны) */}
+      <WarehouseSegmented className="w-full sm:w-auto" />
 
       {/* Чипы категорий + фильтры */}
       <div className="flex flex-wrap items-center gap-1.5">

@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-15T13:07:15.085Z",
+  "startedAt": "2026-09-15T13:15:20.357Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -13,7 +13,7 @@
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 36
+        "btnCount": 48
       },
       "stock": {
         "overflowX": 0,
@@ -41,8 +41,14 @@
         "overlapped": [
           {
             "btn": "2",
+            "by": "DIV.pill-shell pill-active",
+            "pos": "342,675",
+            "floating": "pill-shell"
+          },
+          {
+            "btn": "2",
             "by": "INPUT.pill-haptic",
-            "pos": "342,727",
+            "pos": "342,735",
             "floating": "pill-item"
           }
         ],
@@ -78,9 +84,9 @@
       "320x568": {
         "catalog": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -92,13 +98,13 @@
       "360x640": {
         "catalog": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 2,
           "broken": 0,
           "btns": 59
         }
@@ -106,9 +112,9 @@
       "375x667": {
         "catalog": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -122,7 +128,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -136,7 +142,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -150,7 +156,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -164,7 +170,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -178,7 +184,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -192,7 +198,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -206,7 +212,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -220,7 +226,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -234,7 +240,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -248,7 +254,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -262,7 +268,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -274,9 +280,9 @@
       "852x393": {
         "catalog": {
           "overflowX": 0,
-          "overlapped": 0,
+          "overlapped": 3,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -288,9 +294,9 @@
       "932x430": {
         "catalog": {
           "overflowX": 0,
-          "overlapped": 0,
+          "overlapped": 3,
           "broken": 0,
-          "btns": 36
+          "btns": 48
         },
         "stock": {
           "overflowX": 0,
@@ -310,7 +316,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu2osmrc0002nhlghmqt7at3\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu2p318t0002nhnlkahywerf\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {

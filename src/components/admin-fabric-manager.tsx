@@ -223,6 +223,16 @@ export function FabricManager() {
 
   const fabrics = (d?.materials ?? []).filter((m) => m.type === "Ткань");
   const groups = [...new Set(fabrics.map((f) => f.colorGroup).filter(Boolean) as string[])];
+  /* Быстрый поиск по тканям (разбор §4: «в Тканях нет быстрого поиска») */
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? fabrics.filter(
+        (f) =>
+          f.name.toLowerCase().includes(needle) ||
+          (f.colorGroup ?? "").toLowerCase().includes(needle)
+      )
+    : fabrics;
 
   // Новая ткань: название + гамма + фото каталога (по желанию)
   const [name, setName] = useState("");
@@ -366,9 +376,16 @@ export function FabricManager() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Список тканей ── */}
+      {/* ── Список тканей (с быстрым поиском) ── */}
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Быстрый поиск: название или гамма…"
+        className="field"
+        type="search"
+      />
       <div className="grid max-h-[48dvh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-        {fabrics.map((f) => (
+        {shown.map((f) => (
           <FabricRow
             key={f.id}
             f={{ id: f.id, name: f.name, colorGroup: f.colorGroup ?? null, swatchUrl: f.swatchUrl ?? null }}
@@ -380,9 +397,9 @@ export function FabricManager() {
             onDelete={(id, n) => setDeleting({ id, name: n })}
           />
         ))}
-        {fabrics.length === 0 && (
+        {shown.length === 0 && (
           <p className="col-span-full py-6 text-center text-[12.5px] text-muted-foreground">
-            Пока пусто — создайте первую ткань выше
+            {fabrics.length === 0 ? "Пока пусто — создайте первую ткань выше" : "Ничего не найдено по запросу"}
           </p>
         )}
       </div>

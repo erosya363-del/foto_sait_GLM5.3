@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -159,9 +159,44 @@ function FreshStrip() {
   );
 }
 
+/* Быстрые чипы тканей (разбор §3): горизонтальный скролл с превью ткани */
+function FabricChips({ onOpen }: { onOpen: (fabric: string | null) => void }) {
+  const { data } = useQuery<{ fabrics: FabricDto[] }>({
+    queryKey: ["catalog", "level=fabrics"],
+    queryFn: async () => {
+      const r = await fetch("/api/catalog?level=fabrics");
+      if (!r.ok) throw new Error("Ошибка загрузки");
+      return r.json();
+    },
+  });
+  const top = (data?.fabrics ?? []).slice(0, 12);
+  if (!data || top.length === 0) return null;
+  return (
+    <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      {top.map((f, i) => (
+        <button key={f.id} type="button" onClick={() => onOpen(f.name)} className="chip shrink-0">
+          {f.swatchUrl || f.thumb ? (
+            <img
+              src={(f.swatchUrl ?? f.thumb)!}
+              alt=""
+              loading="lazy"
+              className="h-5 w-5 rounded-full object-cover"
+              style={{ animationDelay: `${i * 30}ms` }}
+            />
+          ) : (
+            <SwatchBook size={13} strokeWidth={2.3} />
+          )}
+          {f.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function LevelCategories() {
   const setCat = usePortal((s) => s.setCatCategory);
   const setFabrics = usePortal((s) => s.setCatFabrics);
+  const setMaterial = usePortal((s) => s.setCatMaterial);
   const crumbs = useCatalogCrumbs();
   const { data } = useQuery<{
     categories: Array<{ id: string; name: string; icon: string | null; modelCount: number; variantCount: number }>;
@@ -189,6 +224,17 @@ function LevelCategories() {
     <div className="flex flex-col gap-4">
       <Breadcrumbs crumbs={crumbs} />
       <FreshStrip />
+      {/* Разбор §3: быстрые чипы тканей прямо в каталоге — один тап до фото ткани */}
+      <FabricChips
+        onOpen={(name) => {
+          if (name) {
+            setFabrics(true);
+            setMaterial(name);
+          } else {
+            setFabrics(true);
+          }
+        }}
+      />
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3 lg:gap-4">
         <div className="col-span-full mb-1 text-[12.5px] leading-relaxed text-muted-foreground">
           Категория → модель → ткань и название. Или используйте{" "}
@@ -420,6 +466,7 @@ function VariantsGrid({ items, mode }: { items: SearchResp["variants"]; mode: Ca
 
 function LevelVariants({ category, model }: { category: string; model: string }) {
   const mode = usePortal((s) => s.catalogMode);
+  const [fabric, setFabric] = useState<string | null>(null);
   const { data, isLoading } = useQuery<{ items: CatalogItemDto[] }>({
     queryKey: ["catalog", "cat", category, "model", model],
     queryFn: async () => {
@@ -449,6 +496,17 @@ function LevelVariants({ category, model }: { category: string; model: string })
     [data]
   );
 
+  /* Разбор §3: при открытии модели — все доступные ткани горизонтальным скроллом;
+     тап по ткани фильтрует варианты без похода на сервер */
+  const fabricNames = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const it of items) {
+      if (it.materialName) map.set(it.materialName, (map.get(it.materialName) ?? 0) + 1);
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]);
+  }, [items]);
+  const shown = fabric ? items.filter((it) => it.materialName === fabric) : items;
+
   if (isLoading && !data)
     return (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
@@ -467,7 +525,29 @@ function LevelVariants({ category, model }: { category: string; model: string })
       </div>
     );
 
-  return <VariantsGrid items={items} mode={mode} />;
+  return (
+    <div className="flex flex-col gap-2.5">
+      {fabricNames.length > 1 && (
+        <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <button type="button" onClick={() => setFabric(null)} className={cn("chip shrink-0", !fabric && "is-on")}>
+            Все ткани
+          </button>
+          {fabricNames.map(([name, count]) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setFabric(fabric === name ? null : name)}
+              className={cn("chip shrink-0", fabric === name && "is-on")}
+            >
+              {name}
+              <span className="opacity-60">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <VariantsGrid items={shown} mode={mode} />
+    </div>
+  );
 }
 
 /* ─────────────── Уровень «Все ткани» (Шаг 4) ──────────────────────────── */

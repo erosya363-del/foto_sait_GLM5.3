@@ -19,7 +19,7 @@ export function WarehouseSegmented({ className }: { className?: string }) {
       role="tablist"
       aria-label="Склад"
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-full border border-border bg-secondary/70 p-1",
+        "inline-flex items-center gap-0.5 rounded-full border border-border bg-secondary/70 p-1 sm:w-auto",
         className
       )}
     >
@@ -33,7 +33,7 @@ export function WarehouseSegmented({ className }: { className?: string }) {
             aria-selected={on}
             onClick={() => setWarehouse(w)}
             className={cn(
-              "relative rounded-full px-3.5 py-1.5 text-[12px] font-bold transition-colors",
+              "relative flex-1 justify-center rounded-full px-3.5 py-2 text-[12.5px] font-bold transition-colors sm:flex-none sm:py-1.5 sm:text-[12px]",
               on ? "text-[color:var(--primary-foreground)]" : "text-muted-foreground hover:text-foreground"
             )}
           >
