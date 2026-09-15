@@ -60,56 +60,58 @@
   --sand: #d6c3a8;
   --sand-rgb: 214, 195, 168;
 
-  --background: #1c1c1e;
-  --foreground: #f5f5f7;
-  --card: rgba(44, 44, 46, 0.66);
-  --card-foreground: #f5f5f7;
-  --popover: rgba(40, 40, 43, 0.97);
-  --popover-foreground: #f5f5f7;
+  /* ТЁПЛЫЙ графит (шаг 4: «добавить бежевого/песочного в нейтрали»):
+     #1d1b18 вместо холодного #1c1c1e — коричневатый подтон */
+  --background: #1d1b18;
+  --foreground: #f6f4f0;
+  --card: rgba(46, 44, 40, 0.66);
+  --card-foreground: #f6f4f0;
+  --popover: rgba(43, 41, 38, 0.97);
+  --popover-foreground: #f6f4f0;
   --primary: #14b8a6;
   --primary-foreground: #06231f;
-  --secondary: rgba(255, 255, 255, 0.07);
-  --secondary-foreground: #e8e8ea;
-  --muted: rgba(255, 255, 255, 0.07);
-  --muted-foreground: #98989d;
+  --secondary: rgba(255, 250, 240, 0.07);
+  --secondary-foreground: #eae6df;
+  --muted: rgba(255, 250, 240, 0.07);
+  --muted-foreground: #9c968c;
   --accent: rgba(var(--brand-rgb), 0.14);
   --accent-foreground: #5eead4;
   --destructive: #fb7185;
-  --border: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.18);
-  --input: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 248, 238, 0.11);
+  --border-strong: rgba(255, 248, 238, 0.19);
+  --input: rgba(255, 248, 238, 0.11);
   --ring: rgba(var(--brand-rgb), 0.5);
   --chart-1: #14b8a6;
   --chart-2: #d6c3a8;
   --chart-3: #fbbf24;
   --chart-4: #fb7185;
   --chart-5: #a78bfa;
-  --sidebar: rgba(28, 28, 30, 0.8);
-  --sidebar-foreground: #f5f5f7;
+  --sidebar: rgba(29, 27, 24, 0.8);
+  --sidebar-foreground: #f6f4f0;
   --sidebar-primary: #14b8a6;
   --sidebar-primary-foreground: #06231f;
   --sidebar-accent: rgba(var(--brand-rgb), 0.12);
   --sidebar-accent-foreground: #5eead4;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-border: rgba(255, 248, 238, 0.1);
   --sidebar-ring: rgba(var(--brand-rgb), 0.45);
-  /* СТЕКЛО v4: графит translucent (44,44,46) — ПРОЗРАЧНЕЕ прежнего (0.55→0.44),
-     фон просвечивает и подстраивается (saturate+brightness в рецепте .glass) */
-  --glass: rgba(44, 44, 46, 0.44);
-  --glass-strong: rgba(44, 44, 46, 0.8);
-  /* Поле поиска/инпутов — нейтральный графит (iOS filled field) */
-  --field: rgba(255, 255, 255, 0.08);
-  --field-strong: rgba(255, 255, 255, 0.15);
+  /* СТЕКЛО v4.1: тёплый графит translucent — фон просвечивает и подстраивается
+     (saturate+brightness в рецепте .glass) */
+  --glass: rgba(47, 45, 41, 0.44);
+  --glass-strong: rgba(47, 45, 41, 0.8);
+  /* Поле поиска/инпутов — тёплый светлый translucent (iOS filled field) */
+  --field: rgba(255, 250, 240, 0.08);
+  --field-strong: rgba(255, 250, 240, 0.15);
   --shadow-card: 0 10px 40px -12px rgba(0, 0, 0, 0.5);
   --shadow-pop: 0 24px 70px -20px rgba(0, 0, 0, 0.65);
-  --grid-line: rgba(255, 255, 255, 0.045);
+  --grid-line: rgba(255, 250, 240, 0.045);
   /* Цвет кромки/буквбокса iOS: нижние 48px вьюпорта всегда этого цвета
      (совпадает с фоном html — системная зона неотличима от страницы) */
-  --edge: #1c1c1e;
+  --edge: #1d1b18;
   /* Стекло плавающей пилюли: обычное / при скролле (прозрачнее) / при касании (плотнее).
-     ГРАФИТНАЯ капсула чуть СВЕТЛЕЕ фона (#1c1c1e → ~#2e2e31), не сливается */
-  --pill-bg: rgba(46, 46, 49, 0.42);
-  --pill-bg-dim: rgba(46, 46, 49, 0.26);
-  --pill-bg-active: rgba(52, 52, 56, 0.78);
+     ТЁПЛАЯ капсула чуть СВЕТЛЕЕ фона (#1d1b18 → ~#32302c), не сливается */
+  --pill-bg: rgba(50, 48, 44, 0.44);
+  --pill-bg-dim: rgba(50, 48, 44, 0.27);
+  --pill-bg-active: rgba(56, 53, 49, 0.78);
   /* Линза активного пункта / чип темы — нейтральное светлое стекло */
   --lens-bg: rgba(255, 255, 255, 0.14);
   --lens-border: rgba(255, 255, 255, 0.24);
@@ -118,10 +120,11 @@
   /* Liquid Glass (iOS 26): спекуляр-блик на верхней кромке стеклянных поверхностей */
   --glass-spec: rgba(255, 255, 255, 0.1);
   --glass-spec-strong: rgba(255, 255, 255, 0.18);
-  /* Хроматическая кромка стекла v4 (искажение по краям): тёплая и холодная
-     стороны спектра на кромке — оптика стекла, НЕ обрамление */
-  --rim-warm: rgba(255, 190, 140, 0.5);
-  --rim-cool: rgba(150, 200, 255, 0.42);
+  /* Хроматическая кромка стекла v4.1 (искажение по краям): тёплая песочная и
+     мягкая шалфейная стороны — «холодная розоватая линия» убрана (просьба
+     владельца); оптика стекла, НЕ обрамление */
+  --rim-warm: rgba(255, 205, 165, 0.42);
+  --rim-cool: rgba(190, 220, 200, 0.3);
 }
 
 /* ─── Светлая тема ───────────────────────────────────────────────────────── */
@@ -131,44 +134,44 @@
   --brand-rgb: 15, 118, 110;
   --sand: #c9b493;
   --sand-rgb: 201, 180, 147;
-  /* ТЁПЛЫЙ светло-серый (по разбору): не стерильно-холодный */
-  --background: #f7f6f3;
-  --edge: #f7f6f3;
-  --foreground: #1c1c1e;
+  /* ТЁПЛЫЙ БЕЖЕВЫЙ (шаг 4: чуть больше песочного в нейтрали) */
+  --background: #f8f5ef;
+  --edge: #f8f5ef;
+  --foreground: #1f1d19;
   --card: rgba(255, 255, 255, 0.8);
-  --card-foreground: #1c1c1e;
-  --popover: rgba(255, 255, 255, 0.98);
-  --popover-foreground: #1c1c1e;
+  --card-foreground: #1f1d19;
+  --popover: rgba(255, 254, 251, 0.98);
+  --popover-foreground: #1f1d19;
   --primary: #0f766e;
   --primary-foreground: #ffffff;
-  --secondary: rgba(60, 60, 67, 0.06);
-  --secondary-foreground: #3a3a3e;
-  --muted: rgba(60, 60, 67, 0.06);
-  --muted-foreground: #6e6e73;
+  --secondary: rgba(82, 74, 60, 0.06);
+  --secondary-foreground: #3a362e;
+  --muted: rgba(82, 74, 60, 0.06);
+  --muted-foreground: #6f695e;
   --accent: rgba(var(--brand-rgb), 0.1);
   --accent-foreground: #0f766e;
   --destructive: #ef4444;
-  /* Рамки НЕЙТРАЛЬНЫЕ серые (iOS separator) — никакого изумруда в обрамлении */
-  --border: rgba(60, 60, 67, 0.12);
-  --border-strong: rgba(60, 60, 67, 0.22);
-  --input: rgba(60, 60, 67, 0.1);
+  /* Рамки тёплые серо-бежевые (iOS separator) — никакого изумруда/бирюзы в обрамлении */
+  --border: rgba(82, 74, 60, 0.13);
+  --border-strong: rgba(82, 74, 60, 0.24);
+  --input: rgba(82, 74, 60, 0.11);
   --ring: rgba(var(--brand-rgb), 0.4);
   --sidebar: rgba(255, 255, 255, 0.75);
-  --sidebar-foreground: #1c1c1e;
+  --sidebar-foreground: #1f1d19;
   --sidebar-primary: #0f766e;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: rgba(var(--brand-rgb), 0.09);
   --sidebar-accent-foreground: #0f766e;
-  --sidebar-border: rgba(60, 60, 67, 0.08);
+  --sidebar-border: rgba(82, 74, 60, 0.09);
   --sidebar-ring: rgba(var(--brand-rgb), 0.35);
   /* СТЕКЛО v4: белое translucent — фон (фото, авроры) просвечивает и красит стекло */
   --glass: rgba(255, 255, 255, 0.46);
   --glass-strong: rgba(255, 255, 255, 0.8);
-  --field: rgba(60, 60, 67, 0.05);
-  --field-strong: rgba(60, 60, 67, 0.09);
+  --field: rgba(82, 74, 60, 0.055);
+  --field-strong: rgba(82, 74, 60, 0.1);
   --shadow-card: 0 8px 30px -14px rgba(0, 0, 0, 0.16);
   --shadow-pop: 0 24px 60px -22px rgba(0, 0, 0, 0.22);
-  --grid-line: rgba(60, 60, 67, 0.05);
+  --grid-line: rgba(82, 74, 60, 0.05);
   /* Капсула: белое стекло на тёплом фоне; при скролле прозрачнее, при касании плотнее */
   --pill-bg: rgba(255, 255, 255, 0.44);
   --pill-bg-dim: rgba(255, 255, 255, 0.28);
@@ -178,8 +181,8 @@
   --focus-ring: rgba(var(--brand-rgb), 0.14);
   --glass-spec: rgba(255, 255, 255, 0.7);
   --glass-spec-strong: rgba(255, 255, 255, 0.9);
-  --rim-warm: rgba(255, 200, 160, 0.55);
-  --rim-cool: rgba(160, 205, 255, 0.5);
+  --rim-warm: rgba(232, 196, 156, 0.5);
+  --rim-cool: rgba(178, 212, 190, 0.38);
 }
 
 *,
@@ -844,8 +847,9 @@ body {
   margin: 0 auto;
   width: 100%;
   max-width: 500px;
-  height: 76px;
-  padding: 6px;
+  /* Шаг 2 (v5): панель НИЖЕ — 64px вместо 76px, iOS-компактно */
+  height: 64px;
+  padding: 5px;
   border-radius: 999px;
   background: var(--pill-bg);
   -webkit-backdrop-filter: blur(56px) saturate(2.1) brightness(1.15);
@@ -997,7 +1001,7 @@ body {
   transform: scale(0.92);
 }
 .pill-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.01em;
 }
@@ -1026,8 +1030,8 @@ body {
    ведутся motion-пружинами из portal.tsx), нейтральное стекло, без обводок */
 .nav-lens {
   position: absolute;
-  top: 6px;
-  bottom: 6px;
+  top: 5px;
+  bottom: 5px;
   left: 0;
   width: 0;
   z-index: 0;
@@ -1062,7 +1066,7 @@ body {
     from 0deg,
     color-mix(in srgb, var(--brand) 60%, transparent),
     rgba(255, 255, 255, 0.25),
-    color-mix(in srgb, var(--brand) 45%, rgba(120, 150, 255, 0.5)),
+    color-mix(in srgb, var(--brand) 45%, rgba(var(--sand-rgb), 0.55)),
     color-mix(in srgb, var(--brand) 60%, transparent)
   );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -1101,6 +1105,51 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     0 6px 16px -8px rgba(23, 42, 51, 0.4);
 }
+/* Шаг 2 (v5): круглый элемент ПОИСКА на панели — отдельная секция справа,
+   тот же размер, что иконки табов; линза драга НЕ захватывает его
+   (в itemRefs не входит, см. portal.tsx) */
+.pill-sep {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 1px;
+  height: 28px;
+  margin: 0 7px 0 3px;
+  background: var(--border-strong);
+  opacity: 0.5;
+}
+.pill-search {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-right: 1px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--muted-foreground);
+  transition:
+    color 0.2s ease,
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.pill-search:active {
+  transform: scale(0.9);
+}
+/* Поиск открыт — та же «линзовая» стеклянная подложка, что у активного таба */
+.pill-search.is-on {
+  color: var(--foreground);
+  background: var(--lens-bg);
+  border-color: var(--lens-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-spec-strong),
+    0 4px 14px -6px rgba(0, 0, 0, 0.45);
+}
+
 /* Шаг 2: пульс пункта при повторном тапе «Каталог» (мгновенный возврат наверх) */
 .nav-pulse {
   animation: nav-pulse 0.62s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -1112,10 +1161,10 @@ body {
   100% { transform: scale(1); }
 }
 
-/* ─── Шапка: сворачивание при скролле + плавающий поиск-кружок ─────────────
-   Наверху — полная шапка («Назад», заголовок раздела, тема) и панель поиска.
-   Листают — шапка становится ПОЛНОСТЬЮ прозрачной («как будто её не было»):
-   остаются только плавающие «Назад» (крупная) и кружок поиска СЛЕВА. */
+/* ─── Шапка: сворачивание при скролле (поиск вынесен на нижнюю панель) ─────
+   Листают — шапка становится ПОЛНОСТЬЮ прозрачной: остаётся только плавающая
+   «Назад». Поисковая строка сверху УДАЛЕНА на всех экранах (шаги 1/3):
+   поиск живёт в круглой кнопке на пилюле + подвесная карточка над ней. */
 header.glass {
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease;
 }
@@ -1134,83 +1183,23 @@ header.glass {
   transform: translateY(-6px) scale(0.98);
   pointer-events: none;
 }
-/* Панель поиска сворачивается плавно (grid-rows — без прыжков высоты).
-   РАЗВЁРНУТАЯ панель: overflow visible — иначе clips-дропдаун с подсказками
-   (пользователь видел «мёртвое» поле: дропдаун открыт, но обрезан).
-   Клип нужен только пока панель сворачивается/свёрнута (.header-collapsed). */
-.search-collapse {
-  display: grid;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition: grid-template-rows 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.22s ease;
-}
-.search-collapse > div {
-  overflow: visible;
-  min-height: 0;
-}
-.header-collapsed .search-collapse {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  pointer-events: none;
-}
-.header-collapsed .search-collapse > div {
-  overflow: hidden;
-}
-/* Кружок поиска — появляется вместо панели при скролле, СЛЕВА (одна сторона со «Назад»).
-   Единый размер с «Назад»/«наверх»: 44px, иконка 20 */
-.search-fab {
-  position: fixed;
-  top: calc(62px + env(safe-area-inset-top));
-  left: 14px;
-  z-index: 46;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  background: var(--pill-bg-active);
-  -webkit-backdrop-filter: blur(56px) saturate(2.1) brightness(1.15);
-  backdrop-filter: blur(56px) saturate(2.1) brightness(1.15);
-  border: 1px solid var(--border-strong);
-  color: var(--foreground);
-  box-shadow:
-    inset 0 1px 0 var(--glass-spec-strong),
-    0 10px 26px -10px rgba(0, 0, 0, 0.5);
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-  animation: search-fab-in 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.search-fab:active {
-  transform: scale(0.9);
-}
-/* На кружке видно, что поиск применён — нейтральное усиление, без бирюзы */
-.search-fab.has-query {
-  border-color: var(--border-strong);
-  box-shadow:
-    inset 0 1px 0 var(--glass-spec-strong),
-    0 10px 26px -10px rgba(0, 0, 0, 0.55),
-    0 0 0 3px var(--focus-ring);
-}
-@keyframes search-fab-in {
-  from {
-    opacity: 0;
-    transform: scale(0.6) translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-/* Подвесной поиск: ПРЕДСМОНТИРОВАН (в DOM всегда — фокус внутри жеста тапа
-   открывает клавиатуру iOS; flushSync-рендер запрещён — рвал AnimatePresence).
+
+/* ─── ШАГ 3: подвесной поиск НАД ПАНЕЛЬЮ ─────────────────────────────────
+   ПРЕДСМОНТИРОВАН (в DOM всегда — фокус внутри жеста тапа открывает
+   клавиатуру iOS; flushSync-рендер запрещён — рвал AnimatePresence).
    Скрытое состояние: visibility:hidden + прозрачность; открытие — класс .is-open
-   (вешается синхронно из portal.tsx ДО focus(), виден в том же кадре). */
+   (вешается синхронно из portal.tsx ДО focus(), виден в том же кадре).
+   Позиция: ПОД ПАНЕЛЬЮ НЕТ — НАД панелью: отступ 12мм (10–15мм по ТЗ) от
+   верха пилюли; при открытой клавиатуре — плавно поднимается на её высоту
+   (--kb-h из visualViewport в portal.tsx). */
 .search-pop {
   position: fixed;
-  top: calc(56px + env(safe-area-inset-top));
+  top: auto;
   left: 12px;
   right: 12px;
+  bottom: calc(max(10px, env(safe-area-inset-bottom)) + 64px + 12mm + var(--kb-h, 0px));
   z-index: 50;
-  border-radius: 20px;
+  border-radius: 22px;
   background: var(--glass-strong);
   -webkit-backdrop-filter: blur(56px) saturate(2.05) brightness(1.12);
   backdrop-filter: blur(56px) saturate(2.05) brightness(1.12);
@@ -1220,10 +1209,11 @@ header.glass {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateY(-10px) scale(0.98);
+  transform: translateY(14px) scale(0.98);
   transition:
     opacity 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
     transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+    bottom 0.3s cubic-bezier(0.22, 0.61, 0.36, 1),
     visibility 0s linear 0.24s;
 }
 /* Liquid Glass v4: глянец + преломление по краям на подвесной карточке поиска
@@ -1255,14 +1245,122 @@ header.glass {
   transform: translateY(0) scale(1);
   transition:
     opacity 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
-    transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+    transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1),
+    bottom 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+/* Дропдаун подсказок ОТКРЫВАЕТСЯ ВВЕРХ (карточка у низа экрана — результаты
+   не должны уходить под панель/клавиатуру). Клавиатура открыта (kb-open) —
+   карточка поднята к верху: дропдаун открывается ВНИЗ от поля. */
+.search-dd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 10px);
+  top: auto;
+  z-index: 50;
+  max-height: min(46dvh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+html.kb-open .search-dd {
+  bottom: auto;
+  top: calc(100% + 10px);
+  max-height: min(48dvh, 440px);
+}
+/* Крестик закрытия карточки (справа от поля) */
+.search-pop-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.2s ease, background-color 0.2s ease;
+}
+.search-pop-close:active {
+  transform: scale(0.88);
+  color: var(--foreground);
+}
+/* Применённый поиск — плавающий чип НАД панелью (когда карточка закрыта):
+   видно, что фильтр активен, и можно сбросить одним тапом */
+.search-chip {
+  position: fixed;
+  left: 50%;
+  /* translateX(-50%) — ЦЕНТРИРОВКА живёт в базовом правиле (не только в
+     keyframes: после окончания анимации transform возвращается к базе) */
+  transform: translateX(-50%);
+  bottom: calc(max(10px, env(safe-area-inset-bottom)) + 64px + 8px);
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(92vw, 480px);
+  padding: 6px 7px 6px 14px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: blur(48px) saturate(1.9) brightness(1.1);
+  backdrop-filter: blur(48px) saturate(1.9) brightness(1.1);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.5);
+  animation: search-chip-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.search-chip-x {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--field-strong);
+  color: var(--muted-foreground);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+.search-chip-x:active {
+  transform: scale(0.86);
+  color: var(--foreground);
+}
+@keyframes search-chip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+/* Клавиатура открыта: чип прячу (мешает), карточка уже поднята на --kb-h */
+html.kb-open .search-chip {
+  opacity: 0;
+  pointer-events: none;
 }
 @media (min-width: 1024px) {
-  .search-fab,
+  /* Десктоп: карточка поиска — по центру, ПОД шапкой (панели снизу нет) */
   .search-pop {
-    display: none;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    top: calc(env(safe-area-inset-top) + 64px);
+    width: min(600px, calc(100vw - 48px));
+    transform: translateX(-50%) translateY(-10px) scale(0.98);
   }
-  /* На десктопе шапку не сворачиваем — там сайдбар и поиск всегда виден */
+  .search-pop.is-open {
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  .search-dd {
+    bottom: auto;
+    top: calc(100% + 10px);
+    max-height: min(56dvh, 480px);
+  }
+  /* Чип применённого поиска — под шапкой по центру */
+  .search-chip {
+    bottom: auto;
+    top: calc(env(safe-area-inset-top) + 60px);
+  }
+  /* На десктопе шапку не сворачиваем — там сайдбар */
   .header-collapsed .header-fade {
     opacity: 1;
     transform: none;
@@ -1273,11 +1371,6 @@ header.glass {
     border-color: var(--border);
     -webkit-backdrop-filter: blur(52px) saturate(1.9) brightness(1.08);
     backdrop-filter: blur(52px) saturate(1.9) brightness(1.08);
-  }
-  .header-collapsed .search-collapse {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    pointer-events: auto;
   }
 }
 

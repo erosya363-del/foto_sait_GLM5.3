@@ -1,15 +1,15 @@
 /**
- * E2E: «поиск не работает, если нажимать на лупу» (видео владельца, v2.1).
- * Регресс бага: при скролле монтировались ДВА SearchBar (свёрнутая панель шапки +
- * подвесная карточка) с ОДИНАКОВЫМ id="global-search" → getElementById возвращал
- * невидимое поле → фокус не туда → клавиатура iOS не открывалась → печатать нельзя.
+ * E2E: поиск через круглый элемент на пилюле (v5, шаг 3 владельца).
+ * История: в v2.1 при скролле жили ДВА SearchBar с одинаковым id → клавиатура
+ * iOS не открывалась. С v5 панель поиска сверху УДАЛЕНА вовсе: в DOM ровно
+ * ОДИН input[data-search-input] — в подвесной карточке НАД пилюлей.
  * Проверки:
- *  1. В DOM всегда РОВНО ОДИН input[data-search-input] (панель и карточка не сосуществуют)
- *  2. Тап по лупе при скролле: .search-pop открыт и фокус В ЕГО поле (activeElement)
- *  3. Ввод «тре» → дропдаун с результатами (Ткани/Каталог фото) реально появляется
- *  4. Enter применяет запрос → карточка закрылась, каталог отфильтрован (чип «сбросить»)
- *  5. Палитра «Кобальт»: --brand больше НЕ бирюза (#11b5b0), стекло не серое
- *     (--glass без 150,160,169 / 46,51,58), в обеих темах
+ *  1. В DOM ровно ОДИН input[data-search-input], старого id «global-search» нет
+ *  2. Тап по круглому поиску на пилюле: .search-pop открыт, фокус В ЕГО поле
+ *     (activeElement), карточка НАД панелью с зазором 10–15мм
+ *  3. Ввод «локо» → дропдаун с результатами (Ткани/Каталог фото)
+ *  4. Enter применяет запрос → карточка закрылась, над панелью чип с «сбросить»
+ *  5. Палитра: --brand изумруд, стекло тёплый графит (47,45,41), поле тёплое
  *  6. Консоль чиста
  * Запуск: node scripts/test-search-fix.mjs (сервер на :3000)
  */
@@ -61,15 +61,17 @@ console.log("\n— 1. Поисковые поля в DOM —");
 const inputsAtStart = await page.evaluate(
   () => document.querySelectorAll("input[data-search-input]").length
 );
-/* 2 поля = панель шапки + ПРЕДСМОНТИРОВАННАЯ скрытая карточка (новая архитектура) */
-ok("в DOM ровно 2 поля: панель + скрытая карточка", inputsAtStart === 2, `найдено ${inputsAtStart}`);
+/* С v5 панель сверху удалена: ОДНО поле — в предсмонтированной скрытой карточке */
+ok("в DOM ровно 1 поле (в карточке над пилюлей)", inputsAtStart === 1, `найдено ${inputsAtStart}`);
 const oldIdGone = await page.evaluate(() => !document.getElementById("global-search"));
 ok("дублирующий id «global-search» полностью убран", oldIdGone);
+ok("панели поиска сверху нет (.search-collapse удалена)", (await page.locator(".search-collapse").count()) === 0);
+ok("кружка-лупы нет (заменена круглой кнопкой в пилюле)", (await page.locator(".search-fab").count()) === 0);
 
-console.log("\n— 2. Сценарий из видео: скролл → лупа → карточка → фокус —");
-/* Проваливаемся в КАТЕГОРИЮ «Диваны» (не в товар и не в переключатель режима):
-   карточки категорий — кнопки без aria-label с текстом категории */
-const catBtn = page.locator("main button:not([aria-label])", { hasText: "Диваны" }).first();
+console.log("\n— 2. Сценарий: скролл → круглый поиск на пилюле → карточка → фокус —");
+/* Проваливаемся на ДЛИННЫЙ уровень «Все ткани» (данных живые: категория
+   «Диваны» может стать короче вьюпорта после чистки владельцем) */
+const catBtn = page.locator("main button:not([aria-label])", { hasText: "Все ткани" }).first();
 await catBtn.click();
 await page.waitForTimeout(900);
 const productOpen = await page.evaluate(
@@ -82,8 +84,8 @@ await page.evaluate(() =>
 await page.waitForTimeout(600);
 const scrolledY = await page.evaluate(() => window.scrollY);
 ok("страница реально проскроллена", scrolledY > 6, `scrollY=${scrolledY}`);
-const fabVisible = await page.locator(".search-fab").isVisible();
-ok("кружок-лупа появился при скролле", fabVisible);
+const searchBtnVisible = await page.locator(".pill-search").isVisible();
+ok("круглый поиск на пилюле доступен и при скролле", searchBtnVisible);
 /* высота шапки ЗАМЕРЯЕТСЯ ПОСЛЕ скролла (шапка уже свернулась) — сравниваем
    до/после тапа: открытие карточки НЕ должно менять высоту шапки,
    иначе браузер компенсирует скроллом и страница прыгает */
@@ -93,7 +95,7 @@ const headerH0 = await page.evaluate(() => document.querySelector("header")?.get
    элемента скроллит ДОКУМЕНТ в его статическую позицию (наверх), и приложение
    закономерно закрывает всё при скролле. Реальный палец страницу не листает —
    жмём из JS, как настоящий тап. */
-await page.evaluate(() => document.querySelector(".search-fab")?.click());
+await page.evaluate(() => document.querySelector(".pill-search")?.click());
 await page.waitForTimeout(350);
 
 const popVisible = await page.locator(".search-pop").isVisible();
@@ -108,7 +110,16 @@ const focusInPop = await page.evaluate(() => {
   const input = pop?.querySelector("input[data-search-input]");
   return Boolean(input) && document.activeElement === input;
 });
-ok("ФОКУС в видимом поле карточки (раньше уходил в невидимое — баг клавиатуры iOS)", focusInPop);
+ok("ФОКУС в видимом поле карточки (клавиатура iOS откроется)", focusInPop);
+
+/* Карточка НАД панелью, зазор 10–15мм (38–57px) */
+const geo = await page.evaluate(() => {
+  const pop = document.querySelector(".search-pop")?.getBoundingClientRect();
+  const nav = document.querySelector(".pill-nav")?.getBoundingClientRect();
+  if (!pop || !nav) return null;
+  return { gap: nav.top - pop.bottom, above: pop.bottom <= nav.top + 1 };
+});
+ok("карточка НАД панелью с зазором 10–15мм", geo && geo.above && geo.gap >= 36 && geo.gap <= 60, JSON.stringify(geo));
 
 const headerH1 = await page.evaluate(() => document.querySelector("header")?.getBoundingClientRect().height ?? -2);
 ok(
@@ -136,26 +147,28 @@ await page.waitForTimeout(900);
 /* карточка ПРЕДСМОНТИРОВАНА — закрытие = исчезновение класса .is-open */
 const popClosed = await page.evaluate(() => !document.querySelector(".search-pop.is-open"));
 ok("карточка закрылась после применения запроса", popClosed);
+/* Карточка закрыта; над панелью — плавающий чип применённого поиска с крестиком */
 const applied = await page.evaluate(() => {
-  const chip = [...document.querySelectorAll("button")].find((b) =>
-    b.textContent?.includes("сбросить")
-  );
-  return Boolean(chip);
+  const chip = document.querySelector(".search-chip");
+  return Boolean(chip && (chip.textContent || "").includes("локо"));
 });
-ok("в панели появился applied-чип с «сбросить»", applied);
+ok("над панелью плавающий чип «Поиск: «локо»» (v5)", applied);
+const resetBtnVisible = await page.locator(".search-chip .search-chip-x").isVisible();
+ok("крестик-сброс на чипе виден", resetBtnVisible);
 const catalogFiltered = await page.evaluate(() => {
   const main = document.querySelector("main");
   return main ? (main.textContent || "").length > 50 : false;
 });
 ok("каталог отрисовал отфильтрованный список", catalogFiltered);
-// сброс
-const reset = page.locator("button", { hasText: "сбросить" }).first();
+// сброс крестиком чипа
+const reset = page.locator(".search-chip .search-chip-x").first();
 if (await reset.isVisible().catch(() => false)) {
-  await reset.click();
+  await page.evaluate(() => document.querySelector(".search-chip .search-chip-x")?.click());
   await page.waitForTimeout(500);
+  ok("крестик чипа сбросил поиск", (await page.locator(".search-chip").count()) === 0);
 }
 
-console.log("\n— 5. Палитра «Кобальт»: ни бирюзы, ни серого стекла —");
+console.log("\n— 5. Палитра: изумруд + тёплый графит стекла —");
 /* Resolved-значения custom properties зависят от движка — щупаем через probe-элемент */
 const probeColor = (page, cssVar, withClass) =>
   page.evaluate(
@@ -179,8 +192,8 @@ ok(
 );
 const glassDark = await probeColor(page, "--glass", "");
 ok(
-  "тёмная тема: стекло синеватое (34,42,74), не серое (46,51,58)",
-  /44,\s*44,\s*46/.test(glassDark) && !/46,\s*51,\s*58/.test(glassDark),
+  "тёмная тема: стекло тёплый графит (47,45,41), не серое (46,51,58)",
+  /47,\s*45,\s*41/.test(glassDark) && !/46,\s*51,\s*58/.test(glassDark),
   glassDark
 );
 // переключаем светлую тему так же, как ThemeSwitch (класс light на <html>)
@@ -202,14 +215,14 @@ ok(
 );
 ok("бирюзовый #11b5b0 нигде не остался брендом", !/17,\s*181,\s*176/.test(brandDark + brandLight));
 
-console.log("\n— 6. Светлая тема: поле поиска — синеватое стекло —");
+console.log("\n— 6. Светлая тема: поле поиска — тёплое нейтральное —");
 await page.waitForTimeout(300);
 const lightField = await page.evaluate(() => {
   const input = document.querySelector("input[data-search-input]");
   if (!input) return "no-input";
   return getComputedStyle(input).backgroundColor;
 });
-ok("светлая тема: поле имеет нейтральный фон (не синий)", /rgba\(60, 60, 67/.test(lightField), lightField);
+ok("светлая тема: поле тёплое нейтральное (82,74,60; не синее)", /rgba\(82,\s*74,\s*60/.test(lightField), lightField);
 
 console.log("\n— 7. Консоль —");
 ok("консоль чиста (0 ошибок)", consoleErrors.length === 0, consoleErrors.slice(0, 3).join(" | "));

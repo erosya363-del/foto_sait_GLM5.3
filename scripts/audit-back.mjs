@@ -95,6 +95,9 @@ const portal = (page) =>
 /* S4: поиск → Back → поиск снят */
 {
   const { ctx, page } = await fresh();
+  /* v5: поиск открывается из круглой кнопки на пилюле (поле одно, в карточке) */
+  await page.evaluate(() => document.querySelector(".pill-search")?.click());
+  await page.waitForTimeout(400);
   await page.fill("input[data-search-input]", "sky");
   await page.waitForTimeout(500);
   await page.keyboard.press("Enter");

@@ -208,11 +208,11 @@ ok("«Назад» виден при скролле (единственная к
 await page.evaluate(() => window.__portal.setState({ catCategory: null }));
 await page.waitForTimeout(300);
 
-console.log("── 6. Кружок поиска и «наверх» — слева ──");
-const fab = page.locator(".search-fab");
-ok("кружок поиска виден при скролле", await fab.isVisible());
-const fabBox = await fab.boundingBox();
-ok("кружок СЛЕВА (одна сторона с «Назад»)", fabBox && fabBox.x < 100, JSON.stringify(fabBox));
+console.log("── 6. Поиск переехал в пилюлю; «наверх» — слева ──");
+const pillSearch = page.locator(".pill-search");
+ok("круглый поиск на пилюле виден при скролле (вместо кружка)", await pillSearch.isVisible());
+const psBox = await pillSearch.boundingBox();
+ok("круглый поиск СПРАВА (в панели)", psBox && psBox.x > 200, JSON.stringify(psBox));
 const ftop = page.locator(".fab-top");
 ok("стрелка «наверх» видна", await ftop.isVisible());
 const ftopBox = await ftop.boundingBox();
@@ -233,15 +233,17 @@ await page.evaluate(() => {
 });
 await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(800);
-await page.click("input[data-search-input]");
+/* Поиск открыт из круглой кнопки на пилюле (шаг 3) — поле теперь одно,
+   в подвесной карточке над панелью */
+await page.evaluate(() => document.querySelector(".pill-search")?.click());
 await page.waitForTimeout(400);
-const dd = page.locator(".search-collapse .absolute.z-50").first();
+const dd = page.locator(".search-pop .search-dd").first();
 ok("дропдаун открылся", await dd.isVisible());
 const ddBg = await dd.evaluate((el) => getComputedStyle(el).backgroundColor);
 ok("дропдаун полупрозрачный (~85%)", Math.abs(alphaOf(ddBg) - 0.85) < 0.06, ddBg);
 const ddBlur = await dd.evaluate((el) => getComputedStyle(el).backdropFilter);
 ok("фон за дропдауном размыт", /blur/.test(ddBlur), ddBlur);
-const input = page.locator("input[data-search-input]").first(); // 2 инпута: панель + предсмонтированная карточка
+const input = page.locator("input[data-search-input]").first(); // поле одно — в карточке над панелью
 const inpStyle = await input.evaluate((el) => {
   const cs = getComputedStyle(el);
   return { bw: cs.borderWidth, bs: cs.borderStyle, bg: cs.backgroundColor, anim: cs.animationName };
@@ -250,11 +252,11 @@ ok("тонкая рамка 1px", inpStyle.bw === "1px" && inpStyle.bs === "soli
 ok("поле нейтральное графит-стекло (фокус = --field-strong ~0.15; палитра «Изумруд»)", Math.abs(alphaOf(inpStyle.bg) - 0.15) < 0.03, inpStyle.bg);
 ok("нет анимаций на поле (не мигает)", inpStyle.anim === "none", inpStyle.anim);
 ok("старая мигающая рамка .search-frame удалена", (await page.locator(".search-frame").count()) === 0);
-const chips = await page.locator(".search-collapse .absolute button").allTextContents();
+const chips = await page.locator(".search-pop .search-dd button").allTextContents();
 ok("личный топ-1 «sky» (3 ввода)", chips[0] === "sky", chips.join("|"));
 ok("«магни» в популярных", chips.includes("магни"), chips.join("|"));
 ok("запрос старше 7 дней не показан", !chips.includes("старьё"), chips.join("|"));
-const ddLabel = await page.locator(".search-collapse .absolute p").first().textContent();
+const ddLabel = await page.locator(".search-pop .search-dd p").first().textContent();
 ok("заголовок «Популярные за 7 дней»", /за 7 дней/.test(ddLabel ?? ""), ddLabel ?? "");
 await page.fill("input[data-search-input]", "sky");
 await page.keyboard.press("Enter");
@@ -303,10 +305,10 @@ ok("карточки вариантов отрисованы", (await page.locat
 console.log("── 10. Лента новинок: компактнее ──");
 await page.evaluate(() => window.__portal.getState().resetCatalog());
 await page.waitForTimeout(700);
-const stripCard = page.locator("main section button.w-\\[100px\\]").first();
+const stripCard = page.locator("main section button.w-\\[92px\\]").first();
 if ((await stripCard.count()) > 0) {
   const w = (await stripCard.boundingBox())?.width ?? 0;
-  ok("карточки ленты 100px (было 122)", Math.abs(w - 100) < 2, `w=${w}`);
+  ok("карточки ленты 92px (компактнее по высоте, шаг 1)", Math.abs(w - 92) < 2, `w=${w}`);
 } else {
   console.log("  ~ лента новинок пуста — пропуск");
 }

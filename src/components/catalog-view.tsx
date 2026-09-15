@@ -102,9 +102,12 @@ function ModeSwitch() {
   );
 }
 
-/* ───────────────── Уровень 1: категории + новинки + ткани ─────────────── */
+/* ───────────────── Уровень 1: категории + новинки ─────────────────── */
 
-/** Лента «Новинки за 7 дней» — свежие фото, горизонтальный скролл */
+/** Лента «Новинки за 7 дней» — свежие фото, горизонтальный скролл.
+    Шаг 1: карточки КОМПАКТНЕЕ по высоте (78/92px, квадрат — было 86/100 + 4/5),
+    подпись под фото; СКРОЛЛ ЦЕНТРИРУЕТСЯ, когда лента короче экрана
+    (внутренняя строка w-max mx-auto — без клиппинга при переполнении). */
 function FreshStrip() {
   const openProduct = usePortal((s) => s.openProduct);
   const { data } = useQuery<{ items: FreshItem[]; total: number }>({
@@ -127,76 +130,43 @@ function FreshStrip() {
           {data.total}
         </span>
       </p>
-      <div className="no-scrollbar -mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:gap-2.5 sm:px-0">
-        {data.items.map((p, i) => (
-          <motion.button
-            key={p.photoId}
-            type="button"
-            onClick={() => openProduct(p.variantId, "catalog")}
-            className="card-hover spot rise group relative w-[86px] shrink-0 snap-start overflow-hidden rounded-xl border border-border bg-card text-left sm:w-[100px] sm:rounded-2xl"
-            style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
-          >
-            <NewBadge className="left-1 top-1 sm:left-1.5 sm:top-1.5" />
-            <div className="aspect-square w-full overflow-hidden bg-muted sm:aspect-[4/5]">
-              <img
-                src={p.thumbUrl}
-                alt={p.modelName}
-                loading="lazy"
-                onLoad={(e) => e.currentTarget.classList.add("is-loaded")}
-                className="img-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
-              />
-            </div>
-            <div className="flex flex-col gap-px p-1 sm:p-1.5">
-              <p className="truncate text-[10px] font-bold leading-tight sm:text-[10.5px]">{p.modelName}</p>
-              {p.variantName && (
-                <p className="truncate text-[9px] font-semibold text-[color:var(--brand)] sm:text-[9.5px]">{p.variantName}</p>
-              )}
-            </div>
-          </motion.button>
-        ))}
+      <div className="no-scrollbar -mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+        <div className="mx-auto flex w-max snap-x gap-2 sm:gap-2.5">
+          {data.items.map((p, i) => (
+            <motion.button
+              key={p.photoId}
+              type="button"
+              onClick={() => openProduct(p.variantId, "catalog")}
+              className="card-hover spot rise group relative w-[78px] shrink-0 snap-start overflow-hidden rounded-xl border border-border bg-card text-left sm:w-[92px] sm:rounded-2xl"
+              style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
+            >
+              <NewBadge className="left-1 top-1 sm:left-1.5 sm:top-1.5" />
+              <div className="aspect-square w-full overflow-hidden bg-muted">
+                <img
+                  src={p.thumbUrl}
+                  alt={p.modelName}
+                  loading="lazy"
+                  onLoad={(e) => e.currentTarget.classList.add("is-loaded")}
+                  className="img-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+                />
+              </div>
+              <div className="flex flex-col gap-px p-1 sm:p-1.5">
+                <p className="truncate text-[10px] font-bold leading-tight sm:text-[10.5px]">{p.modelName}</p>
+                {p.variantName && (
+                  <p className="truncate text-[9px] font-semibold text-[color:var(--brand)] sm:text-[9.5px]">{p.variantName}</p>
+                )}
+              </div>
+            </motion.button>
+          ))}
+        </div>
       </div>
     </section>
-  );
-}
-
-/* Быстрые чипы тканей (разбор §3): горизонтальный скролл с превью ткани */
-function FabricChips({ onOpen }: { onOpen: (fabric: string | null) => void }) {
-  const { data } = useQuery<{ fabrics: FabricDto[] }>({
-    queryKey: ["catalog", "level=fabrics"],
-    queryFn: async () => {
-      const r = await fetch("/api/catalog?level=fabrics");
-      if (!r.ok) throw new Error("Ошибка загрузки");
-      return r.json();
-    },
-  });
-  const top = (data?.fabrics ?? []).slice(0, 12);
-  if (!data || top.length === 0) return null;
-  return (
-    <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-      {top.map((f, i) => (
-        <button key={f.id} type="button" onClick={() => onOpen(f.name)} className="chip shrink-0">
-          {f.swatchUrl || f.thumb ? (
-            <img
-              src={(f.swatchUrl ?? f.thumb)!}
-              alt=""
-              loading="lazy"
-              className="h-5 w-5 rounded-full object-cover"
-              style={{ animationDelay: `${i * 30}ms` }}
-            />
-          ) : (
-            <SwatchBook size={13} strokeWidth={2.3} />
-          )}
-          {f.name}
-        </button>
-      ))}
-    </div>
   );
 }
 
 function LevelCategories() {
   const setCat = usePortal((s) => s.setCatCategory);
   const setFabrics = usePortal((s) => s.setCatFabrics);
-  const setMaterial = usePortal((s) => s.setCatMaterial);
   const crumbs = useCatalogCrumbs();
   const { data } = useQuery<{
     categories: Array<{ id: string; name: string; icon: string | null; modelCount: number; variantCount: number }>;
@@ -224,22 +194,9 @@ function LevelCategories() {
     <div className="flex flex-col gap-4">
       <Breadcrumbs crumbs={crumbs} />
       <FreshStrip />
-      {/* Разбор §3: быстрые чипы тканей прямо в каталоге — один тап до фото ткани */}
-      <FabricChips
-        onOpen={(name) => {
-          if (name) {
-            setFabrics(true);
-            setMaterial(name);
-          } else {
-            setFabrics(true);
-          }
-        }}
-      />
+      {/* Шаг 1 (v5): блок чипов тканей и подсказка УДАЛЕНЫ — на старте только
+          лента «Новинки» и пункты категорий (Диваны / Кровати / Все ткани) */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3 lg:gap-4">
-        <div className="col-span-full mb-1 text-[12.5px] leading-relaxed text-muted-foreground">
-          Категория → модель → ткань и название. Или используйте{" "}
-          <span className="font-bold text-foreground">единый поиск</span> — «sky» покажет все фото этой ткани.
-        </div>
         {data && (data.categories ?? []).length === 0 && (
           <div className="glass col-span-full flex flex-col items-center gap-3 rounded-3xl px-6 py-14 text-center">
             <span className="empty-live grid h-14 w-14 place-items-center rounded-2xl bg-secondary text-muted-foreground">
@@ -256,37 +213,38 @@ function LevelCategories() {
             key={c.id}
             type="button"
             onClick={() => setCat(c.name)}
-            /* Мобилка: ГОРИЗОНТАЛЬНЫЕ ряды (компактно); десктоп — крупные плитки */
-            className="card-hover spot rise group flex flex-row items-center gap-3.5 rounded-2xl border border-border bg-card px-4 py-3.5 text-left sm:flex-col sm:gap-3 sm:rounded-3xl sm:px-4 sm:py-8 sm:text-center"
+            /* Мобилка: ГОРИЗОНТАЛЬНЫЕ ряды (компактно); десктоп — крупные плитки.
+               Шаг 1 (v5): текст ЧУТЬ МЕНЬШЕ, стрелка справа — как было */
+            className="card-hover spot rise group flex flex-row items-center gap-3.5 rounded-2xl border border-border bg-card px-4 py-3 text-left sm:flex-col sm:gap-3 sm:rounded-3xl sm:px-4 sm:py-8 sm:text-center"
             style={{ animationDelay: `${i * 60}ms` }}
           >
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[color:var(--brand)]/12 text-[color:var(--brand)] transition-transform duration-300 group-hover:scale-110 sm:h-16 sm:w-16">
-              <CatIcon icon={c.icon} className="h-6 w-6 sm:h-8 sm:w-8" />
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[color:var(--brand)]/12 text-[color:var(--brand)] transition-transform duration-300 group-hover:scale-110 sm:h-16 sm:w-16">
+              <CatIcon icon={c.icon} className="h-[22px] w-[22px] sm:h-8 sm:w-8" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block font-display text-[14.5px] font-bold sm:text-[15px]">{c.name}</span>
-              <span className="block truncate text-[12px] text-muted-foreground">
+              <span className="block font-display text-[13.5px] font-bold sm:text-[15px]">{c.name}</span>
+              <span className="block truncate text-[11px] text-muted-foreground sm:text-[12px]">
                 {c.modelCount} моделей · {c.variantCount} вариантов
               </span>
             </span>
             <ChevronRight size={16} strokeWidth={2.3} className="shrink-0 text-muted-foreground sm:hidden" />
           </button>
         ))}
-        {!data && Array.from({ length: 2 }).map((_, i) => <div key={i} className="skeleton h-[68px] rounded-2xl sm:h-52 sm:rounded-3xl" />)}
+        {!data && Array.from({ length: 2 }).map((_, i) => <div key={i} className="skeleton h-[64px] rounded-2xl sm:h-52 sm:rounded-3xl" />)}
       </div>
 
       {/* Шаг 4: все ткани — альтернативный обход каталога */}
       <button
         type="button"
         onClick={() => setFabrics(true)}
-        className="card-hover spot rise group flex items-center gap-4 rounded-3xl border border-[color:var(--brand)]/30 bg-[color:var(--brand)]/8 px-5 py-4 text-left"
+        className="card-hover spot rise group flex items-center gap-4 rounded-3xl border border-[color:var(--brand)]/30 bg-[color:var(--brand)]/8 px-5 py-3.5 text-left"
       >
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[color:var(--brand)]/14 text-[color:var(--brand)] transition-transform duration-300 group-hover:scale-110">
-          <SwatchBook size={22} strokeWidth={2} />
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[color:var(--brand)]/14 text-[color:var(--brand)] transition-transform duration-300 group-hover:scale-110">
+          <SwatchBook size={21} strokeWidth={2} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block font-display text-[14.5px] font-bold">Все ткани</span>
-          <span className="block truncate text-[12px] text-muted-foreground">
+          <span className="block font-display text-[13.5px] font-bold">Все ткани</span>
+          <span className="block truncate text-[11px] text-muted-foreground">
             {fabricCount > 0 ? `${fabricCount} тканей · ${variantTotal} вариантов фото` : "Обзор каталога по тканям"}
           </span>
         </span>

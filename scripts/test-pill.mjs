@@ -56,7 +56,7 @@ ok(".pill-shell видна", await shell.isVisible());
 const shellBox = await shell.boundingBox();
 ok("пилюля не на всю ширину (max-width 500 + поля)", shellBox.width <= 500 + 1, `w=${shellBox.width}`);
 ok("пилюля по центру", Math.abs(shellBox.x + shellBox.width / 2 - 195) < 3, `x=${shellBox.x}`);
-ok("высота капсулы 76px (v3 крупнее)", Math.abs(shellBox.height - 76) < 2, `h=${shellBox.height}`);
+ok("высота капсулы 64px (v5 — ниже, iOS-компакт)", Math.abs(shellBox.height - 64) < 2, `h=${shellBox.height}`);
 
 const shellStyle = await shell.evaluate((el) => {
   const cs = getComputedStyle(el);
@@ -92,7 +92,7 @@ ok("SVG-фильтр #nav-liquid в DOM", (await page.locator("#nav-liquid").cou
 const lensCount = await page.locator(".nav-lens").count();
 ok("линза одна (живёт на уровне капсулы)", lensCount === 1);
 const hapticSwitches = await page.locator(".pill-haptic").count();
-ok("нативных switch для хаптики — по одному на пункт (iOS)", hapticSwitches === 4, `got ${hapticSwitches}`);
+ok("нативных switch для хаптики — по одному на пункт + поиск (iOS)", hapticSwitches === 5, `got ${hapticSwitches}`);
 const hsStyle = await page.locator(".pill-haptic").first().evaluate((el) => {
   const cs = getComputedStyle(el);
   return { op: cs.opacity, clip: cs.clipPath, app: cs.appearance };
@@ -106,7 +106,7 @@ ok("линза имеет ядро .nav-lens-core", (await page.locator(".nav-le
 const onColor = await items.nth(0).evaluate((el) => getComputedStyle(el).color);
 ok(
   "активный пункт чётким цветом текста (iOS-стиль, без бирюзы)",
-  onColor === "rgb(245, 245, 247)",
+  onColor === "rgb(246, 244, 240)",
   onColor
 );
 
@@ -172,16 +172,14 @@ await tapElsewhere();
 await page.waitForTimeout(250);
 ok("тап мимо → pill-active снялся", !(await shell.evaluate((el) => el.classList.contains("pill-active"))));
 
-console.log("── 6. Шапка: сворачивание при скролле ──");
+console.log("── 6. Шапка: сворачивание при скролле, поиска сверху НЕТ (шаги 1/3) ──");
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
 await page.waitForTimeout(400);
 const logo = page.locator("header img[alt='Askona']");
-const searchPanel = page.locator(".search-collapse");
 ok("на мобиле: лого скрыт (заголовок «Askona …» вместо него)", !(await logo.isVisible()));
-ok("наверху: панель поиска видна", await searchPanel.isVisible());
+ok("поисковой строки сверху НЕТ (панель .search-collapse удалена)", (await page.locator(".search-collapse").count()) === 0);
+ok("кружка-лупы .search-fab больше нет (поиск в пилюле)", (await page.locator(".search-fab").count()) === 0);
 ok("наверху: заголовок раздела виден", await page.locator("header .font-display").isVisible());
-const fab0 = page.locator(".search-fab");
-ok("наверху: кружка нет", (await fab0.count()) === 0);
 await page.evaluate(() => window.scrollTo({ top: 300, behavior: "instant" }));
 await page.waitForTimeout(500);
 const titleOpacity = await settle(
@@ -194,39 +192,47 @@ const hdrBg = await settle(
   (v) => v === "rgba(0, 0, 0, 0)"
 );
 ok("при скролле: шапка полностью прозрачна", hdrBg === "rgba(0, 0, 0, 0)", hdrBg);
-const panelH = await settle(
-  async () => (await searchPanel.boundingBox())?.height ?? 0,
-  (v) => v <= 2
-);
-ok("при скролле: панель поиска свернулась (высота ≤2px)", panelH <= 2, `h=${panelH}`);
-ok("при скролле: кружок поиска появился", await fab0.isVisible());
 ok("при скролле: «Назад» осталась (шапка жива)", await page.locator("header").isVisible());
 
-console.log("── 7. Кружок → подвесной поиск → листание сжимает ──");
-await fab0.click();
+console.log("── 7. Круглый поиск на пилюле → карточка НАД панелью (шаг 3) ──");
+const searchBtn = page.locator(".pill-search");
+ok("круглый элемент поиска есть на панели", await searchBtn.isVisible());
+const sBtnBox = await searchBtn.boundingBox();
+const lastItemBox = await items.nth(3).boundingBox();
+ok("поиск СПРАВА от «Админ» (за разделителем)", sBtnBox.x > lastItemBox.x + lastItemBox.width - 2, JSON.stringify({ sBtnBox, lastItemBox }));
+ok("размер круглого поиска 48px (=иконки табов)", Math.abs(sBtnBox.width - 48) < 2 && Math.abs(sBtnBox.height - 48) < 2, `w=${sBtnBox.width} h=${sBtnBox.height}`);
+/* ВАЖНО: НЕ locator.click() — fixed-элемент; жмём из JS, как настоящий тап */
+await page.evaluate(() => document.querySelector(".pill-search")?.click());
 await page.waitForTimeout(450);
 const pop = page.locator(".search-pop");
 ok("подвесной поиск открылся", await pop.isVisible());
-const panelH2 = (await searchPanel.boundingBox())?.height ?? 0;
-ok("панельный поиск при этом свернут", panelH2 <= 2, `h=${panelH2}`);
+const popBox = await pop.boundingBox();
+const navBox = await nav.boundingBox();
+const gapPx = navBox.y - (popBox.y + popBox.height);
+ok("карточка НАД панелью (не перекрывает)", popBox.y + popBox.height <= navBox.y + 1, `popBottom=${(popBox.y + popBox.height).toFixed(1)} navTop=${navBox.y.toFixed(1)}`);
+ok("зазор 10–15мм (38–57px)", gapPx >= 36 && gapPx <= 60, `gap=${gapPx.toFixed(1)}`);
 const focused1 = await page.evaluate(() => {
   const ae = document.activeElement;
   return Boolean(ae && ae.matches("input[data-search-input]") && ae.closest(".search-pop"));
 });
-ok("поле поиска в фокусе (клавиатура) — в ВИДИМОЙ карточке", focused1);
-// печатаем — дропдаун в подвесном формате
+ok("поле поиска в фокусе (клавиатура) — в карточке", focused1);
+// печатаем — дропдаун открывается ВВЕРХ от поля (карточка у низа экрана)
 await page.keyboard.type("диван");
 await page.waitForTimeout(600);
-ok("дропдаун подсказок открыт", await page.locator(".search-pop .absolute").first().isVisible().catch(() => false));
-// листание (в любую сторону >30px; вниз места нет — L1 max 108) — подвесной закрылся
+ok("дропдаун подсказок открыт", await page.locator(".search-pop .search-dd").isVisible());
+const ddGeom = await page.locator(".search-pop .search-dd").evaluate((el) => {
+  const d = el.getBoundingClientRect();
+  const p = el.closest(".search-pop").getBoundingClientRect();
+  return { ddBottom: d.bottom, popTop: p.top };
+});
+ok("дропдаун ВЫШЕ поля (у низа экрана)", ddGeom.ddBottom <= ddGeom.popTop + 2, JSON.stringify(ddGeom));
+// крестик закрытия карточки
+ok("крестик закрытия есть", await page.locator(".search-pop-close").isVisible());
+// листание (>30px) закрывает карточку — класс is-open снялся
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
 await page.waitForTimeout(500);
 /* карточка предсмонтирована — закрытие = снялся класс .is-open */
 ok("листание закрыло подвесной поиск", (await page.locator(".search-pop.is-open").count()) === 0);
-// вернулись вниз — кружок снова на месте
-await page.evaluate(() => window.scrollTo({ top: 108, behavior: "instant" }));
-await page.waitForTimeout(500);
-ok("кружок вернулся", await fab0.isVisible());
 
 console.log("── 8. Повторный тап «Каталог»: пульс + мгновенный верх (Шаг 2) ──");
 await items.nth(0).click(); // из остатков → в каталог (обычный переход, без пульса)
@@ -284,17 +290,18 @@ await page.screenshot({ path: "tool-results/pill-dark-scrolled.png" });
 const skirt = await page.locator(".fx-skirt").count();
 ok("фикс v3: юбка на месте", skirt === 1);
 const htmlBg = await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
-ok("фикс v3: html фон --edge (графит #1c1c1e)", htmlBg === "rgb(28, 28, 30)", htmlBg);
+ok("фикс v3: html фон --edge (тёплый графит #1d1b18)", htmlBg === "rgb(29, 27, 24)", htmlBg);
 
-console.log("── 12. Десктоп: пилюля и кружок скрыты, шапка не сворачивается ──");
+console.log("── 12. Десктоп: пилюля скрыта, поиск в сайдбаре ──");
 await page.setViewportSize({ width: 1440, height: 900 });
 await page.waitForTimeout(400);
 ok("пилюля скрыта на lg", !(await nav.isVisible()));
 ok("сайдбар виден", await page.locator("aside").isVisible());
+ok("в сайдбаре есть кнопка «Поиск» (шаг 3)", await page.locator("aside .side-link", { hasText: "Поиск" }).isVisible());
+ok("карточка поиска в DOM (одна, скрыта до вызова)", (await page.locator(".search-pop").count()) === 1);
 await page.evaluate(() => window.scrollTo({ top: 400, behavior: "instant" }));
 await page.waitForTimeout(400);
 ok("десктоп: лого виден при скролле (шапка не сворачивается)", await logo.isVisible());
-ok("десктоп: панель поиска видна", await searchPanel.isVisible());
 
 console.log("── 13. Консоль ──");
 const realErrors = consoleErrors.filter((e) => !/Download the React DevTools/i.test(e));

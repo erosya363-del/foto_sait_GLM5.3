@@ -116,15 +116,14 @@ export function SearchBar() {
   });
 
   // Клик мимо — закрыть дропдаун. ВАЖНО: тапы внутри подвесной карточки
-  // (.search-pop) и по кружку-лупе (.search-fab) НЕ считаются «мимо» — когда
-  // открыта карточка, именно она активная поверхность; иначе экземпляр панели
-  // шапки гасил бы дропдаун карточки каждым её тапом (два экземпляра живут
-  // одновременно — панель НЕ размонтируется, чтобы не прыгала высота шапки).
+  // (.search-pop) и по круглой кнопке поиска на пилюле (.pill-search) НЕ
+  // считаются «мимо» — когда открыта карточка, именно она активная поверхность;
+  // у кнопки на пилюле свой toggle (иначе pointerdown закрыл бы карточку до click).
   useEffect(() => {
     if (!searchOpen) return;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Element | null;
-      if (t?.closest?.(".search-pop") || t?.closest?.(".search-fab")) return;
+      if (t?.closest?.(".search-pop") || t?.closest?.(".pill-search")) return;
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setSearchOpen(false);
     };
     window.addEventListener("pointerdown", onDown);
@@ -206,9 +205,11 @@ export function SearchBar() {
       </div>
 
       {/* Дропдаун: полупрозрачный стеклянный (~80%) с размытым фоном,
-          без внутренней анимации секций */}
+          без внутренней анимации секций. Геометрия (.search-dd) в globals.css:
+          на мобиле карточка у низа — дропдаун открывается ВВЕРХ от поля,
+          при открытой клавиатуре (kb-open) и на десктопе — ВНИЗ. */}
       {hasDropdown && (
-        <div className="absolute inset-x-0 top-[calc(100%+8px)] z-50 max-h-[min(62dvh,480px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-[var(--glass-strong)] p-2.5 shadow-2xl shadow-black/25 backdrop-blur-[80px]">
+        <div className="search-dd rounded-2xl border border-border bg-[var(--glass-strong)] p-2.5 shadow-2xl shadow-black/25 backdrop-blur-[80px]">
           {!debounced && (
             <>
               <p className="px-1.5 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">

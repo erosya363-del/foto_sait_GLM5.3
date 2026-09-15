@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, animate, useMotionValue } from "framer-motion";
-import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck, X } from "lucide-react";
 import {
   usePortal, snapshot, dismissProduct, isPushSuppressed,
   type View, type Warehouse, type PortalSnapshot,
@@ -199,6 +199,11 @@ function useWowEffects() {
       if (!vv) return;
       const open = window.innerHeight - vv.height > 140;
       document.documentElement.classList.toggle("kb-open", open);
+      /* Высота клавиатуры для .search-pop: карточка поиска «стоит» НАД панелью,
+         а при открытой клавиатуре плавно поднимается НАД клавиатурой
+         (bottom: ... + var(--kb-h)); keyboardTop = vv.offsetTop + vv.height. */
+      const kb = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
+      document.documentElement.style.setProperty("--kb-h", open ? `${Math.round(kb)}px` : "0px");
     };
     vv?.addEventListener("resize", onVV);
     vv?.addEventListener("scroll", onVV);
@@ -269,7 +274,6 @@ export function Portal() {
   const catFabrics = usePortal((s) => s.catFabrics);
   const catMaterial = usePortal((s) => s.catMaterial);
   const title = useHeaderTitle();
-  const searchVisible = view === "catalog" || view === "stock";
   useWowEffects();
 
   /* ── Пилюля: Liquid Glass v3 — «жидкая» линза, как в iOS 26 ──────────────
@@ -345,6 +349,9 @@ export function Portal() {
       left = fx - 12;
     }
     left = Math.max(6, left);
+    /* Линза НЕ залезает на круглую кнопку поиска (правее последнего таба) */
+    const lastRect = rectsRef.current.get("admin");
+    if (lastRect && anchorRef.current !== "admin") right = Math.min(right, lastRect.left + lastRect.width);
     right = Math.min(sw - 6, right);
     if (right - left < anchor.width) right = left + anchor.width; // минимум — пункт
     animate(lensX, left, DRAG_SPRING);
@@ -451,8 +458,9 @@ export function Portal() {
   /* ── Шапка/пилюля: реакция на скролл и касание ────────────────────── */
   const [scrolled, setScrolled] = useState(false);
   const [pillTouched, setPillTouched] = useState(false);
-  /* Подвесной поиск (открыт из кружка) */
+  /* Подвесной поиск (шаг 3): открыт из круглой кнопки на пилюле */
   const [searchFabOpen, setSearchFabOpen] = useState(false);
+  const popRef = useRef<HTMLDivElement | null>(null);
   /* «Жидкий» переезд линзы — 480 мс после смены активного пункта */
   const [liquid, setLiquid] = useState(false);
 
@@ -472,10 +480,7 @@ export function Portal() {
         setScrolled(y > 6);
         if (Math.abs(y - lastY) > 30) {
           lastY = y;
-          setSearchFabOpen((open) => {
-            if (open) usePortal.getState().setSearchOpen(false);
-            return false;
-          });
+          closeSearchPop();
         }
       });
     };
@@ -557,26 +562,18 @@ export function Portal() {
     return () => cancelAnimationFrame(raf);
   }, [liquid]);
 
-  /* ── Поиск: из пилюли, из кружка или по «/» ─────────────────────── */
-  /* ФИКС «ПОИСК НЕ РАБОТАЕТ» (видео владельца): раньше фокус ставился через
-     setTimeout(130мс) на getElementById("global-search") — а при скролле
-     смонтированы ДВА SearchBar (свёрнутая панель + подвесная карточка) с
-     ОДИНАКОВЫМ id, и getElementById возвращал невидимое поле свёрнутой
-     панели. Итог: фокус не там, клавиатура iOS не открывается, печатать
-     нельзя. Теперь: (1) flushSync рендерит карточку СИНХРОННО внутри жеста
-     тапа; (2) фокус ставится немедленно на ВИДИМОЕ поле [data-search-input]
-     — iOS открывает клавиатуру, т.к. focus() остаётся в жесте. */
+  /* ── Поиск (шаг 3): круглый элемент на пилюле + подвесная карточка над ней ──
+   Панель поиска сверху УДАЛЕНА на всех экранах → в DOM теперь ровно ОДИН
+   input[data-search-input] (внутри .search-pop) — дубли полей невозможны.
+   Открытие: класс is-open СИНХРОННО в жесте тапа + focus() — iOS открывает
+   клавиатуру. Закрытие: крестик, свайп вниз, листание, Escape, тап мимо. */
   const focusVisibleSearchInput = () => {
-    const pop = document.querySelector<Element>(".search-pop");
-    const panel = document.querySelector<Element>(".search-collapse");
-    // Подвесная карточка приоритетнее; из двух берём ту, что реально видна
-    const host = isShown(pop) ? pop : isShown(panel) ? panel : null;
+    const host = document.querySelector<Element>(".search-pop");
     const input = host?.querySelector<HTMLInputElement>("input[data-search-input]");
     /* preventScroll ОБЯЗАТЕЛЕН: фокус на поле внутри position:fixed карточки
        otherwise скроллит ДОКУМЕНТ к «статической позиции» фиксированного
-       элемента (в самый верх) — страница улетает наверх, скролл-хендлер видит
-       «скролл > 30px» и тут же закрывает карточку. preventScroll рвёт эту
-       связь; на открытие клавиатуры iOS он не влияет. */
+       элемента — страница улетает наверх. preventScroll рвёт эту связь;
+       на открытие клавиатуры iOS он не влияет. */
     try {
       input?.focus({ preventScroll: true });
     } catch {
@@ -595,28 +592,31 @@ export function Portal() {
     }
     return Boolean(input);
   };
+  const closeSearchPop = () => {
+    document.querySelector(".search-pop")?.classList.remove("is-open");
+    setSearchFabOpen(false);
+    usePortal.getState().setSearchOpen(false);
+  };
   const openSearch = () => {
     const s = usePortal.getState();
     playTick(); // звук + хаптика (движок)
     if (s.productId) dismissProduct();
     if (s.view !== "catalog" && s.view !== "stock") s.setView("catalog");
-    /* Подвесная карточка — только на мобиле (на lg она display:none, там панель
-       поиска в шапке не сворачивается никогда).
-       ТЕХНИКА «ПРЕДСМОНТИРОВАННАЯ КАРТОЧКА» (flushSync запрещён — он рвал
-       AnimatePresence: контент исчезал на кадр, документ схлопывался и iOS
-       сбрасывал скролл в 0): карточка в DOM всегда, скрыта visibility:hidden.
+    /* ТЕХНИКА «ПРЕДСМОНТИРОВАННАЯ КАРТОЧКА» (flushSync запрещён — он рвал
+       AnimatePresence): карточка в DOM всегда, скрыта visibility:hidden.
        Открытие: (1) класс is-open СИНХРОННО — видна в этом же кадре;
-       (2) focus() В ЖЕСТЕ тапа — iOS открывает клавиатуру;
-       (3) setSearchFabOpen — React-состояние для слушателей. */
-    const isDesktop = window.matchMedia?.("(min-width: 1024px)")?.matches ?? false;
-    if (!isDesktop && scrolled) {
-      document.querySelector(".search-pop")?.classList.add("is-open");
-      focusVisibleSearchInput();
-      setSearchFabOpen(true);
-    } else if (!focusVisibleSearchInput()) {
+       (2) focus() В ЖЕСТЕ тапа — iOS открывает клавиатуру. */
+    document.querySelector(".search-pop")?.classList.add("is-open");
+    setSearchFabOpen(true);
+    if (!focusVisibleSearchInput()) {
       // страховка для редких гонок (например, открытие по «/» с другой вью)
       window.setTimeout(focusVisibleSearchInput, 120);
     }
+  };
+  /* Тап по круглому элементу поиска на пилюле: открыть/закрыть (toggle) */
+  const toggleSearch = () => {
+    if (searchFabOpen) closeSearchPop();
+    else openSearch();
   };
 
   useEffect(() => {
@@ -625,27 +625,71 @@ export function Portal() {
     return () => window.removeEventListener("portal:search-open", open);
   });
 
-  // Тап мимо подвесного поиска — закрыть его
+  // Тап мимо подвесного поиска — закрыть (кроме самой карточки и кнопки на пилюле:
+  // у кнопки свой toggle — иначе pointerdown закрыл бы карточку ДО click)
   useEffect(() => {
     if (!searchFabOpen) return;
     const onDown = (e: PointerEvent) => {
       const t = e.target as Element | null;
-      if (t?.closest?.(".search-pop") || t?.closest?.(".search-fab")) return;
-      setSearchFabOpen(false);
-      usePortal.getState().setSearchOpen(false);
+      if (t?.closest?.(".search-pop") || t?.closest?.(".pill-search")) return;
+      closeSearchPop();
     };
     window.addEventListener("pointerdown", onDown);
     return () => window.removeEventListener("pointerdown", onDown);
   }, [searchFabOpen]);
 
-  // Поиск применён (Enter/чип/ткань) → подвесная карточка сворачивается в кружок:
-  // результат виден в каталоге, а applied-чип с «сбросить» живёт в панели шапки
+  /* СВАЙП ВНИЗ закрывает карточку (шаг 3): палец тянет карточку вниз
+     (визуальный след), отпускание при >70px — закрытие. Свайп внутри
+     скроллящегося дропдауна результатов закрытию не мешает. */
+  useEffect(() => {
+    if (!searchFabOpen) return;
+    const pop = popRef.current;
+    if (!pop) return;
+    let startY = 0;
+    let dy = 0;
+    let tracking = false;
+    let inScroller = false;
+    const ts = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const sc = (e.target as Element | null)?.closest?.(".search-dd") as Element | null;
+      inScroller = Boolean(sc && sc.scrollHeight > sc.clientHeight + 4);
+      startY = e.touches[0].clientY;
+      dy = 0;
+      tracking = true;
+    };
+    const tm = (e: TouchEvent) => {
+      if (!tracking || e.touches.length !== 1) return;
+      dy = e.touches[0].clientY - startY;
+      if (inScroller || dy <= 0) return;
+      pop.style.transition = "none";
+      pop.style.transform = `translateY(${Math.min(150, dy * 0.5).toFixed(1)}px)`;
+    };
+    const te = () => {
+      if (!tracking) return;
+      tracking = false;
+      pop.style.transition = "";
+      pop.style.transform = "";
+      if (dy > 70 && !inScroller) closeSearchPop();
+    };
+    pop.addEventListener("touchstart", ts, { passive: true });
+    pop.addEventListener("touchmove", tm, { passive: true });
+    pop.addEventListener("touchend", te, { passive: true });
+    pop.addEventListener("touchcancel", te, { passive: true });
+    return () => {
+      pop.removeEventListener("touchstart", ts);
+      pop.removeEventListener("touchmove", tm);
+      pop.removeEventListener("touchend", te);
+      pop.removeEventListener("touchcancel", te);
+    };
+  }, [searchFabOpen]);
+
+  // Поиск применён (Enter/чип/ткань) → карточка сворачивается в кнопку на пилюле,
+  // а над панелью появляется плавающий чип «Поиск: «X»» с крестиком-сбросом
   const appliedQueryRef = useRef<string | null>(null);
   useEffect(() => {
     if (searchQuery && searchQuery !== appliedQueryRef.current) {
       appliedQueryRef.current = searchQuery;
-      setSearchFabOpen(false);
-      usePortal.getState().setSearchOpen(false);
+      closeSearchPop();
     }
     if (!searchQuery) appliedQueryRef.current = null;
   }, [searchQuery]);
@@ -731,7 +775,7 @@ export function Portal() {
       if (s.viewerOpen || s.filtersOpen || s.searchOpen) return;
       if (searchFabOpen) {
         e.preventDefault();
-        setSearchFabOpen(false);
+        closeSearchPop();
         return;
       }
       if (s.productId) {
@@ -808,6 +852,12 @@ export function Portal() {
                 {label}
               </button>
             ))}
+            {/* Шаг 3: поиск тоже уехал из шапки — кнопка в сайдбаре открывает
+                ту же подвесную карточку (по центру под шапкой) */}
+            <button type="button" onClick={openSearch} className="side-link">
+              <Search size={18} strokeWidth={2.1} />
+              Поиск
+            </button>
           </nav>
         </div>
 
@@ -827,10 +877,11 @@ export function Portal() {
         </div>
       </aside>
 
-      {/* Липкая шапка + панель поиска — мобильные и десктоп (в зоне контента).
-          Наверху: «Назад» + заголовок раздела + тема. При скролле шапка становится
-          ПОЛНОСТЬЮ прозрачной — остаются только плавающие «Назад» (крупная) и
-          кружок поиска слева (search-fab), как просил пользователь. */}
+      {/* Липкая шапка — мобильные и десктоп (в зоне контента).
+          Наверху: «Назад» + заголовок раздела + тема. Поисковой строки сверху НЕТ
+          (шаги 1/3) — поиск переехал в круглый элемент на нижней панели.
+          При скролле шапка становится ПОЛНОСТЬЮ прозрачной — остаётся только
+          плавающая «Назад» (крупная). */}
       <div className={cn("sticky top-0 z-40 lg:ml-[248px]", scrolled && "header-collapsed")}>
         <header className="glass flex items-center gap-2 px-3 pb-2 pt-[max(10px,env(safe-area-inset-top))] sm:px-4">
           <div className="lg:hidden">
@@ -865,20 +916,10 @@ export function Portal() {
               стеклянная капсула видна всегда */}
           <ThemeSwitch mini />
         </header>
-
-        {searchVisible && (
-          <div className="search-collapse glass border-t border-border/60 px-3 sm:px-4">
-            <div>
-              <div className="mx-auto w-full max-w-[860px] pb-2.5 pt-2">
-                <SearchBar />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Контент */}
-      <main className="relative z-10 pb-[calc(108px+env(safe-area-inset-bottom))] lg:ml-[248px] lg:pb-10">
+      <main className="relative z-10 pb-[calc(104px+env(safe-area-inset-bottom))] lg:ml-[248px] lg:pb-10">
         <div className="mx-auto w-full max-w-[1240px] px-4 pt-4 sm:px-6 lg:pt-6">
           <AnimatePresence mode="wait">
             <motion.div
@@ -904,11 +945,12 @@ export function Portal() {
         </div>
       </main>
 
-      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass v3, iOS 26).
+      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass v5, iOS 26).
           Линза-«жидкость» живёт на уровне капсулы: тянется за пальцем, охватывая
           2 блока/ряд (drag-to-select), магнитно увеличивает пункт под пальцем
           и пружиной собирается при отпускании. Нативные switch (.pill-haptic)
           в пунктах дают системную хаптику на iOS при прямом тапе.
+          Справа — круглый элемент ПОИСКА (шаг 3): та же высота, что иконки табов.
           Реакция: листают — стекло растворяется (pill-dim); коснулись —
           плотное активное стекло (pill-active) до тапа мимо. */}
       <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
@@ -923,7 +965,7 @@ export function Portal() {
           onPointerDown={onShellPointerDown}
         >
           {/* Хроматическая кромка v4 («искажение по краям», как на картинке):
-              тонкое тёплое/холодное преломление на самой кромке стекла */}
+              тонкое тёплое/шалфейное преломление на самой кромке стекла */}
           <span className="pill-rim" aria-hidden="true" />
           {/* Линза-«жидкость»: тянется за пальцем (x/width через motion-пружины) */}
           <motion.span
@@ -962,35 +1004,68 @@ export function Portal() {
                     трогаем — без нативного вида iOS не играет хаптику. Атрибут
                     switch передаётся spread'ом: его ещё нет в React-типах. */}
                 <input type="checkbox" {...{ switch: "" }} className="pill-haptic" aria-hidden="true" tabIndex={-1} />
-                <Icon size={24} strokeWidth={2.1} />
+                <Icon size={22} strokeWidth={2.1} />
                 <span className="pill-label">{short}</span>
               </button>
             );
           })}
+          {/* Шаг 3: отдельный круглый элемент ПОИСКА — того же размера, что
+              иконки табов; линза драга его не захватывает (не в itemRefs) */}
+          <span className="pill-sep" aria-hidden="true" />
+          <button
+            type="button"
+            className={cn("pill-search", searchFabOpen && "is-on")}
+            aria-label="Поиск"
+            aria-expanded={searchFabOpen}
+            onClick={toggleSearch}
+          >
+            <input type="checkbox" {...{ switch: "" }} className="pill-haptic" aria-hidden="true" tabIndex={-1} />
+            <Search size={22} strokeWidth={2.1} />
+          </button>
         </div>
       </nav>
 
-      {/* Кружок поиска — вместо свернувшейся панели при скролле (каталог/остатки) */}
-      {searchVisible && scrolled && !searchFabOpen && (
-        <button
-          type="button"
-          aria-label="Открыть поиск"
-          onClick={openSearch}
-          className={cn("search-fab lg:hidden", searchQuery && "has-query")}
-        >
-          <Search size={20} strokeWidth={2.3} />
-        </button>
-      )}
-
-      {/* Подвесной поиск — стеклянная карточка: ПРЕДСМОНТИРОВАНА (скрыта
-          visibility:hidden), открывается из кружка или по «/» при скролле
-          синхронным классом is-open + фокусом в жесте (клавиатура iOS).
-          Листание (>30px) сжимает обратно в кружок. */}
-      {searchVisible && (
-        <div className={cn("search-pop lg:hidden", searchFabOpen && "is-open")}>
-          <SearchBar />
+      {/* Применённый поиск — плавающий чип над панелью (шаг 3):
+          видно активный фильтр + сброс одним тапом */}
+      {searchQuery && !searchFabOpen && (
+        <div className="search-chip" role="status">
+          <Search size={13} strokeWidth={2.4} className="shrink-0 text-[color:var(--brand)]" />
+          <span className="min-w-0 truncate text-[12.5px] font-semibold text-foreground">
+            Поиск: «{searchQuery}»
+          </span>
+          <button
+            type="button"
+            aria-label="Сбросить поиск"
+            onClick={() => {
+              usePortal.getState().applySearch(null);
+            }}
+            className="search-chip-x"
+          >
+            <X size={13} strokeWidth={2.6} />
+          </button>
         </div>
       )}
+
+      {/* Подвесной поиск (шаг 3) — стеклянная карточка НАД панелью (отступ 12мм):
+          ПРЕДСМОНТИРОВАНА (скрыта visibility:hidden), открывается из круглого
+          элемента пилюли или по «/» синхронным классом is-open + фокусом в жесте
+          (клавиатура iOS). Закрытие: крестик справа, свайп вниз, листание.
+          При открытой клавиатуре карточка поднимается над ней (--kb-h). */}
+      <div ref={popRef} className={cn("search-pop", searchFabOpen && "is-open")}>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <SearchBar />
+          </div>
+          <button
+            type="button"
+            aria-label="Закрыть поиск"
+            onClick={closeSearchPop}
+            className="search-pop-close"
+          >
+            <X size={16} strokeWidth={2.4} />
+          </button>
+        </div>
+      </div>
 
       <PhotoViewer />
     </div>
