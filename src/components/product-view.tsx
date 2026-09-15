@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Camera, MapPin, Maximize2 } from "lucide-react";
-import { usePortal, dismissProduct } from "@/lib/store";
+import { Camera, MapPin, Maximize2 } from "lucide-react";
+import { usePortal } from "@/lib/store";
 import { ProductCrumbs } from "@/components/breadcrumbs";
 import type { CatalogItemDto } from "@/lib/portal";
 
@@ -26,16 +26,10 @@ export function ProductView() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Шапка: круглая «Назад» (единая lg-back 44px/иконка 20, как в шапке) + крошки пути + счётчик фото */}
+      {/* АУДИТ v2.6: отдельная круглая «Назад» УДАЛЕНА — та же кнопка уже есть
+         в липкой шапке (на iPhone — слева, на десктопе — справа); раньше
+         на экране товара было ДВЕ видимых стрелки назад */}
       <div className="flex items-center gap-2.5">
-        <button
-          type="button"
-          onClick={dismissProduct}
-          aria-label="Назад"
-          className="lg-back"
-        >
-          <ArrowLeft size={20} strokeWidth={2.3} />
-        </button>
         <div className="min-w-0 flex-1">
           {data ? (
             <ProductCrumbs
@@ -61,21 +55,23 @@ export function ProductView() {
           <div className="skeleton h-96" />
         </div>
       ) : (
-        <div className="grid items-start gap-5 lg:grid-cols-[340px_1fr]">
-          {/* Инфопанель — sticky на десктопе */}
-          <aside className="glass flex flex-col gap-4 rounded-3xl p-5 lg:sticky lg:top-6">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--brand)]">
+        <div className="grid items-start gap-4 lg:grid-cols-[340px_1fr]">
+          {/* Инфопанель — АУДИТ v2.6 («большая карточка — делай строкой, описание
+              лишнее»): компактный блок — заголовок В ОДНУ строку, вариант/
+              ткань/размер одной строкой, описание удалено, крупная стеклянная
+              карточка ужата (p-4, gap-2.5) */}
+          <aside className="glass flex flex-col gap-2.5 rounded-2xl p-4 lg:sticky lg:top-6">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[10.5px] font-bold uppercase tracking-[0.16em] text-[color:var(--brand)]">
                 {data.categoryName}
               </p>
-              <h1 className="font-display mt-1 text-2xl font-bold leading-tight">{data.modelName}</h1>
-              {data.variantName && (
-                <p className="mt-0.5 text-[13.5px] font-semibold text-[color:var(--brand)]">{data.variantName}</p>
-              )}
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                {[data.materialName, data.sizeName].filter(Boolean).join(" · ") || "Материал не указан"}
-              </p>
             </div>
+            <h1 className="font-display truncate text-[17px] font-bold leading-snug lg:text-xl">
+              {data.modelName}
+            </h1>
+            <p className="truncate text-[12.5px] text-muted-foreground">
+              {[data.variantName, data.materialName, data.sizeName].filter(Boolean).join(" · ") || "Материал не указан"}
+            </p>
 
             {data.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -87,13 +83,9 @@ export function ProductView() {
               </div>
             )}
 
-            {data.description && (
-              <p className="text-[13px] leading-relaxed text-muted-foreground">{data.description}</p>
-            )}
-
             <div className="hairline" />
             <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
-              <MapPin size={13} className="text-[color:var(--brand)]" />
+              <MapPin size={13} className="shrink-0 text-[color:var(--brand)]" />
               Наличие уточняйте в разделе «Остатки»
             </p>
           </aside>

@@ -22,7 +22,10 @@ type SearchResp = {
   }>;
 };
 
-/* ── Личные популярные запросы: частые вводы за последние 7 дней (localStorage) ── */
+/* ── Последние запросы (аудит v2.6): только личная история, по свежести, ≤4.
+   «Популярное» (личный топ за 7 дней + глобальные подсказки API) УДАЛЕНО —
+   прямая просьба владельца: «популярное убери, последнее что искали,
+   и то не более 3-4 шт.» ── */
 const LOG_KEY = "skovo-search-log";
 type SearchLog = Record<string, number[]>;
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -52,14 +55,14 @@ function recordQuery(q: string) {
   }
 }
 
-/** Топ частых запросов за 7 дней (по числу, затем по свежести) */
-function popularFromLog(max = 6): string[] {
+/** Последние запросы за 7 дней — по свежести (последнее введённое — первым), ≤ max */
+function recentFromLog(max = 4): string[] {
   try {
     const week = Date.now() - WEEK;
     return Object.entries(loadLog())
-      .map(([q, ts]) => ({ q, n: ts.filter((t) => t >= week).length, last: Math.max(...ts) }))
-      .filter((r) => r.n > 0)
-      .sort((a, b) => b.n - a.n || b.last - a.last)
+      .map(([q, ts]) => ({ q, last: Math.max(...ts) }))
+      .filter((r) => r.last >= week)
+      .sort((a, b) => b.last - a.last)
       .slice(0, max)
       .map((r) => r.q);
   } catch {
@@ -140,9 +143,9 @@ export function SearchBar() {
 
   const hasDropdown = searchOpen;
 
-  // Личные популярные — пересчитывать при каждом открытии дропдауна
+  // Последние запросы — пересчитывать при каждом открытии дропдауна
   const personal = useMemo(
-    () => (searchOpen && !debounced ? popularFromLog(6) : []),
+    () => (searchOpen && !debounced ? recentFromLog(4) : []),
     [searchOpen, debounced]
   );
 
@@ -210,16 +213,13 @@ export function SearchBar() {
           при открытой клавиатуре (kb-open) и на десктопе — ВНИЗ. */}
       {hasDropdown && (
         <div className="search-dd rounded-2xl border border-border bg-[var(--glass-strong)] p-2.5 shadow-2xl shadow-black/25 backdrop-blur-[80px]">
-          {!debounced && (
+          {!debounced && personal.length > 0 && (
             <>
               <p className="px-1.5 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                {personal.length > 0 ? "Популярные за 7 дней" : "Популярные запросы"}
+                Последние запросы
               </p>
               <div className="flex flex-wrap gap-1.5 px-1 pb-1.5">
-                {(personal.length > 0
-                  ? [...personal, ...(data?.popular ?? []).filter((p) => !personal.includes(p))].slice(0, 8)
-                  : (data?.popular ?? ["Локо", "Карина", "Ника", "sky", "угловой", "акция", "160×200"])
-                ).map((p) => (
+                {personal.map((p) => (
                   <button
                     key={p}
                     type="button"

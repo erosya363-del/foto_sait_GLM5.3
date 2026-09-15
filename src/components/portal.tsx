@@ -9,6 +9,7 @@ import {
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { playTick, playStep, vibrateSupported } from "@/lib/tick";
+import { createLiquidGlass } from "@/lib/liquid-glass";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { BootSplash } from "@/components/boot-splash";
 import { SearchBar } from "@/components/search-bar";
@@ -325,40 +326,24 @@ export function Portal() {
     animate(lensW, 0, anim ? SETTLE_SPRING : { duration: 0 });
   };
 
-  /* Капсула тянется от опорного пункта к пальцу — «захват 2 блоков или ряда»:
-     пункт под пальцем поглощается ЦЕЛИКОМ, между пунктами капсула тянется
-     за пальцем с упругим «хвостом» (12px) */
-  const stretchLensTo = (clientX: number) => {
+  /* ФИКС «РАСТЯГИВАНИЯ» (аудит v2.6): линза НЕ тянется за пальцем — она ИДЁТ
+     за ним: ширина линзы = ширина опорного пункта, центр под пальцем,
+     пружина ведёт капсулу плавно, без упругого «хвоста» и захвата 2 блоков */
+  const followLensTo = (clientX: number) => {
     const shell = shellRef.current;
     if (!shell) return;
     const anchor = rectsRef.current.get(anchorRef.current ?? "catalog");
     if (!anchor) return;
     const sw = shell.clientWidth;
     const fx = clientX - shell.getBoundingClientRect().left;
-    const aL = anchor.left;
-    const aR = anchor.left + anchor.width;
-    const cur = dragRef.current.key ? rectsRef.current.get(dragRef.current.key) : null;
-    let left = Math.min(aL, fx);
-    let right = Math.max(aR, fx);
-    if (cur) {
-      left = Math.min(left, cur.left);
-      right = Math.max(right, cur.left + cur.width);
-    } else if (fx > aR) {
-      right = fx + 12;
-    } else if (fx < aL) {
-      left = fx - 12;
-    }
-    left = Math.max(6, left);
-    /* Линза НЕ залезает на круглую кнопку поиска (правее последнего таба) */
-    const lastRect = rectsRef.current.get("admin");
-    if (lastRect && anchorRef.current !== "admin") right = Math.min(right, lastRect.left + lastRect.width);
-    right = Math.min(sw - 6, right);
-    if (right - left < anchor.width) right = left + anchor.width; // минимум — пункт
-    animate(lensX, left, DRAG_SPRING);
-    animate(lensW, right - left, DRAG_SPRING);
+    const w = anchor.width;
+    const x = Math.min(Math.max(fx - w / 2, 6), Math.max(6, sw - 6 - w));
+    animate(lensX, x, DRAG_SPRING);
+    animate(lensW, w, DRAG_SPRING);
   };
 
-  /* Магнитная линза: пункт под пальцем увеличивается и подсвечивается (cyan, как в видео) */
+  /* Магнитная линза: пункт под пальцем увеличивается (нейтральный свет, БЕЗ
+     бирюзы — запрет владельца) */
   const magnifyAt = (clientX: number) => {
     if (reduceMotion.current) return;
     for (const [, el] of itemRefs.current) {
@@ -369,7 +354,7 @@ export function Portal() {
       const label = el.querySelector<HTMLElement>(".pill-label");
       if (icon) icon.style.transform = inf > 0.02 ? `scale(${(1 + 0.34 * inf).toFixed(3)})` : "";
       if (label) label.style.transform = inf > 0.02 ? `translateY(${(-2 * inf).toFixed(1)}px)` : "";
-      el.style.color = inf > 0.45 ? "var(--brand)" : "";
+      el.style.color = inf > 0.45 ? "var(--foreground)" : "";
     }
   };
   const resetMagnify = () => {
@@ -412,7 +397,7 @@ export function Portal() {
     dragRef.current = { on: true, key };
     anchorRef.current = key ?? view;
     setDragKey(key);
-    stretchLensTo(e.clientX);
+    followLensTo(e.clientX);
     magnifyAt(e.clientX);
     /* БЕЗ setPointerCapture: capture ретаргетит click на капсулу — нативный
        switch .pill-haptic не получил бы клик, и iOS 26.5+ не сыграл бы хаптику.
@@ -424,7 +409,7 @@ export function Portal() {
         setDragKey(k);
         playStep(); // тихий tick + лёгкая вибрация на каждом пункте
       }
-      stretchLensTo(ev.clientX);
+      followLensTo(ev.clientX);
       magnifyAt(ev.clientX);
     };
     const onEnd = (ev: PointerEvent) => {
@@ -454,6 +439,38 @@ export function Portal() {
     window.addEventListener("pointerup", onEnd);
     window.addEventListener("pointercancel", onEnd);
   };
+
+  /* ── Liquid Glass (аудит v2.6): настоящее преломление на капсуле ──
+     Chromium: Canvas-карта смещений + feDisplacementMap ×3 с хроматической
+     аберрацией (backdrop-filter: url(#id)); Safari — CSS-fallback без ошибок. */
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const glass = createLiquidGlass(shell, {
+      borderRadius: 999,
+      scale: -110,
+      aberration: [0, 7, 14],
+      blur: 9,
+      saturation: 1.5,
+      band: 14,
+    });
+    return () => glass.destroy();
+  }, []);
+
+  /* Чёлка iPhone (аудит v2.6): meta theme-color всегда в цвет АКТУАЛЬНОЙ темы
+     приложения (не системной) — иначе Safari красит зону статуса серой полосой */
+  useEffect(() => {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (!meta) return;
+    const apply = () => {
+      const light = document.documentElement.classList.contains("light");
+      meta.setAttribute("content", light ? "#f8f5ef" : "#1d1b18");
+    };
+    apply();
+    const obs = new MutationObserver(apply);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
 
   /* ── Шапка/пилюля: реакция на скролл и касание ────────────────────── */
   const [scrolled, setScrolled] = useState(false);
@@ -945,12 +962,12 @@ export function Portal() {
         </div>
       </main>
 
-      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass v5, iOS 26).
-          Линза-«жидкость» живёт на уровне капсулы: тянется за пальцем, охватывая
-          2 блока/ряд (drag-to-select), магнитно увеличивает пункт под пальцем
-          и пружиной собирается при отпускании. Нативные switch (.pill-haptic)
-          в пунктах дают системную хаптику на iOS при прямом тапе.
-          Справа — круглый элемент ПОИСКА (шаг 3): та же высота, что иконки табов.
+      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass v6, iOS 18).
+          Настоящее преломление: Canvas-карта смещений + feDisplacementMap
+          с хроматической аберрацией (Chromium; Safari — чистый blur-fallback).
+          Линза-«жидкость» ИДЁТ за пальцем (без растягивания), магнитно
+          увеличивает пункт под пальцем и пружиной собирается при отпускании.
+          Нативные switch (.pill-haptic) дают системную хаптику на iOS.
           Реакция: листают — стекло растворяется (pill-dim); коснулись —
           плотное активное стекло (pill-active) до тапа мимо. */}
       <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
@@ -1009,9 +1026,9 @@ export function Portal() {
               </button>
             );
           })}
-          {/* Шаг 3: отдельный круглый элемент ПОИСКА — того же размера, что
-              иконки табов; линза драга его не захватывает (не в itemRefs) */}
-          <span className="pill-sep" aria-hidden="true" />
+          {/* Шаг 3 (аудит v2.6): поиск — РЯД ПИЛЮЛИ, без разделителя и без
+              отдельного круга: тот же размер, что табы; линза драга его
+              не захватывает (не в itemRefs) */}
           <button
             type="button"
             className={cn("pill-search", searchFabOpen && "is-on")}

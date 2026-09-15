@@ -91,8 +91,8 @@ await page.mouse.move(b1.x + b1.width / 2, b1.y + b1.height / 2, { steps: 6 });
 await page.waitForTimeout(160);
 const lensMid = await page.locator(".nav-lens").boundingBox();
 ok(
-  "линза ТЯНЕТСЯ от «Каталог» к «Остатки» — захват 2 блоков ещё ДО отпускания",
-  lensMid.x <= b0.x + 8 && lensMid.x + lensMid.width >= b1.x + b1.width - 8 && lensMid.width > b1.width * 1.4,
+  "линза ИДЁТ за пальцем (аудит v2.6): центр под пальцем, ширина = пункт — БЕЗ растягивания",
+  Math.abs(lensMid.x + lensMid.width / 2 - (b1.x + b1.width / 2)) < 26 && Math.abs(lensMid.width - b0.width) < 14,
   JSON.stringify(lensMid)
 );
 const scale1 = await items.nth(1).evaluate((el) => {
@@ -129,7 +129,7 @@ await page.waitForTimeout(450);
 const shell = page.locator(".pill-shell");
 ok("pill-dim включён", await shell.evaluate((el) => el.classList.contains("pill-dim")));
 const dimBg = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
-ok("фон панели сильно прозрачнее при скролле (dim 0.26)", Math.abs(alphaOf(dimBg) - 0.26) < 0.03, dimBg);
+ok("фон панели сильно прозрачнее при скролле (dim 0.14)", Math.abs(alphaOf(dimBg) - 0.14) < 0.03, dimBg);
 /* рамка растворяется transition'ом 0.28s — под нагрузкой 450мс не всегда хватает */
 let borderGone = true;
 try {
@@ -170,7 +170,7 @@ try {
       if (!el) return false;
       const m = getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
       const a = m ? parseFloat(m[1].split(",")[3] ?? "1") : 1;
-      return a >= 0.78;
+      return a >= 0.58;
     },
     { timeout: 2000 }
   );
@@ -178,7 +178,7 @@ try {
   activeSettled = false;
 }
 const activeBg = await shell.evaluate((el) => getComputedStyle(el).backgroundColor);
-ok("активное стекло плотное (0.8)", activeSettled && Math.abs(alphaOf(activeBg) - 0.8) < 0.03, activeBg);
+ok("активное стекло плотное (0.62)", activeSettled && Math.abs(alphaOf(activeBg) - 0.62) < 0.04, activeBg);
 await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
 await page.waitForTimeout(250);
 ok("тап мимо → pill-active снялся", !(await shell.evaluate((el) => el.classList.contains("pill-active"))));
@@ -257,7 +257,8 @@ ok("личный топ-1 «sky» (3 ввода)", chips[0] === "sky", chips.joi
 ok("«магни» в популярных", chips.includes("магни"), chips.join("|"));
 ok("запрос старше 7 дней не показан", !chips.includes("старьё"), chips.join("|"));
 const ddLabel = await page.locator(".search-pop .search-dd p").first().textContent();
-ok("заголовок «Популярные за 7 дней»", /за 7 дней/.test(ddLabel ?? ""), ddLabel ?? "");
+ok("заголовок «Последние запросы» (популярное удалено — аудит v2.6)", /Последние запросы/.test(ddLabel ?? ""), ddLabel ?? "");
+ok("показано не более 4 последних (ограничение владельца)", chips.length <= 4, chips.join("|"));
 await page.fill("input[data-search-input]", "sky");
 await page.keyboard.press("Enter");
 await page.waitForTimeout(500);

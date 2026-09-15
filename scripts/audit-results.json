@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-15T14:31:50.254Z",
+  "startedAt": "2026-09-15T17:19:23.255Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -42,7 +42,7 @@
           {
             "btn": "2",
             "by": "INPUT.pill-haptic",
-            "pos": "342,731",
+            "pos": "342,743",
             "floating": "pill-shell"
           }
         ],
@@ -310,7 +310,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu2rtf2w0002nhw0jyf6kymh\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu2xswuk0005p44xbspy3vem\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
@@ -321,8 +321,8 @@
           "shellH": 64,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 53, 49, 0.78)",
-          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "bg": "rgba(56, 53, 49, 0.62)",
+          "blur": "url(\"#lg-1-yblel3\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -337,8 +337,8 @@
           "shellH": 64,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 53, 49, 0.78)",
-          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "bg": "rgba(56, 53, 49, 0.62)",
+          "blur": "url(\"#lg-1-yblel3\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -353,8 +353,8 @@
           "shellH": 64,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 53, 49, 0.78)",
-          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "bg": "rgba(56, 53, 49, 0.62)",
+          "blur": "url(\"#lg-1-yblel3\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -369,8 +369,8 @@
           "shellH": 64,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 53, 49, 0.78)",
-          "blur": "blur(56px) saturate(2.1) brightness(1.15)",
+          "bg": "rgba(56, 53, 49, 0.62)",
+          "blur": "url(\"#lg-1-yblel3\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",

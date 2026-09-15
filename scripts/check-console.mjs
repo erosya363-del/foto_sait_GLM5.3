@@ -1,0 +1,10 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch();
+const page = await browser.newPage();
+const logs = [];
+page.on("console", (m) => { if (["error", "warning"].includes(m.type())) logs.push(`[${m.type()}] ${m.text().slice(0, 300)}`); });
+page.on("pageerror", (e) => logs.push(`[pageerror] ${String(e).slice(0, 300)}`));
+await page.goto("http://localhost:3000", { waitUntil: "networkidle" });
+await page.waitForTimeout(2500);
+console.log(logs.slice(0, 20).join("\n") || "NO console errors");
+await browser.close();

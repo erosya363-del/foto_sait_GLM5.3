@@ -43,10 +43,12 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0d0e10" },
-    { media: "(prefers-color-scheme: light)", color: "#f4f7f8" },
-  ],
+  /* ЧЁЛКА iPhone (аудит v2.6): ОДИН meta без media — цвет зоны статуса
+     синхронизируется с ТЕМОЙ ПРИЛОЖЕНИЯ (не системной) скриптом ниже и
+     MutationObserver'ом в portal.tsx. Раньше стояли media-пары со старыми
+     цветами (#0d0e10/#f4f7f8) — при светлой теме приложения и тёмной системе
+     Safari рисовал серую полосу под чёлкой (скрин владельца) */
+  themeColor: "#1d1b18",
 };
 
 export default function RootLayout({
@@ -64,6 +66,20 @@ export default function RootLayout({
         <Script id="ios-viewport-nudge" strategy="beforeInteractive">
           {`(function () {
             try {
+              /* ЧЁЛКА (аудит v2.6): цвет статуса = тема приложения ДО первой
+                 отрисовки (next-themes хранит ключ "theme": light/dark/system) */
+              var syncMeta = function () {
+                try {
+                  var t = null;
+                  try { t = localStorage.getItem("theme"); } catch (e) {}
+                  var eff = t === "light" || t === "dark"
+                    ? t
+                    : (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+                  var m = document.querySelector('meta[name="theme-color"]');
+                  if (m) m.setAttribute("content", eff === "light" ? "#f8f5ef" : "#1d1b18");
+                } catch (e) {}
+              };
+              syncMeta();
               var ua = navigator.userAgent || "";
               var iOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
               if (!iOS) return;
@@ -75,6 +91,16 @@ export default function RootLayout({
                   void html.offsetHeight;
                   html.style.minHeight = prev;
                   window.dispatchEvent(new Event("resize"));
+                  /* ФИКС ПОЛОСЫ, повторно (аудит v2.6): форс-репейнт стекла пилюли —
+                     iOS standalone иногда отдаёт backdrop-filter-слой с неверной
+                     геометрией до первого касания; мгновенный compositor-толчок
+                     перерисовывает капсулу на всю ширину */
+                  var pill = document.querySelector(".pill-shell");
+                  if (pill) {
+                    pill.style.transform = "translateZ(0)";
+                    setTimeout(function () { pill.style.transform = ""; }, 80);
+                  }
+                  syncMeta();
                 } catch (e) {}
               };
               [120, 420, 900, 1500, 2200, 3000].forEach(function (ms) { setTimeout(nudge, ms); });

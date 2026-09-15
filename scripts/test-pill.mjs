@@ -70,7 +70,8 @@ const shellStyle = await shell.evaluate((el) => {
   };
 });
 ok("капсула fully-rounded (999px)", shellStyle.radius === "999px", shellStyle.radius);
-ok("стекло v4: blur 56px + saturate/brightness (подстройка под фон)", /56px/.test(shellStyle.blur) && /saturate/.test(shellStyle.blur) && /brightness/.test(shellStyle.blur), shellStyle.blur);
+ok("стекло v6: Liquid Glass url(#lg…) в Chromium ИЛИ иней blur 18px (Safari-фолбэк)", /url\("#lg-/.test(shellStyle.blur) || (/18px/.test(shellStyle.blur) && /saturate/.test(shellStyle.blur) && /brightness/.test(shellStyle.blur)), shellStyle.blur);
+ok("Liquid Glass: SVG-фильтр линзы в DOM (преломление + аберрация)", (await page.locator("svg filter[id^='lg-']").count()) >= 1);
 ok("переливание — блик-анимация на стекле (::after)", shellStyle.sheenAnim === "pill-sheen", shellStyle.sheenAnim);
 ok("линза на уровне капсулы (position absolute)", (await page.locator(".pill-shell > .nav-lens").count()) === 1);
 
@@ -199,8 +200,9 @@ const searchBtn = page.locator(".pill-search");
 ok("круглый элемент поиска есть на панели", await searchBtn.isVisible());
 const sBtnBox = await searchBtn.boundingBox();
 const lastItemBox = await items.nth(3).boundingBox();
-ok("поиск СПРАВА от «Админ» (за разделителем)", sBtnBox.x > lastItemBox.x + lastItemBox.width - 2, JSON.stringify({ sBtnBox, lastItemBox }));
-ok("размер круглого поиска 48px (=иконки табов)", Math.abs(sBtnBox.width - 48) < 2 && Math.abs(sBtnBox.height - 48) < 2, `w=${sBtnBox.width} h=${sBtnBox.height}`);
+ok("поиск СПРАВА от «Админ» (ряд пилюли, без разделителя)", sBtnBox.x > lastItemBox.x + lastItemBox.width - 2, JSON.stringify({ sBtnBox, lastItemBox }));
+ok("разделитель .pill-sep удалён (поиск — часть пилюли)", (await page.locator(".pill-sep").count()) === 0);
+ok("размер поиска 54px (весь ряд, как табы)", Math.abs(sBtnBox.width - 54) < 2 && Math.abs(sBtnBox.height - 54) < 2, `w=${sBtnBox.width} h=${sBtnBox.height}`);
 /* ВАЖНО: НЕ locator.click() — fixed-элемент; жмём из JS, как настоящий тап */
 await page.evaluate(() => document.querySelector(".pill-search")?.click());
 await page.waitForTimeout(450);
