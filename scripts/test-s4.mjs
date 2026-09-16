@@ -61,7 +61,7 @@ console.log("── 4. Экран «Все ткани» ──");
 await fabricsBtn.click();
 await page.waitForTimeout(900);
 const title = await page.locator("header span").first().textContent();
-ok("заголовок фиксированный «Askona Каталог» (Шаг 6)", title?.trim() === "Askona Каталог", `(got «${title}»)`);
+ok("заголовок фиксированный «Каталог» (п.8 ТЗ)", title?.trim() === "Каталог", `(got «${title}»)`);
 ok("крошка «Все ткани» на месте", (await page.locator('[role="navigation"]:has-text("Все ткани")').count()) > 0);
 const fabricCards = page.locator("main button:has(img)");
 ok("карточки тканей есть", (await fabricCards.count()) > 0, `(${await fabricCards.count()})`);
@@ -81,7 +81,7 @@ if (!fabricName) {
   await page.locator(`main button:has-text("${fabricName}")`).first().click();
   await page.waitForTimeout(900);
 const title2 = await page.locator("header span").first().textContent();
-ok("заголовок остаётся «Askona Каталог» (Шаг 6)", title2?.trim() === "Askona Каталог", `(got «${title2}»)`);
+ok("заголовок остаётся «Каталог» (п.8 ТЗ)", title2?.trim() === "Каталог", `(got «${title2}»)`);
 ok(`крошка-ткань показывает имя (${fabricName})`, (await page.locator(`[role="navigation"]:has-text("${fabricName}")`).count()) > 0);
 ok("крошка «Все ткани» тапабельна", await page.locator('button:has-text("Все ткани")').first().isVisible());
 ok("варианты ткани показаны", (await page.locator("main button:has(img)").count()) > 0);

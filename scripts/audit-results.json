@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-15T18:24:44.721Z",
+  "startedAt": "2026-09-16T17:09:06.423Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -13,7 +13,7 @@
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 34
+        "btnCount": 29
       },
       "stock": {
         "overflowX": 0,
@@ -37,7 +37,7 @@
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 59
+        "btnCount": 56
       },
       "upload": {
         "overflowX": 0,
@@ -49,7 +49,7 @@
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 28
+        "btnCount": 25
       },
       "admin": {
         "overflowX": 0,
@@ -57,26 +57,55 @@
         "small": [
           "Как в системе (28×28)",
           "Светлая (28×28)",
-          "Тёмная (28×28)"
+          "Тёмная (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)"
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 62
+        "btnCount": 83
       }
     },
     "viewports": {
       "320x568": {
         "catalog": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "360x640": {
@@ -84,13 +113,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "375x667": {
@@ -98,13 +127,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "390x760": {
@@ -112,13 +141,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "393x852": {
@@ -126,13 +155,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "412x915": {
@@ -140,13 +169,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "430x932": {
@@ -154,13 +183,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "768x1024": {
@@ -168,13 +197,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "820x1180": {
@@ -182,13 +211,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "1024x1366": {
@@ -196,13 +225,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "1280x800": {
@@ -210,13 +239,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "1366x768": {
@@ -224,13 +253,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "1440x900": {
@@ -238,13 +267,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "1920x1080": {
@@ -252,13 +281,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "852x393": {
@@ -266,13 +295,13 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       },
       "932x430": {
@@ -280,19 +309,19 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 34
+          "btns": 29
         },
         "stock": {
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 62
+          "btns": 59
         }
       }
     },
     "back": {},
     "offline": {
-      "bodyLen": 437,
+      "bodyLen": 449,
       "hasSplash": true,
       "title": "Склад мебели · Askona"
     },
@@ -300,7 +329,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu304y840018p4c60bnkqk1c\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu4cvjb90002tmwb7879fdmh\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
@@ -312,7 +341,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-dilnp9\")",
+          "blur": "url(\"#lg-1-n4chz9\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -328,7 +357,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-dilnp9\")",
+          "blur": "url(\"#lg-1-n4chz9\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -344,7 +373,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-dilnp9\")",
+          "blur": "url(\"#lg-1-n4chz9\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -360,7 +389,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-dilnp9\")",
+          "blur": "url(\"#lg-1-n4chz9\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",

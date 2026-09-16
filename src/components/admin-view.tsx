@@ -28,10 +28,12 @@ import {
 
 type Entity = "category" | "model" | "material" | "size" | "tag";
 
+/* П.3 ТЗ: в Справочниках — ТОЛЬКО системные параметры (используются в
+   нескольких местах). «Модели» и «Материалы» УДАЛЕНЫ из списка: это дубли
+   разделов «Товары» и «Ткани» (модели создаются в мастере товара, ткани —
+   в разделе «Ткани»; один источник данных на каждую сущность) */
 const TABS: Array<{ key: Entity; label: string }> = [
   { key: "category", label: "Категории" },
-  { key: "model", label: "Модели" },
-  { key: "material", label: "Материалы" },
   { key: "size", label: "Размеры" },
   { key: "tag", label: "Признаки" },
 ];
@@ -151,10 +153,8 @@ function Row({
 
 function DictManager({
   entity,
-  withCategory,
 }: {
   entity: Entity;
-  withCategory?: boolean;
 }) {
   const qc = useQueryClient();
   const { data: d } = useQuery<Dictionaries>({
@@ -166,21 +166,15 @@ function DictManager({
     },
   });
   const [name, setName] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [materialType, setMaterialType] = useState("Ткань");
   const [pending, setPending] = useState<string | null>(null); // подтверждение создания
   const [deleting, setDeleting] = useState<null | { id: string; name: string }>(null);
 
   const rows =
     entity === "category"
       ? (d?.categories ?? []).map((c) => ({ id: c.id, name: c.name, sub: undefined as string | undefined }))
-      : entity === "model"
-        ? (d?.models ?? []).map((m) => ({ id: m.id, name: m.name, sub: m.categoryName }))
-        : entity === "material"
-          ? (d?.materials ?? []).map((m) => ({ id: m.id, name: m.name, sub: m.type }))
-          : entity === "size"
-            ? (d?.sizes ?? []).map((s) => ({ id: s.id, name: s.name, sub: undefined }))
-            : (d?.tags ?? []).map((t) => ({ id: t.id, name: t.name, sub: "общий" }));
+      : entity === "size"
+        ? (d?.sizes ?? []).map((s) => ({ id: s.id, name: s.name, sub: undefined }))
+        : (d?.tags ?? []).map((t) => ({ id: t.id, name: t.name, sub: "общий" }));
 
   async function create() {
     if (!name.trim()) return toast.error("Введите название");
@@ -192,7 +186,7 @@ function DictManager({
     const n = pending;
     if (!n) return;
     try {
-      await api({ entity, action: "create", name: n, categoryId, type: materialType });
+      await api({ entity, action: "create", name: n });
       toast.success(`«${n}» создано`);
       setName("");
       qc.invalidateQueries({ queryKey: ["dictionaries"] });
@@ -229,23 +223,6 @@ function DictManager({
   return (
     <div className="flex flex-col gap-3">
       <div className="glass flex flex-col gap-2 rounded-2xl p-3 sm:flex-row sm:items-end">
-        {withCategory && (
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="field cursor-pointer sm:w-44">
-            <option value="">Категория *</option>
-            {d?.categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        )}
-        {entity === "material" && (
-          <select value={materialType} onChange={(e) => setMaterialType(e.target.value)} className="field cursor-pointer sm:w-40">
-            {["Ткань", "Обивка", "ЛДСП", "Дерево", "Металл", "Другое"].map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-        )}
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -351,7 +328,7 @@ function DictionariesSection() {
           </button>
         ))}
       </div>
-      <DictManager key={entity} entity={entity} withCategory={entity === "model"} />
+      <DictManager key={entity} entity={entity} />
     </div>
   );
 }
@@ -365,7 +342,7 @@ export function AdminView() {
             Админ<span className="gradient-text">-панель</span>
           </h1>
           <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Товары, справочники и фото: создание, переименование, удаление с корзиной
+            Товары · Ткани · Системные справочники · Фото — по одной точке управления на каждую сущность
           </p>
         </div>
       </div>

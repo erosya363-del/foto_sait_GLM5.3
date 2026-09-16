@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { motion, AnimatePresence, animate, useMotionValue } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck, X } from "lucide-react";
 import {
   usePortal, snapshot, dismissProduct, isPushSuppressed,
-  type View, type Warehouse, type PortalSnapshot,
+  type View, type PortalSnapshot,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { playTick, playStep, vibrateSupported } from "@/lib/tick";
@@ -27,13 +27,11 @@ const NAV: Array<{ key: View; label: string; short: string; Icon: typeof Boxes }
   { key: "admin", label: "Админ", short: "Админ", Icon: ShieldCheck },
 ];
 
-/* «Жидкий» глитч-рябь (feTurbulence + feDisplacementMap) — только Chromium;
-   в остальных браузерах — плавный сквош линзы без фильтра. */
-const IS_CHROMIUM =
-  typeof navigator !== "undefined" &&
-  /Chrom(e|ium)|Edg\/|OPR\/|SamsungBrowser/.test(navigator.userAgent);
+/* «Жидкий» глитч-рябь (feTurbulence + feDisplacementMap) — УДАЛЕНА вместе с линзой (п.5 ТЗ:
+   панель должна быть максимально стабильной) */
 
-const WAREHOUSES: Warehouse[] = ["Обухово", "Владимир"];
+/* Склад выбран по умолчанию в store (API не тронут); переключатель склада
+   и «склад онлайн» из UI УДАЛЕНЫ — прямая просьба владельца (п.7 ТЗ) */
 
 /** Видим ли элемент — для выбора ПРАВИЛЬного поля поиска.
     НЕ offsetParent (у position:fixed он всегда null — а .search-pop fixed):
@@ -49,38 +47,16 @@ function isShown(el: Element | null): el is Element {
   return st.display !== "none" && st.visibility !== "hidden";
 }
 
-/** Селектор склада — фиксированная ширина, чтобы шапка не прыгала при смене */
-function WarehouseSelect({ className }: { className?: string }) {
-  const warehouse = usePortal((s) => s.warehouse);
-  const setWarehouse = usePortal((s) => s.setWarehouse);
-  return (
-    <select
-      value={warehouse}
-      onChange={(e) => setWarehouse(e.target.value as Warehouse)}
-      aria-label="Склад"
-      className={cn(
-        "cursor-pointer appearance-none rounded-full border border-border bg-secondary/80 px-2.5 py-1 text-left font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_1px_0_var(--glass-spec)] backdrop-blur-md outline-none transition-colors hover:border-[var(--border-strong)] hover:text-foreground active:scale-95",
-        className
-      )}
-    >
-      {WAREHOUSES.map((w) => (
-        <option key={w} value={w}>
-          {w}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-/** Заголовок текущего экрана — только раздел, ничего лишнего (просьба пользователя) */
+/** Заголовок текущего экрана — ТОЛЬКО название вкладки (п.8 ТЗ: никаких
+    «Обухов (склад)»/«Склад онлайн»/приставок — просто Каталог/Остатки/…) */
 function useHeaderTitle() {
   const view = usePortal((s) => s.view);
   const productId = usePortal((s) => s.productId);
-  if (productId) return "Фото товара";
-  if (view === "stock") return "Askona Остатки";
-  if (view === "upload") return "Askona Загрузка фото";
-  if (view === "admin") return "Askona Админ";
-  return "Askona Каталог";
+  if (productId) return "Каталог";
+  if (view === "stock") return "Остатки";
+  if (view === "upload") return "Загрузка";
+  if (view === "admin") return "Админ";
+  return "Каталог";
 }
 
 /**
@@ -277,168 +253,13 @@ export function Portal() {
   const title = useHeaderTitle();
   useWowEffects();
 
-  /* ── Пилюля: Liquid Glass v3 — «жидкая» линза, как в iOS 26 ──────────────
-     Линза живёт НА УРОВНЕ КАПСУЛЫ и ТЯНЕТСЯ от опорного пункта к пальцу,
-     охватывая 2 блока/ряд (растягивание, как в видео), затем пружиной
-     собирается в пункт. Пункт под пальцем магнитно увеличивается и
-     подсвечивается фирменным цветом (эффект «магнитной линзы»).
+  /* ── Пилюля (п.5 ТЗ): БЕЗ плавающей линзы и drag-механики ──────────────
+     Панель максимально стабильная: иконки не двигаются, геометрия капсулы
+     неизменна при смене вкладок, активный пункт подсвечивается СТАТИЧНЫМ
+     стеклом (.pill-item.is-on — цвет/прозрачность, без перемещений).
      Хаптика: нативный switch (.pill-haptic) в каждом пункте играет системный
      тик на iOS при прямом тапе; Android вибрирует через navigator.vibrate. */
-  const itemRefs = useRef(new Map<string, HTMLButtonElement>());
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const rectsRef = useRef(new Map<string, { left: number; width: number }>());
-  const anchorRef = useRef<string | null>(null);
-  const lensX = useMotionValue(0);
-  const lensW = useMotionValue(0);
-  const dragRef = useRef<{ on: boolean; key: string | null }>({ on: false, key: null });
-  const suppressClickRef = useRef(false);
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  const reduceMotion = useRef(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (!mq) return;
-    const apply = () => {
-      reduceMotion.current = mq.matches;
-    };
-    apply();
-    mq.addEventListener?.("change", apply);
-    return () => mq.removeEventListener?.("change", apply);
-  }, []);
-
-  const DRAG_SPRING = { type: "spring", stiffness: 620, damping: 48 } as const;
-  const SETTLE_SPRING = { type: "spring", stiffness: 470, damping: 34 } as const;
-
-  const measurePill = () => {
-    const m = new Map<string, { left: number; width: number }>();
-    for (const [key, el] of itemRefs.current) m.set(key, { left: el.offsetLeft, width: el.offsetWidth });
-    rectsRef.current = m;
-  };
-
-  const placeLens = (key: string, anim = true) => {
-    const r = rectsRef.current.get(key);
-    if (!r) return;
-    animate(lensX, r.left, anim ? SETTLE_SPRING : { duration: 0 });
-    animate(lensW, r.width, anim ? SETTLE_SPRING : { duration: 0 });
-  };
-
-  const collapseLens = (anim = true) => {
-    animate(lensW, 0, anim ? SETTLE_SPRING : { duration: 0 });
-  };
-
-  /* ФИКС «РАСТЯГИВАНИЯ» (аудит v2.6): линза НЕ тянется за пальцем — она ИДЁТ
-     за ним: ширина линзы = ширина опорного пункта, центр под пальцем,
-     пружина ведёт капсулу плавно, без упругого «хвоста» и захвата 2 блоков */
-  const followLensTo = (clientX: number) => {
-    const shell = shellRef.current;
-    if (!shell) return;
-    const anchor = rectsRef.current.get(anchorRef.current ?? "catalog");
-    if (!anchor) return;
-    const sw = shell.clientWidth;
-    const fx = clientX - shell.getBoundingClientRect().left;
-    const w = anchor.width;
-    const x = Math.min(Math.max(fx - w / 2, 6), Math.max(6, sw - 6 - w));
-    animate(lensX, x, DRAG_SPRING);
-    animate(lensW, w, DRAG_SPRING);
-  };
-
-  /* Магнитная линза: пункт под пальцем увеличивается (нейтральный свет, БЕЗ
-     бирюзы — запрет владельца) */
-  const magnifyAt = (clientX: number) => {
-    if (reduceMotion.current) return;
-    for (const [, el] of itemRefs.current) {
-      const r = el.getBoundingClientRect();
-      const d = Math.abs(clientX - (r.left + r.width / 2));
-      const inf = Math.max(0, 1 - d / 90);
-      const icon = el.querySelector("svg");
-      const label = el.querySelector<HTMLElement>(".pill-label");
-      if (icon) icon.style.transform = inf > 0.02 ? `scale(${(1 + 0.34 * inf).toFixed(3)})` : "";
-      if (label) label.style.transform = inf > 0.02 ? `translateY(${(-2 * inf).toFixed(1)}px)` : "";
-      el.style.color = inf > 0.45 ? "var(--foreground)" : "";
-    }
-  };
-  const resetMagnify = () => {
-    for (const [, el] of itemRefs.current) {
-      const icon = el.querySelector("svg");
-      const label = el.querySelector<HTMLElement>(".pill-label");
-      if (icon) icon.style.transform = "";
-      if (label) label.style.transform = "";
-      el.style.color = "";
-    }
-  };
-
-  const pillActivate = (key: string) => {
-    if (key === "catalog") {
-      goCatalog(itemRefs.current.get("catalog") ?? null, true);
-    } else {
-      usePortal.getState().setView(key as View);
-      // iOS: системную хаптику уже сыграл .pill-haptic под пальцем — не дублируем
-      playTick("tap", { hapticOn: vibrateSupported() });
-    }
-  };
-
-  /** Пункт пилюли под точкой (палец может чуть съезжать — допуск ±12px) */
-  const keyAtPoint = (x: number, y: number): string | null => {
-    for (const [key, el] of itemRefs.current) {
-      const r = el.getBoundingClientRect();
-      if (x >= r.left && x <= r.right && y >= r.top - 12 && y <= r.bottom + 12) return key;
-    }
-    return null;
-  };
-
-  const onShellPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    /* Guard: синтетический pointerdown (тесты/код) может прийти без координат —
-       вне капсулы drag не начинаем, чтобы не растянуть линзу фантомно */
-    const shellBox = e.currentTarget.getBoundingClientRect();
-    if (e.clientX === 0 && e.clientY === 0) return;
-    if (e.clientX < shellBox.left - 1 || e.clientX > shellBox.right + 1 || e.clientY < shellBox.top - 1 || e.clientY > shellBox.bottom + 1) return;
-    const key = keyAtPoint(e.clientX, e.clientY);
-    dragRef.current = { on: true, key };
-    anchorRef.current = key ?? view;
-    setDragKey(key);
-    followLensTo(e.clientX);
-    magnifyAt(e.clientX);
-    /* БЕЗ setPointerCapture: capture ретаргетит click на капсулу — нативный
-       switch .pill-haptic не получил бы клик, и iOS 26.5+ не сыграл бы хаптику.
-       Слушатели на window ведут палец даже за пределами пилюли. */
-    const onMove = (ev: PointerEvent) => {
-      const k = keyAtPoint(ev.clientX, ev.clientY);
-      if (k && k !== dragRef.current.key) {
-        dragRef.current.key = k;
-        setDragKey(k);
-        playStep(); // тихий tick + лёгкая вибрация на каждом пункте
-      }
-      followLensTo(ev.clientX);
-      magnifyAt(ev.clientX);
-    };
-    const onEnd = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onEnd);
-      window.removeEventListener("pointercancel", onEnd);
-      if (!dragRef.current.on) return;
-      dragRef.current.on = false;
-      anchorRef.current = null;
-      const k = keyAtPoint(ev.clientX, ev.clientY) ?? dragRef.current.key;
-      setDragKey(null);
-      resetMagnify();
-      if (!k) {
-        placeLens(view); // палец ушёл с пилюли — линза возвращается к активному
-        return;
-      }
-      // активация здесь: синтетический click подавляем (сработал бы на старом пункте)
-      suppressClickRef.current = true;
-      window.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 500);
-      pillActivate(k);
-      // страховка: если view не изменился (повторный тап) — линза всё равно собирается
-      placeLens(k);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onEnd);
-    window.addEventListener("pointercancel", onEnd);
-  };
 
   /* ── Liquid Glass (аудит v2.6): настоящее преломление на капсуле ──
      Chromium: Canvas-карта смещений + feDisplacementMap ×3 с хроматической
@@ -478,9 +299,6 @@ export function Portal() {
   /* Подвесной поиск (шаг 3): открыт из круглой кнопки на пилюле */
   const [searchFabOpen, setSearchFabOpen] = useState(false);
   const popRef = useRef<HTMLDivElement | null>(null);
-  /* «Жидкий» переезд линзы — 480 мс после смены активного пункта */
-  const [liquid, setLiquid] = useState(false);
-
   useEffect(() => {
     usePortal.getState().restore();
     window.history.replaceState(snapshot(), "");
@@ -520,65 +338,6 @@ export function Portal() {
     return () => document.removeEventListener("pointerdown", onDown);
   }, []);
 
-  // Жидкий эффект: запуск на смену активного пункта пилюли + переезд/схлопывание линзы
-  const activeKey = productId ? `product:${productId}` : view;
-  const prevActiveKey = useRef(activeKey);
-  useEffect(() => {
-    if (prevActiveKey.current === activeKey) return;
-    prevActiveKey.current = activeKey;
-    setLiquid(true);
-    const t = window.setTimeout(() => setLiquid(false), 500);
-    if (!dragRef.current.on) {
-      // открыт товар — линза жидко схлопывается; вернулись в раздел — перетекает на пункт
-      if (productId) collapseLens(true);
-      else placeLens(view, true);
-    }
-    return () => window.clearTimeout(t);
-  }, [activeKey, productId, view]);
-
-  // Геометрия пилюли: первичное размещение линзы (без анимации) + повороты/ресайз
-  const viewRef = useRef(view);
-  const productIdRef = useRef(productId);
-  viewRef.current = view;
-  productIdRef.current = productId;
-  const syncLensInstant = () => {
-    measurePill();
-    if (productIdRef.current) collapseLens(false);
-    else placeLens(viewRef.current, false);
-  };
-  useLayoutEffect(() => {
-    syncLensInstant();
-    window.addEventListener("resize", syncLensInstant);
-    return () => window.removeEventListener("resize", syncLensInstant);
-  }, []);
-
-  // rAF-анимация SVG-фильтра (feTurbulence/feDisplacementMap) за 480 мс — только Chromium
-  const turbRef = useRef<SVGFETurbulenceElement>(null);
-  const dispRef = useRef<SVGFEDisplacementMapElement>(null);
-  useEffect(() => {
-    if (!liquid || !IS_CHROMIUM) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    const disp = dispRef.current;
-    const turb = turbRef.current;
-    if (!disp || !turb) return;
-    const start = performance.now();
-    const DUR = 480;
-    let raf = 0;
-    const frame = (now: number) => {
-      const p = Math.min(1, (now - start) / DUR);
-      const k = (1 - p) * (1 - p); // затухание 1→0
-      disp.setAttribute("scale", (17 * k).toFixed(2));
-      turb.setAttribute(
-        "baseFrequency",
-        `${(0.012 + 0.05 * k).toFixed(4)} ${(0.09 + 0.14 * k).toFixed(4)}`
-      );
-      if (p < 1) raf = requestAnimationFrame(frame);
-      else disp.setAttribute("scale", "0");
-    };
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
-  }, [liquid]);
-
   /* ── Поиск (шаг 3): круглый элемент на пилюле + подвесная карточка над ней ──
    Панель поиска сверху УДАЛЕНА на всех экранах → в DOM теперь ровно ОДИН
    input[data-search-input] (внутри .search-pop) — дубли полей невозможны.
@@ -614,19 +373,21 @@ export function Portal() {
     setSearchFabOpen(false);
     usePortal.getState().setSearchOpen(false);
   };
-  const openSearch = () => {
+  /* П.9 ТЗ: тап по кнопке поиска НЕ ставит фокус — клавиатура не вскакивает,
+     viewport не прыгает. Пользователь сам тапает по полю → нативный focus →
+     клавиатура. Фокус остаётся ТОЛЬКО у программного открытия по «/» (десктоп). */
+  const openSearch = (focusInput = false) => {
     const s = usePortal.getState();
     playTick(); // звук + хаптика (движок)
     if (s.productId) dismissProduct();
     if (s.view !== "catalog" && s.view !== "stock") s.setView("catalog");
     /* ТЕХНИКА «ПРЕДСМОНТИРОВАННАЯ КАРТОЧКА» (flushSync запрещён — он рвал
        AnimatePresence): карточка в DOM всегда, скрыта visibility:hidden.
-       Открытие: (1) класс is-open СИНХРОННО — видна в этом же кадре;
-       (2) focus() В ЖЕСТЕ тапа — iOS открывает клавиатуру. */
+       Открытие: класс is-open СИНХРОННО — видна в этом же кадре. */
     document.querySelector(".search-pop")?.classList.add("is-open");
     setSearchFabOpen(true);
-    if (!focusVisibleSearchInput()) {
-      // страховка для редких гонок (например, открытие по «/» с другой вью)
+    if (focusInput && !focusVisibleSearchInput()) {
+      // страховка для программного открытия («/») при редких гонках
       window.setTimeout(focusVisibleSearchInput, 120);
     }
   };
@@ -637,7 +398,7 @@ export function Portal() {
   };
 
   useEffect(() => {
-    const open = () => openSearch();
+    const open = () => openSearch(true); /* «/» — сразу к вводу (десктоп) */
     window.addEventListener("portal:search-open", open);
     return () => window.removeEventListener("portal:search-open", open);
   });
@@ -816,16 +577,6 @@ export function Portal() {
         <span className="fx-skirt" />
       </div>
 
-      {/* SVG-фильтр жидкой ряби для пилюли (анимируется по rAF, только Chromium) */}
-      <svg aria-hidden focusable="false" width="0" height="0" style={{ position: "absolute", pointerEvents: "none" }}>
-        <defs>
-          <filter id="nav-liquid" x="-20%" y="-60%" width="140%" height="220%" colorInterpolationFilters="sRGB">
-            <feTurbulence ref={turbRef} type="fractalNoise" baseFrequency="0.012 0.09" numOctaves={2} seed={7} result="noise" />
-            <feDisplacementMap ref={dispRef} in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
-
       {/* Плёночная фактура поверх контента (не перехватывает события) */}
       <div className="fx-vignette" aria-hidden />
       <div className="fx-grain" aria-hidden />
@@ -871,7 +622,7 @@ export function Portal() {
             ))}
             {/* Шаг 3: поиск тоже уехал из шапки — кнопка в сайдбаре открывает
                 ту же подвесную карточку (по центру под шапкой) */}
-            <button type="button" onClick={openSearch} className="side-link">
+            <button type="button" onClick={() => openSearch()} className="side-link">
               <Search size={18} strokeWidth={2.1} />
               Поиск
             </button>
@@ -879,7 +630,6 @@ export function Portal() {
         </div>
 
         <div className="flex flex-col gap-4">
-          <LiveStatus />
           <div className="flex items-center justify-between rounded-2xl border border-border bg-secondary px-3 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Тема
@@ -904,26 +654,12 @@ export function Portal() {
           <div className="lg:hidden">
             <BackButton />
           </div>
-          <button
-            type="button"
-            onClick={() => goCatalog(usePortal.getState().productId != null ? null : undefined)}
-            aria-label="На главную — Каталог фото"
-            className="header-fade hidden shrink-0 lg:block"
-          >
-            <img
-              src="/logo-askona.png"
-              alt="Askona"
-              className="h-6 w-auto max-w-[64px] object-contain sm:h-7 sm:max-w-[80px]"
-              draggable={false}
-            />
-          </button>
+          {/* П.6 ТЗ: второй логотип Askona в шапке УДАЛЁН — один основной
+              остался в сайдбаре. П.7: селектор «Обухово» из шапки убран. */}
           <div className="header-fade flex min-w-0 flex-1 flex-col items-start lg:flex-none">
             <span className="max-w-[64vw] truncate font-display text-[13px] font-bold leading-none sm:text-[14px] lg:max-w-[46vw]" title={title}>
               {title}
             </span>
-            <div className="mt-1 hidden lg:block">
-              <WarehouseSelect className="w-[102px] text-[9px]" />
-            </div>
           </div>
           <span className="min-w-2 flex-1 lg:block" aria-hidden />
           <div className="hidden lg:block">
@@ -963,11 +699,9 @@ export function Portal() {
       </main>
 
       {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass v6, iOS 18).
-          Настоящее преломление: Canvas-карта смещений + feDisplacementMap
-          с хроматической аберрацией (Chromium; Safari — чистый blur-fallback).
-          Линза-«жидкость» ИДЁТ за пальцем (без растягивания), магнитно
-          увеличивает пункт под пальцем и пружиной собирается при отпускании.
-          Нативные switch (.pill-haptic) дают системную хаптику на iOS.
+          П.5 ТЗ: никаких движущихся элементов — линза удалена; активный
+          пункт = статичная стеклянная подложка (.is-on), геометрия панели
+          неизменна. Нативные switch (.pill-haptic) дают хаптику на iOS.
           Реакция: листают — стекло растворяется (pill-dim); коснулись —
           плотное активное стекло (pill-active) до тапа мимо. */}
       <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
@@ -977,34 +711,20 @@ export function Portal() {
             "pill-shell",
             scrolled && !pillTouched && "pill-dim",
             pillTouched && "pill-active",
-            liquid && IS_CHROMIUM && "is-liquid"
           )}
-          onPointerDown={onShellPointerDown}
         >
           {/* Хроматическая кромка v4 («искажение по краям», как на картинке):
               тонкое тёплое/шалфейное преломление на самой кромке стекла */}
           <span className="pill-rim" aria-hidden="true" />
-          {/* Линза-«жидкость»: тянется за пальцем (x/width через motion-пружины) */}
-          <motion.span
-            className={cn("nav-lens", dragKey && "is-drag", liquid && "is-squash")}
-            style={{ x: lensX, width: lensW }}
-            aria-hidden="true"
-          >
-            <span className="nav-lens-core" />
-          </motion.span>
+          {/* П.5 ТЗ: линза-«жидкость» УДАЛЕНА — активный пункт подсвечивает
+              статичное стекло .pill-item.is-on, ничего не перемещается */}
           {NAV.map(({ key, short, Icon }) => {
             const on = view === key && !productId;
-            const drag = dragKey === key && !on;
             return (
               <button
                 key={key}
                 type="button"
-                ref={(el) => {
-                  if (el) itemRefs.current.set(key, el);
-                  else itemRefs.current.delete(key);
-                }}
                 onClick={(e) => {
-                  if (suppressClickRef.current) return; // активация уже сделана в pointerup
                   if (key === "catalog") goCatalog(e.currentTarget, true);
                   else {
                     usePortal.getState().setView(key);
@@ -1012,7 +732,7 @@ export function Portal() {
                     playTick("tap", { hapticOn: vibrateSupported() });
                   }
                 }}
-                className={cn("pill-item", on && "is-on", drag && "is-drag")}
+                className={cn("pill-item", on && "is-on")}
                 aria-current={on ? "page" : undefined}
               >
                 {/* Нативный switch под пальцем (Safari 17.4+): прямой тап = системная
@@ -1027,8 +747,7 @@ export function Portal() {
             );
           })}
           {/* Шаг 3 (аудит v2.6): поиск — РЯД ПИЛЮЛИ, без разделителя и без
-              отдельного круга: тот же размер, что табы; линза драга его
-              не захватывает (не в itemRefs) */}
+              отдельного круга: тот же размер, что табы */}
           <button
             type="button"
             className={cn("pill-search", searchFabOpen && "is-on")}
@@ -1088,14 +807,4 @@ export function Portal() {
     </div>
   );
 
-  function LiveStatus() {
-    return (
-      <div className="flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-1.5">
-        <span className="live-dot h-2 w-2 shrink-0 rounded-full bg-[color:var(--brand)]" />
-        <WarehouseSelect className="w-[110px] border-0 bg-transparent text-[11px]" />
-        <span className="h-3 w-px shrink-0 bg-border" />
-        <span className="shrink-0 text-[11px] font-medium text-muted-foreground">склад онлайн</span>
-      </div>
-    );
-  }
 }

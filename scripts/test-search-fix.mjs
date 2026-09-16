@@ -5,8 +5,8 @@
  * ОДИН input[data-search-input] — в подвесной карточке НАД пилюлей.
  * Проверки:
  *  1. В DOM ровно ОДИН input[data-search-input], старого id «global-search» нет
- *  2. Тап по круглому поиску на пилюле: .search-pop открыт, фокус В ЕГО поле
- *     (activeElement), карточка НАД панелью с зазором 10–15мм
+ *  2. Тап по круглому поиску на пилюле: .search-pop открыт БЕЗ autofocus
+ *     (п.9 ТЗ), тап по полю даёт фокус, карточка НАД панелью с зазором 10–15мм
  *  3. Ввод «локо» → дропдаун с результатами (Ткани/Каталог фото)
  *  4. Enter применяет запрос → карточка закрылась, над панелью чип с «сбросить»
  *  5. Палитра: --brand изумруд, стекло тёплый графит (47,45,41), поле тёплое
@@ -110,7 +110,19 @@ const focusInPop = await page.evaluate(() => {
   const input = pop?.querySelector("input[data-search-input]");
   return Boolean(input) && document.activeElement === input;
 });
-ok("ФОКУС в видимом поле карточки (клавиатура iOS откроется)", focusInPop);
+/* П.9 ТЗ (НОВОЕ ПОВЕДЕНИЕ): при открытии карточки фокуса НЕТ — клавиатура
+   не вскакивает, экран не прыгает. Фокус — ТОЛЬКО по тапу пользователя в поле */
+ok("при открытии поле БЕЗ фокуса (п.9: клавиатуру вызывает тап по полю)", !focusInPop);
+
+/* Шаг 2 (п.9): пользователь сам тапает по полю → фокус → клавиатура */
+await page.locator("input[data-search-input]").first().click();
+await page.waitForTimeout(300);
+const focusAfterTap = await page.evaluate(() => {
+  const pop = document.querySelector(".search-pop");
+  const input = pop?.querySelector("input[data-search-input]");
+  return Boolean(input) && document.activeElement === input;
+});
+ok("тап по полю → фокус (клавиатура открылась)", focusAfterTap);
 
 /* Карточка НАД панелью, зазор 10–15мм (38–57px) */
 const geo = await page.evaluate(() => {

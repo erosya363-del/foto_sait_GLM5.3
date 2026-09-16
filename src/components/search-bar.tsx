@@ -178,12 +178,14 @@ export function SearchBar() {
           aria-label="Единый поиск: ткань, модель, размер"
           enterKeyHint="search"
           autoComplete="off"
-          // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass: блюр 80px,
-          // синеватое стекло вместо серого, кобальтовый focus-ring.
-          // ВАЖНО: transition-all ЗАПРЕЩЁН — он транзионил унаследованный
-          // visibility (карточка открывается в кадре тапа): в первый кадр
-          // computed visibility оставался «hidden» и focus() молча отказывал.
-          className="h-11 w-full rounded-full border border-border bg-field pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] transition-[background-color,border-color,box-shadow] placeholder:text-muted-foreground focus:border-[var(--border-strong)] focus:bg-field-strong focus:shadow-[inset_0_1px_0_var(--glass-spec),0_0_0_4px_var(--focus-ring)] sm:text-[14px]"
+          // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass: блюр 80px.
+          // П.10 ТЗ: при focus НИКАКИХ рамок/колец/смены геометрии — размеры
+          // (h-11, w-full) зафиксированы; живёт только слабая смена фона/кромки
+          // + мигающий курсор. transition-all ЗАПРЕЩЁН — транзионил бы
+          // унаследованный visibility (карточка открывается в кадре тапа):
+          // в первый кадр computed visibility оставался «hidden» и focus()
+          // молча отказывал.
+          className="h-11 w-full rounded-full border border-border bg-field pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] transition-[background-color,border-color] placeholder:text-muted-foreground focus:border-[var(--border-strong)] focus:bg-field-strong sm:text-[14px]"
         />
         {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
         {!(value || searchQuery) && !searchOpen && (

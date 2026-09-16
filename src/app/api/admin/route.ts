@@ -41,6 +41,8 @@ async function autoPurgeTrash(): Promise<number> {
  * GET /api/admin — данные для админки:
  *   ?view=trash     → содержимое корзины (фото + вариант + дней до автоочистки)
  *   ?view=variants  → список товаров (вариантов) с счётчиком живых фото
+ *   ?view=photos    → все живые фото с ПОЛНОЙ привязкой (п.4 ТЗ: редактирование
+ *                     привязки фото — категория/модель/ткань/размер/подпись)
  */
 export async function GET(req: NextRequest) {
   const view = req.nextUrl.searchParams.get("view") || "";
@@ -107,7 +109,44 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: "Укажите view=trash или view=variants" }, { status: 400 });
+    if (view === "photos") {
+      const rows = await db.photo.findMany({
+        where: { deletedAt: null },
+        orderBy: [{ variantId: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+        include: {
+          variant: {
+            include: {
+              category: true,
+              model: true,
+              material: true,
+              size: true,
+              _count: { select: { photos: { where: { deletedAt: null } } } },
+            },
+          },
+        },
+      });
+      return NextResponse.json({
+        items: rows.map((p) => ({
+          id: p.id,
+          url: p.url,
+          thumbUrl: p.thumbUrl,
+          comment: p.comment,
+          variantId: p.variantId,
+          categoryId: p.variant.categoryId,
+          categoryName: p.variant.category.name,
+          modelId: p.variant.modelId,
+          modelName: p.variant.model.name,
+          materialId: p.variant.materialId,
+          materialName: p.variant.material?.name ?? null,
+          sizeId: p.variant.sizeId,
+          sizeName: p.variant.size?.name ?? null,
+          variantName: p.variant.variantName,
+          variantPhotoCount: p.variant._count.photos,
+        })),
+      });
+    }
+
+    return NextResponse.json({ error: "Укажите view=trash, view=variants или view=photos" }, { status: 400 });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
@@ -167,6 +206,62 @@ export async function POST(req: NextRequest) {
         await db.photo.delete({ where: { id: p.id } }).catch(() => {});
       }
       return NextResponse.json({ ok: true, purged: rows.length, filesRemoved });
+    }
+
+    // ── Фото: ПЕРЕПРИВЯЗКА без перезагрузки файла (п.4 ТЗ) ───────────
+    // Пример ошибки из ТЗ: фото кровати случайно привязали к дивану —
+    // админ меняет категорию/модель/ткань/размер, ФАЙЛ остаётся на диске.
+    // Фото присоединяется к варианту (категория+модель+ткань+размер);
+    // если такого варианта нет — он создаётся; опустевший старый — чистится.
+    if (action === "movePhoto") {
+      if (!id) return NextResponse.json({ error: "Нужен id фото" }, { status: 400 });
+      const photo = await db.photo.findUnique({ where: { id } });
+      if (!photo) return NextResponse.json({ error: "Фото не найдено" }, { status: 404 });
+      if (photo.deletedAt) return NextResponse.json({ error: "Фото в корзине — сначала верните его" }, { status: 400 });
+
+      const categoryId = String(body.categoryId ?? "");
+      const modelId = String(body.modelId ?? "");
+      if (!categoryId) return NextResponse.json({ error: "Выберите категорию" }, { status: 400 });
+      if (!modelId) return NextResponse.json({ error: "Выберите модель" }, { status: 400 });
+      const category = await db.category.findUnique({ where: { id: categoryId } });
+      if (!category) return NextResponse.json({ error: "Категория не найдена" }, { status: 404 });
+      const model = await db.model.findUnique({ where: { id: modelId } });
+      if (!model || model.categoryId !== categoryId) {
+        return NextResponse.json({ error: "Модель не относится к выбранной категории" }, { status: 400 });
+      }
+      const materialId = String(body.materialId ?? "") || null;
+      const sizeId = String(body.sizeId ?? "") || null;
+      const variantName = String(body.variantName ?? "").trim() || null;
+
+      // Целевой вариант: та же связка, что у quickCreateVariant (дубликаты недопустимы)
+      let target = await db.productVariant.findFirst({
+        where: { categoryId, modelId, materialId, sizeId, deletedAt: null },
+      });
+      if (!target) {
+        target = await db.productVariant.create({
+          data: { categoryId, modelId, materialId, sizeId, variantName },
+        });
+      } else if (variantName !== null && target.variantName !== variantName) {
+        await db.productVariant.update({ where: { id: target.id }, data: { variantName } });
+      }
+
+      const oldVariantId = photo.variantId;
+      await db.photo.update({ where: { id }, data: { variantId: target.id } });
+
+      // Старый вариант опустел и не в корзине — физически удаляем пустую оболочку
+      // (ТОЛЬКО если нет вообще ни одного фото — иначе сломается «Вернуть» из корзины)
+      let cleanedOld = false;
+      if (oldVariantId !== target.id) {
+        const left = await db.photo.count({ where: { variantId: oldVariantId } });
+        if (left === 0) {
+          const old = await db.productVariant.findUnique({ where: { id: oldVariantId } });
+          if (old && !old.deletedAt) {
+            await db.productVariant.delete({ where: { id: oldVariantId } }).catch(() => {});
+            cleanedOld = true;
+          }
+        }
+      }
+      return NextResponse.json({ ok: true, variantId: target.id, moved: oldVariantId !== target.id, cleanedOld });
     }
 
     // ── Товары: быстрое создание (категория/модель — на лету) ────────

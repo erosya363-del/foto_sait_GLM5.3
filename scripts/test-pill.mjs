@@ -1,9 +1,8 @@
 /**
- * E2E: плавающая «пилюля» Liquid Glass v2 + умная шапка + подвесной поиск.
- * Проверки: 5 пунктов, линза пружиной (stiffness 430), жидкий сквош+SVG-фильтр,
- * pill-dim при скролле / pill-active при касании, 5-й пункт «Поиск» фокусирует
- * поле, шапка сворачивается при скролле, кружок → подвесной поиск → сворачивание
- * при листании, темы, регресс юбки v3, десктоп, консоль чистая.
+ * E2E: плавающая «пилюля» v2.8 — СТАБИЛЬНАЯ (п.5 ТЗ: линза/драг/liquid удалены)
+ * + умная шапка (п.6-8: один лого, без склада, title = вкладка) + поиск без
+ * autofocus (п.9) и без кольца (п.10) + подвесной поиск, pill-dim/active,
+ * темы, регресс юбки v3, консоль чистая.
  * Запуск: node scripts/test-pill.mjs (сервер на :3000)
  */
 import { chromium } from "playwright";
@@ -73,7 +72,7 @@ ok("капсула fully-rounded (999px)", shellStyle.radius === "999px", shellS
 ok("стекло v6: Liquid Glass url(#lg…) в Chromium ИЛИ иней blur 18px (Safari-фолбэк)", /url\("#lg-/.test(shellStyle.blur) || (/18px/.test(shellStyle.blur) && /saturate/.test(shellStyle.blur) && /brightness/.test(shellStyle.blur)), shellStyle.blur);
 ok("Liquid Glass: SVG-фильтр линзы в DOM (преломление + аберрация)", (await page.locator("svg filter[id^='lg-']").count()) >= 1);
 ok("переливание — блик-анимация на стекле (::after)", shellStyle.sheenAnim === "pill-sheen", shellStyle.sheenAnim);
-ok("линза на уровне капсулы (position absolute)", (await page.locator(".pill-shell > .nav-lens").count()) === 1);
+ok("ЛИНЗА УДАЛЕНА (п.5 ТЗ: ни одного движущегося элемента на панели)", (await page.locator(".pill-shell > .nav-lens").count()) === 0);
 
 const navStyle = await nav.evaluate((el) => {
   const cs = getComputedStyle(el);
@@ -89,9 +88,9 @@ ok("4 пункта (пятый «Поиск» убран по просьбе)", 
 const labels = await items.allTextContents();
 ok("подписи на месте, без «Поиск»", /Каталог/.test(labels[0]) && /Остатки/.test(labels[1]) && /Загрузка/.test(labels[2]) && /Админ/.test(labels[3]) && labels.every((l) => !/Поиск/.test(l)), labels.join("|"));
 
-ok("SVG-фильтр #nav-liquid в DOM", (await page.locator("#nav-liquid").count()) === 1);
+ok("SVG-фильтр #nav-liquid УДАЛЁН (жидкий переезд — тоже линза)", (await page.locator("#nav-liquid").count()) === 0);
 const lensCount = await page.locator(".nav-lens").count();
-ok("линза одна (живёт на уровне капсулы)", lensCount === 1);
+ok("линзы нет нигде в DOM", lensCount === 0, `got ${lensCount}`);
 const hapticSwitches = await page.locator(".pill-haptic").count();
 ok("нативных switch для хаптики — по одному на пункт + поиск (iOS)", hapticSwitches === 5, `got ${hapticSwitches}`);
 const hsStyle = await page.locator(".pill-haptic").first().evaluate((el) => {
@@ -99,10 +98,13 @@ const hsStyle = await page.locator(".pill-haptic").first().evaluate((el) => {
   return { op: cs.opacity, clip: cs.clipPath, app: cs.appearance };
 });
 ok("switch невидим, но appearance нативный (иначе iOS не сыграет)", Number(hsStyle.op) === 0 && /inset/.test(hsStyle.clip) && !/none/.test(hsStyle.app), JSON.stringify(hsStyle));
-const lensBox1 = await page.locator(".nav-lens").boundingBox();
 const item1 = await items.nth(0).boundingBox();
-ok("линза внутри активного пункта «Каталог»", Math.abs(lensBox1.x - item1.x) < 3 && Math.abs(lensBox1.width - item1.width) < 3, JSON.stringify(lensBox1));
-ok("линза имеет ядро .nav-lens-core", (await page.locator(".nav-lens .nav-lens-core").count()) === 1);
+const onStyle1 = await items.nth(0).evaluate((el) => {
+  const cs = getComputedStyle(el);
+  return { bg: cs.backgroundColor, shadow: cs.boxShadow };
+});
+ok("активный пункт — СТАТИЧНАЯ стеклянная подложка на месте (п.5 ТЗ)", onStyle1.bg !== "rgba(0, 0, 0, 0)", JSON.stringify(onStyle1));
+ok("подложка с внутренним бликом", /inset/.test(onStyle1.shadow), onStyle1.shadow);
 
 const onColor = await items.nth(0).evaluate((el) => getComputedStyle(el).color);
 ok(
@@ -111,37 +113,57 @@ ok(
   onColor
 );
 
-console.log("── 3. Жидкий переезд линзы: сквош + spring 430 ──");
+console.log("── 3. Смена вкладки: геометрия ВСЕХ пунктов НЕИЗМЕННА (п.5 ТЗ) ──");
+// Снимаем боксы всех пунктов ДО переключения
+const boxesBefore = await page.evaluate(() =>
+  [...document.querySelectorAll(".pill-item")].map((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  })
+);
 await items.nth(1).click();
-await page.waitForTimeout(120); // эффект ставит классы сразу после рендера
-// сразу — класс is-squash на линзе и is-liquid на капсуле (Chromium)
-const liquidNow = await page.evaluate(() => {
-  const lens = document.querySelector(".nav-lens");
-  const sh = document.querySelector(".pill-shell");
-  return { squash: lens?.classList.contains("is-squash") ?? false, liquid: sh?.classList.contains("is-liquid") ?? false };
-});
-ok("сквош-класс is-squash активен сразу после тапа", liquidNow.squash);
-ok("is-liquid на капсуле (Chromium)", liquidNow.liquid);
-const filterNow = await shell.evaluate((el) => getComputedStyle(el).filter);
-ok("капсула с filter:url(#nav-liquid) в полёте", /nav-liquid/.test(filterNow), filterNow);
-await page.waitForTimeout(700);
-const liquidAfter = await page.evaluate(() => {
-  const lens = document.querySelector(".nav-lens");
-  const sh = document.querySelector(".pill-shell");
-  return { squash: lens?.classList.contains("is-squash") ?? false, liquid: sh?.classList.contains("is-liquid") ?? false };
-});
-ok("сквош снят через ~700мс", !liquidAfter.squash && !liquidAfter.liquid);
-const lensBox2 = await page.locator(".nav-lens").boundingBox();
-const item2 = await items.nth(1).boundingBox();
-ok("линза приземлилась на «Остатки»", Math.abs(lensBox2.x - item2.x) < 3, `lens=${lensBox2.x} item=${item2.x}`);
-ok("заголовок в шапке «Askona Остатки»", (await page.locator("header .font-display").textContent())?.trim() === "Askona Остатки");
+await page.waitForTimeout(700); // было 120мс на линзу — теперь просто ждём переходы цвета
+// Никаких «жидких» классов в DOM
+const liquidLeft = await page.evaluate(() => ({
+  lens: document.querySelectorAll(".nav-lens").length,
+  liquid: document.querySelector(".pill-shell")?.classList.contains("is-liquid") ?? false,
+  squash: document.querySelectorAll(".is-squash").length,
+  drag: document.querySelectorAll(".pill-item.is-drag").length,
+}));
+ok("нет линзы/is-liquid/is-squash/is-drag после смены вкладки", !liquidLeft.lens && !liquidLeft.liquid && !liquidLeft.squash && !liquidLeft.drag, JSON.stringify(liquidLeft));
+ok("активным стал «Остатки» (is-on переехал классом, не анимацией)", await items.nth(1).evaluate((el) => el.classList.contains("is-on")) && !(await items.nth(0).evaluate((el) => el.classList.contains("is-on"))));
+// Геометрия КАЖДОГО пункта — идентична до/после (ничего не прыгнуло)
+const boxesAfter = await page.evaluate(() =>
+  [...document.querySelectorAll(".pill-item")].map((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  })
+);
+const geomStable = boxesBefore.every((b, i) => Math.abs(b.x - boxesAfter[i].x) < 0.5 && Math.abs(b.w - boxesAfter[i].w) < 0.5);
+ok("иконки не сдвинулись, ширины не изменились (пиксель-в-пиксель)", geomStable, JSON.stringify({ before: boxesBefore[1], after: boxesAfter[1] }));
+ok("заголовок в шапке — только вкладка «Остатки» (п.8 ТЗ)", (await page.locator("header .font-display").textContent())?.trim() === "Остатки");
 
-console.log("── 4. Тап «Загрузка» → линза едет дальше ──");
+console.log("── 4. Тап «Загрузка» → заголовок = только вкладка, геометрия стабильна ──");
+const boxAdminBefore = await items.nth(3).boundingBox();
+const boxFirstBefore = await items.nth(0).boundingBox();
 await items.nth(2).click();
 await page.waitForTimeout(650);
-const lensBox3 = await page.locator(".nav-lens").boundingBox();
-const item3 = await items.nth(2).boundingBox();
-ok("линза на «Загрузка»", Math.abs(lensBox3.x - item3.x) < 3);
+ok("заголовок «Загрузка» (без приставок — п.8 ТЗ)", (await page.locator("header .font-display").textContent())?.trim() === "Загрузка");
+const boxAdminAfter = await items.nth(3).boundingBox();
+const boxFirstAfter = await items.nth(0).boundingBox();
+/* Смена раздела может появить/убрать скроллбар страницы → капсула честно
+   пересчитывается по ширине вьюпорта (на iPhone скроллбары overlay — эффекта
+   нет). Стабильность = межиконные шаги неизменны, а изменение ширины (если
+   есть) РАВНОМЕРНОЕ по всем пунктам — никакой пункт не «прыгает» отдельно. */
+const gapBefore = boxAdminBefore.x - boxFirstBefore.x;
+const gapAfter = boxAdminAfter.x - boxFirstAfter.x;
+const dAdmin = boxAdminAfter.width - boxAdminBefore.width;
+const dFirst = boxFirstAfter.width - boxFirstBefore.width;
+ok(
+  "пункты не прыгают: шаг неизменен, пересчёт ширины равномерный",
+  Math.abs(gapBefore - gapAfter) < 0.5 && Math.abs(dAdmin - dFirst) < 0.5,
+  JSON.stringify({ gapBefore, gapAfter, dAdmin, dFirst })
+);
 
 console.log("── 5. Пилюля и скролл/касание: pill-dim / pill-active ──");
 // скроллим «Остатки» (на L1 каталога места под скролл почти нет)
@@ -217,7 +239,18 @@ const focused1 = await page.evaluate(() => {
   const ae = document.activeElement;
   return Boolean(ae && ae.matches("input[data-search-input]") && ae.closest(".search-pop"));
 });
-ok("поле поиска в фокусе (клавиатура) — в карточке", focused1);
+/* П.9 ТЗ: при ОТКРЫТИИ поле НЕ в фокусе — клавиатура не вскакивает, экран не прыгает */
+ok("при открытии поле БЕЗ фокуса (п.9: клавиатуру вызывает сам пользователь)", !focused1);
+/* П.10 ТЗ: геометрия поля при focus НЕ меняется, никакого кольца */
+const inpBefore = await page.locator("input[data-search-input]").boundingBox();
+await page.locator("input[data-search-input]").click();
+await page.waitForTimeout(300);
+const focused2 = await page.evaluate(() => Boolean(document.activeElement?.matches("input[data-search-input]")));
+ok("тап по полю → фокус (клавиатура)", focused2);
+const inpAfter = await page.locator("input[data-search-input]").boundingBox();
+ok("геометрия поля при focus идентична (п.10)", Math.abs(inpBefore.width - inpAfter.width) < 0.5 && Math.abs(inpBefore.height - inpAfter.height) < 0.5, JSON.stringify({ before: inpBefore, after: inpAfter }));
+const focusShadow = await page.locator("input[data-search-input]").evaluate((el) => getComputedStyle(el).boxShadow);
+ok("при focus НЕТ 4px-кольца (только inset-спекуляр)", !/0px 0px 0px 4px/.test(focusShadow), focusShadow);
 // печатаем — дропдаун открывается ВВЕРХ от поля (карточка у низа экрана)
 await page.keyboard.type("диван");
 await page.waitForTimeout(600);
@@ -253,7 +286,7 @@ ok("пульс-класс nav-pulse активирован", pulsing);
 await page.waitForTimeout(600);
 const scrollY2 = await page.evaluate(() => window.scrollY);
 ok("scrollY = 0 после повторного тапа", scrollY2 === 0, `got ${scrollY2}`);
-ok("линза вернулась на «Каталог»", await items.nth(0).evaluate((el) => el.classList.contains("is-on")));
+ok("активным снова стал «Каталог» (is-on)", await items.nth(0).evaluate((el) => el.classList.contains("is-on")));
 
 console.log("── 10. Светлая тема ──");
 await page.evaluate(() => {
@@ -273,8 +306,11 @@ ok(
   /^rgba\(255,\s*255,\s*255/.test(lightBg),
   lightBg
 );
-const lightLens = await page.locator(".nav-lens-core").evaluate((el) => getComputedStyle(el).boxShadow);
-ok("светлая линза с белой кромкой", /255,\s*255,\s*255/.test(lightLens));
+const lightLens = await page.locator(".pill-item.is-on").evaluate((el) => {
+  const cs = getComputedStyle(el);
+  return cs.backgroundColor + " | " + cs.boxShadow;
+});
+ok("светлая тема: АКТИВНЫЙ пункт со стеклянной подложкой и бликом", /inset/.test(lightLens), lightLens);
 await page.screenshot({ path: "tool-results/pill-light.png" });
 await page.evaluate(() => {
   document.documentElement.classList.add("dark");
@@ -303,7 +339,11 @@ ok("в сайдбаре есть кнопка «Поиск» (шаг 3)", await 
 ok("карточка поиска в DOM (одна, скрыта до вызова)", (await page.locator(".search-pop").count()) === 1);
 await page.evaluate(() => window.scrollTo({ top: 400, behavior: "instant" }));
 await page.waitForTimeout(400);
-ok("десктоп: лого виден при скролле (шапка не сворачивается)", await logo.isVisible());
+ok("десктоп: лого в шапке УДАЛЁН (п.6: один логотип — в сайдбаре)", !(await logo.isVisible().catch(() => false)));
+ok("десктоп: основной лого в сайдбаре на месте", await page.locator("aside img[alt='Askona']").isVisible());
+ok("десктоп: селектора склада «Обухово» в шапке НЕТ (п.7)", (await page.locator("header select").count()) === 0);
+ok("десктоп: «склад онлайн» удалён из сайдбара (п.7)", !/склад онлайн/.test(await page.locator("aside").innerText()));
+ok("десктоп: заголовок = только вкладка (п.8)", ["Каталог", "Остатки", "Загрузка", "Админ"].includes((await page.locator("header .font-display").textContent())?.trim() ?? ""));
 
 console.log("── 13. Консоль ──");
 const realErrors = consoleErrors.filter((e) => !/Download the React DevTools/i.test(e));

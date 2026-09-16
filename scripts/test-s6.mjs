@@ -1,12 +1,8 @@
 /**
- * E2E Шаг 6: бег линзы за пальцем (drag-to-select), 4 пункта пилюли,
- * вибро-API (код-ревью вне браузера), растворение пилюли при скролле с
- * горящим активным пунктом, полностью прозрачная шапка при скролле,
- * крупная «Назад» (44px), кружок поиска и «наверх» слева, поле поиска без
- * мигания (серое 80%, тонкая рамка), личные популярные за 7 дней,
- * карточки тканей (гамма + фото каталога), карточки вариантов без
- * «Стандарт/Акция/топпер», компактный NEW, админка: раздел «Ткани»,
- * панель выбранных фото над пилюлей.
+ * E2E Шаг 6 (v2.8): пилюля БЕЗ линзы/драга (п.5: стабильна), 4 пункта,
+ * растворение при скролле, шапка-вкладка (п.8), поиск без autofocus (п.9),
+ * карточки тканей, админка: Ткани/Справочники без дублей (п.3),
+ * фотобанк с редактором привязки (п.4) и панелью над пилюлей.
  * Запуск: node scripts/test-s6.mjs (сервер на :3000)
  */
 import { chromium } from "playwright";
@@ -56,22 +52,22 @@ page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
 const headerTitle = () => page.locator("header .font-display").textContent().then((t) => (t ?? "").trim());
 
-console.log("── 1. Заголовки разделов: только «Askona X» ──");
+console.log("── 1. Заголовки разделов: только вкладка (п.8 ТЗ) ──");
 await page.goto(BASE, { waitUntil: "networkidle" });
 await page.waitForTimeout(900);
-ok("Каталог → «Askona Каталог»", (await headerTitle()) === "Askona Каталог", await headerTitle());
+ok("Каталог → «Каталог»", (await headerTitle()) === "Каталог", await headerTitle());
 ok("мобильная шапка: лого скрыт", !(await page.locator("header img[alt='Askona']").isVisible()));
-ok("мобильная шапка: селектор склада скрыт", !(await page.locator("header select").isVisible().catch(() => false)));
+ok("мобильная шапка: селектора склада нет вовсе (п.7)", (await page.locator("header select").count()) === 0);
 
 await page.locator('nav.pill-nav button:has-text("Остатки")').click();
 await page.waitForTimeout(500);
-ok("Остатки → «Askona Остатки»", (await headerTitle()) === "Askona Остатки", await headerTitle());
+ok("Остатки → «Остатки»", (await headerTitle()) === "Остатки", await headerTitle());
 await page.locator('nav.pill-nav button:has-text("Загрузка")').click();
 await page.waitForTimeout(500);
-ok("Загрузка → «Askona Загрузка фото»", (await headerTitle()) === "Askona Загрузка фото", await headerTitle());
+ok("Загрузка → «Загрузка»", (await headerTitle()) === "Загрузка", await headerTitle());
 await page.locator('nav.pill-nav button:has-text("Админ")').click();
 await page.waitForTimeout(500);
-ok("Админ → «Askona Админ»", (await headerTitle()) === "Askona Админ", await headerTitle());
+ok("Админ → «Админ»", (await headerTitle()) === "Админ", await headerTitle());
 await page.locator('nav.pill-nav button:has-text("Каталог")').click();
 await page.waitForTimeout(600);
 
@@ -81,39 +77,35 @@ ok("4 пункта", (await items.count()) === 4, `got ${await items.count()}`);
 const labels = await items.allTextContents();
 ok("без пункта «Поиск»", labels.every((l) => !/Поиск/.test(l)), labels.join("|"));
 
-console.log("── 3. Drag-to-select: линза бежит за пальцем ──");
+console.log("── 3. Drag по пилюле БОЛЬШЕ ничего не двигает/не активирует (п.5 ТЗ) ──");
 const b0 = await items.nth(0).boundingBox();
 const b1 = await items.nth(1).boundingBox();
 const b2 = await items.nth(2).boundingBox();
+const itemsBefore = await page.evaluate(() =>
+  [...document.querySelectorAll(".pill-item")].map((el) => el.getBoundingClientRect().x)
+);
 await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2);
 await page.mouse.down();
 await page.mouse.move(b1.x + b1.width / 2, b1.y + b1.height / 2, { steps: 6 });
 await page.waitForTimeout(160);
-const lensMid = await page.locator(".nav-lens").boundingBox();
-ok(
-  "линза ИДЁТ за пальцем (аудит v2.6): центр под пальцем, ширина = пункт — БЕЗ растягивания",
-  Math.abs(lensMid.x + lensMid.width / 2 - (b1.x + b1.width / 2)) < 26 && Math.abs(lensMid.width - b0.width) < 14,
-  JSON.stringify(lensMid)
-);
+ok("линзы нет в DOM во время пальца", (await page.locator(".nav-lens").count()) === 0);
+ok("нет is-drag подсветки под пальцем", !(await items.nth(1).evaluate((el) => el.classList.contains("is-drag"))));
 const scale1 = await items.nth(1).evaluate((el) => {
-  const m = getComputedStyle(el.querySelector("svg")).transform; // matrix(a,0,0,a,e,f)
-  return m && m !== "none" ? parseFloat(m.slice(7)) : 1;
-});
-ok("магнитное увеличение иконки под пальцем", scale1 > 1.1, `scale=${scale1}`);
-await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2, { steps: 6 });
-await page.waitForTimeout(160);
-const drag2 = await items.nth(2).evaluate((el) => el.classList.contains("is-drag"));
-ok("пункт под пальцем подсвечен (is-drag)", drag2);
-await page.mouse.up();
-await page.waitForTimeout(600);
-ok("отпускание активировало «Загрузка»", (await headerTitle()) === "Askona Загрузка фото", await headerTitle());
-ok("is-drag снят после отпускания", !(await items.nth(2).evaluate((el) => el.classList.contains("is-drag"))));
-const scaleReset = await items.nth(1).evaluate((el) => {
   const m = getComputedStyle(el.querySelector("svg")).transform;
   return m && m !== "none" ? parseFloat(m.slice(7)) : 1;
 });
-ok("магнит-увеличение снято после отпускания", Math.abs(scaleReset - 1) < 0.03, `scale=${scaleReset}`);
-// сброс pillTouched (остался от тапов по пилюле) — иначе dim не включится
+ok("иконка под пальцем НЕ увеличивается (магнит удалён)", Math.abs(scale1 - 1) < 0.03, `scale=${scale1}`);
+await page.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2, { steps: 6 });
+await page.waitForTimeout(160);
+await page.mouse.up();
+await page.waitForTimeout(600);
+ok("отпускание пальца НЕ активировало раздел (активация — только тап)", (await headerTitle()) === "Каталог", await headerTitle());
+ok("is-drag не появился после отпускания", !(await items.nth(2).evaluate((el) => el.classList.contains("is-drag"))));
+const itemsAfter = await page.evaluate(() =>
+  [...document.querySelectorAll(".pill-item")].map((el) => el.getBoundingClientRect().x)
+);
+ok("иконки не сдвинулись за время жеста", itemsBefore.every((x, i) => Math.abs(x - itemsAfter[i]) < 0.5));
+// сброс pillTouched (остался от касания пилюли) — иначе dim не включится
 await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointerdown")));
 await page.waitForTimeout(250);
 
@@ -238,7 +230,12 @@ await page.waitForTimeout(800);
 await page.evaluate(() => document.querySelector(".pill-search")?.click());
 await page.waitForTimeout(400);
 const dd = page.locator(".search-pop .search-dd").first();
-ok("дропдаун открылся", await dd.isVisible());
+/* П.9 ТЗ: при открытии карточки поле БЕЗ фокуса — дропдауна ещё НЕТ,
+   клавиатура не вскакивает; дропдаун появится после тапа по полю */
+ok("при открытии дропдауна нет (поле не в фокусе)", !(await dd.isVisible().catch(() => false)));
+await page.locator("input[data-search-input]").first().click();
+await page.waitForTimeout(400);
+ok("дропдаун открылся после тапа по полю", await dd.isVisible());
 const ddBg = await dd.evaluate((el) => getComputedStyle(el).backgroundColor);
 ok("дропдаун полупрозрачный (~85%)", Math.abs(alphaOf(ddBg) - 0.85) < 0.06, ddBg);
 const ddBlur = await dd.evaluate((el) => getComputedStyle(el).backdropFilter);
@@ -265,7 +262,7 @@ await page.waitForTimeout(500);
 const logAfter = await page.evaluate(() => JSON.parse(localStorage.getItem("skovo-search-log") || "{}"));
 ok("запрос записался в журнал (7 дней)", (logAfter.sky?.length ?? 0) === 4, JSON.stringify(logAfter.sky));
 const titleAfterSearch = await headerTitle();
-ok("заголовок раздела НЕ подменяется «Поиск: …»", /^Askona (Каталог|Остатки)$/.test(titleAfterSearch), titleAfterSearch);
+ok("заголовок раздела НЕ подменяется «Поиск: …»", /^(Каталог|Остатки)$/.test(titleAfterSearch), titleAfterSearch);
 await page.evaluate(() => window.__portal.getState().applySearch(null));
 await page.waitForTimeout(300);
 
@@ -358,6 +355,14 @@ const del = await fetch(BASE + "/api/admin", {
 });
 ok("API: тестовая ткань удалена (чистка)", del.ok);
 
+console.log("── 11b. Справочники: только системные, без дублей (п.3 ТЗ) ──");
+await page.locator('button[role="tab"]:has-text("Справочники")').click();
+await page.waitForTimeout(400);
+const dictTabs = await page.locator('main [role="tablist"] button').allTextContents();
+ok("в справочниках Категории/Размеры/Признаки", /Категории/.test(dictTabs.join("|")) && /Размеры/.test(dictTabs.join("|")) && /Признаки/.test(dictTabs.join("|")), dictTabs.join("|"));
+ok("нет дубля «Модели» (модели живут в Товарах)", !dictTabs.includes("Модели"), dictTabs.join("|"));
+ok("нет дубля «Материалы» (ткани живут в Тканях)", !dictTabs.includes("Материалы"), dictTabs.join("|"));
+
 console.log("── 12. Админка: панель выбранных фото НАД пилюлей ──");
 await page.locator('button[role="tab"]:has-text("Фото")').click();
 await page.waitForTimeout(900);
@@ -377,6 +382,43 @@ if ((await photoBtn.count()) > 0) {
   ok("«Снять» сбрасывает выбор", (await page.locator("main .sticky:has-text('Выбрано')").count()) === 0);
 } else {
   console.log("  ~ фото в фотобанке отсутствуют — пропуск");
+}
+
+console.log("── 12b. Редактирование привязки фото (п.4 ТЗ) ──");
+const photoApi = await (await fetch(BASE + "/api/admin?view=photos")).json();
+ok("API view=photos: привязка полная", photoApi.items.every((p) => "categoryId" in p && "modelId" in p && "variantPhotoCount" in p));
+if (photoApi.items.length >= 1) {
+  const somePhoto = photoApi.items[0];
+  await page.locator('main button[aria-label="Редактировать привязку фото"]').first().click();
+  await page.waitForTimeout(500);
+  ok("диалог редактирования привязки открыт", await page.locator("[data-slot='dialog-content']").isVisible());
+  ok("кнопка «Удалить фото» в диалоге (п.4)", (await page.locator("[data-slot='dialog-content'] button:has-text('Удалить фото')").count()) === 1);
+  const dlgBox = await page.locator("[data-slot='dialog-content']").boundingBox();
+  ok("диалог целиком в viewport (п.1: не уходит за экран)", dlgBox && dlgBox.y >= 0 && dlgBox.y + dlgBox.height <= 761, JSON.stringify(dlgBox));
+  await page.locator("[data-slot='dialog-content'] button:has-text('Отмена')").click();
+  await page.waitForTimeout(300);
+  // API: неполные данные → отказ
+  const bad = await fetch(BASE + "/api/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "movePhoto", id: somePhoto.id }),
+  });
+  ok("API: movePhoto без категории → 400", bad.status === 400, `got ${bad.status}`);
+  // API: та же связка → ok, переноса нет
+  const same = await fetch(BASE + "/api/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "movePhoto", id: somePhoto.id,
+      categoryId: somePhoto.categoryId, modelId: somePhoto.modelId,
+      materialId: somePhoto.materialId ?? "", sizeId: somePhoto.sizeId ?? "",
+      variantName: somePhoto.variantName ?? "",
+    }),
+  });
+  const sameJson = await same.json();
+  ok("API: movePhoto в ту же связку → ok без переноса", same.ok && sameJson.moved === false, JSON.stringify(sameJson));
+} else {
+  console.log("  ~ фото отсутствуют — пропуск 12b");
 }
 
 console.log("── 13. Светлая тема не сломана (пилюля/шапка) ──");

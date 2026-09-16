@@ -43,6 +43,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  // П.11 ТЗ (клавиатура): Android/Chrome сжимает layout-viewport на высоту
+  // клавиатуры → 100dvh/модалки/нижняя панель считаются от ВИДИМОЙ области
+  // синхронно с visualViewport-логикой portal.tsx (--kb-h)
+  interactiveWidget: "resizes-content",
   /* ЧЁЛКА iPhone (аудит v2.6): ОДИН meta без media — цвет зоны статуса
      синхронизируется с ТЕМОЙ ПРИЛОЖЕНИЯ (не системной) скриптом ниже и
      MutationObserver'ом в portal.tsx. Раньше стояли media-пары со старыми

@@ -27,6 +27,7 @@ async function makePng(color) {
   return sharp({ create: { width: 50, height: 70, channels: 3, background: color } }).png().toBuffer();
 }
 
+
 const dicts = await (await fetch(`${BASE}/api/dictionaries`)).json();
 
 // ────────────────────────────────────────────────────────────────
