@@ -23,7 +23,7 @@ function ok(name, cond, extra = "") {
 }
 
 const browser = await chromium.launch();
-const context = await browser.newContext({ viewport: { width: 390, height: 780 } });
+const context = await browser.newContext({ viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true });
 await context.addInitScript(() => {
   try {
     /* Чистим хранилища ОДИН РАЗ (маркер в localStorage переживает навигации):
@@ -165,94 +165,18 @@ if (framesCount > 0) {
   await page.evaluate(() => window.scrollTo(0, 120));
   const scrollBefore = await page.evaluate(() => window.scrollY);
   await photoFrames.first().click();
-  await page.waitForTimeout(600);
-  ok("просмотрщик открылся", await page.locator(".viewer-backdrop").isVisible());
-  ok("счётчик «1 / N»", (await page.locator(".viewer-count").innerText()).match(/^\d+ \/ \d+$/) !== null);
-  ok("нижняя панель зума присутствует (6+ кнопок)",
-    (await page.locator(".viewer-bar .vbtn").count()) >= 5 && await page.locator(".viewer-pct").isVisible());
-  ok("двойная загрузка: thumb + optimized в слайде",
-    (await page.locator(".viewer-zoom img").count()) === 2);
-  /* Клавиатура: + зум, 0 сброс, → листание, Esc закрытие */
-  await page.keyboard.press("+");
-  await page.waitForTimeout(500);
-  const pctZoomed = await page.locator(".viewer-pct").innerText();
-  ok("клавиша «+» увеличила (>% )", parseInt(pctZoomed) > 120, pctZoomed);
-  await page.keyboard.press("0");
-  await page.waitForTimeout(500);
-  ok("клавиша «0» сбросила к 100%", (await page.locator(".viewer-pct").innerText()) === "100%");
-  const cntBefore = await page.locator(".viewer-count").innerText();
-  await page.keyboard.press("ArrowRight");
-  await page.waitForTimeout(500);
-  ok("стрелка → перелистнула", (await page.locator(".viewer-count").innerText()) !== cntBefore
-    || framesCount === 1);
-  /* Wheel-зум на десктопе */
-  await page.keyboard.press("0");
-  await page.locator(".viewer-stage").hover({ position: { x: 195, y: 300 } });
-  await page.mouse.wheel(0, -400);
-  await page.waitForTimeout(300);
-  ok("wheel вверх зумит", parseInt(await page.locator(".viewer-pct").innerText()) > 120);
-  /* Пан в зуме не выходит за границы: тянем сильно влево — слой не улетает */
-  const txBefore = await page.evaluate(() => document.querySelector(".viewer-zoom")?.getBoundingClientRect().left ?? 0);
-  await page.mouse.down();
-  await page.mouse.move(20, 300, { steps: 5 });
-  await page.mouse.up();
-  await page.waitForTimeout(400);
-  const txAfter = await page.evaluate(() => document.querySelector(".viewer-zoom")?.getBoundingClientRect().left ?? 0);
-  ok("pan в зуме ограничен границами (нет бесконечного утащить)", Math.abs(txAfter - txBefore) < 400,
-    `${txBefore} → ${txAfter}`);
-  /* Двойной клик — зум/сброс */
-  await page.keyboard.press("0");
-  await page.waitForTimeout(300);
-  await page.locator(".viewer-stage").dblclick();
-  await page.waitForTimeout(600);
-  const pctDbl = parseInt(await page.locator(".viewer-pct").innerText());
-  ok("double click зумит к ~250%", pctDbl > 180 && pctDbl < 400, pctDbl);
-  await page.locator(".viewer-stage").dblclick();
-  await page.waitForTimeout(600);
-  ok("повторный double click вернул 100%", (await page.locator(".viewer-pct").innerText()) === "100%");
+  await page.waitForTimeout(700);
+  ok("просмотрщик открылся (pswp)", await page.locator(".pswp").isVisible());
+  ok("счётчик «1 / N»", (await page.locator(".pswp__counter").innerText()).match(/^\d+ \/ \d+$/) !== null);
+  ok("кнопок −/%/+ НЕТ на мобильном (P0.8, zoom-кнопка только desktop)",
+    (await page.locator(".pswp__button--zoom").count()) === 0);
   /* Позиция каталога сохраняется после закрытия (ТЗ п.33) */
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
-  ok("Esc закрыл просмотрщик", !(await page.locator(".viewer-backdrop").count()));
+  await page.waitForTimeout(600);
+  ok("Esc закрыл просмотрщик", (await page.locator(".pswp").count()) === 0);
   const scrollAfter = await page.evaluate(() => window.scrollY);
   ok("позиция скролла каталога сохранилась", Math.abs(scrollAfter - scrollBefore) < 8, `${scrollBefore} → ${scrollAfter}`);
-
-  console.log("\n— 5. Photo Viewer: Share и action sheet —");
-  await photoFrames.first().click();
-  await page.waitForTimeout(500);
-  /* В headless Chromium navigator.share нет → кнопка Share открывает fallback-меню */
-  const hasNativeShare = await page.evaluate(() => typeof navigator.share === "function");
-  await page.locator('button[aria-label="Поделиться"]').click();
-  await page.waitForTimeout(500);
-  if (!hasNativeShare) {
-    ok("Share без Web Share API открыл fallback-меню", await page.locator(".viewer-sheet").isVisible());
-    ok("в меню есть «Скачать»", await page.locator(".viewer-sheet-row", { hasText: "Скачать" }).count() > 0);
-    ok("в меню есть «Скопировать ссылку»", await page.locator(".viewer-sheet-row", { hasText: "Скопировать ссылку" }).count() > 0);
-    ok("в меню есть «Открыть оригинал»", await page.locator(".viewer-sheet-row", { hasText: "Открыть оригинал" }).count() > 0);
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(300);
-    ok("Esc сначала закрыл меню, просмотрщик жив", await page.locator(".viewer-backdrop").isVisible());
-  } else {
-    console.log("  (navigator.share доступен — fallback не проверяем)");
-    await page.keyboard.press("Escape");
-  }
-  /* ⋯ открывает action sheet */
-  await page.locator('button[aria-label="Действия с фотографией"]').click();
-  await page.waitForTimeout(400);
-  ok("кнопка ⋯ открыла action sheet", await page.locator(".viewer-sheet").isVisible());
-  ok("в sheet есть информация о фото", await page.locator(".viewer-sheet-info").isVisible());
-  await page.locator(".viewer-sheet-backdrop").click({ position: { x: 10, y: 10 } });
-  await page.waitForTimeout(900); // spring-выход sheet ≈ 0.5с
-  ok("тап по фону закрыл sheet", (await page.locator(".viewer-sheet").count()) === 0);
-  /* Touch targets: vbtn ≥44px */
-  const vbtnSize = await page.evaluate(() => {
-    const el = document.querySelector(".viewer-bar .vbtn");
-    const r = el?.getBoundingClientRect();
-    return r ? { w: r.width, h: r.height } : null;
-  });
-  ok("кнопки просмотрщика ≥44px", vbtnSize && vbtnSize.w >= 43 && vbtnSize.h >= 43, JSON.stringify(vbtnSize));
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(400);
+  /* Полная проверка viewer'а (жесты/zoom/share/lifecycle) — в scripts/test-v31.mjs */
 } else {
   ok("фото для теста viewer найдено", false, "нет .photo-frame");
 }

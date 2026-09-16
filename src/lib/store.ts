@@ -377,6 +377,13 @@ export function snapshot(): Record<string, unknown> {
  * поглощается дедупликацией в popstate-обработчике и push-эффекте.
  */
 function suppressAndBack(hasLayer: boolean, apply: () => void) {
+  /* РЕЕНТЕРАБЕЛЬНОСТЬ (v3.1): два dismiss за ОДИН тик (pswp «close» гасит
+     слой синхронно + React успевает уничтожить корень pswp до конца
+     обработки того же Escape → портал думает, что viewer'а нет, и делает
+     второй back — улетали сразу ДВА слоя истории). Пока suppress активен,
+     второй dismiss в этом же тике игнорируется: history.back() за тик
+     должен быть ровно один. */
+  if (suppressPush) return;
   suppressPush = true;
   try {
     apply();

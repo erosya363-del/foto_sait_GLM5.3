@@ -9,7 +9,7 @@ import {
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { playTick, playStep, vibrateSupported } from "@/lib/tick";
-import { createLiquidGlass } from "@/lib/liquid-glass";
+import { useKeyboardOpen } from "@/lib/use-visual-viewport";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { BootSplash } from "@/components/boot-splash";
 import { SearchBar } from "@/components/search-bar";
@@ -171,71 +171,15 @@ function useWowEffects() {
     };
     document.addEventListener("click", onClickTick, { passive: true });
 
-    /* ── Клавиатура (ТЗ v3.0 п.1/2/4/6): класс kb-open + высота --kb-h ──
-       ДВА механизма, т.к. платформы ведут себя по-разному:
-       • iOS Safari: layout-viewport НЕ сжимается — клавиатура ПЕРЕКРЫВАЕт его
-         снизу → kb = innerHeight − (vv.offsetTop + vv.height);
-       • Android Chrome (interactiveWidget: resizes-content): сжимается САМ
-         layout-viewport → innerHeight − vv.height ≈ 0, старый детект НЕ
-         срабатывал и пилюля ВСПЛЫВАЛА НАД клавиатурой (жалоба: на одном
-         экране клавиатура + навигация + поиск + контент). Вторая метрика —
-         падение высоты layout-viewport ниже baseline (запомненной высоты
-         без клавиатуры при той же ширине окна).
-       ВАЖНО (ТЗ п.2): геометрия клавиатуры НИЧЕГО не закрывает и не открывает —
-       search-state не зависит от focus/blur/resize. Эти события только
-       двигают --kb-h (подъём карточки поиска) и прячут пилюлю. */
-    const vv = window.visualViewport;
-    const docEl = document.documentElement;
-    let baseH = 0; // высота layout-viewport без клавиатуры (baseline)
-    let baseW = 0; // ширина baseline (поворот сбрасывает)
-    const isTextField = () => {
-      const el = document.activeElement as HTMLElement | null;
-      return Boolean(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable));
-    };
-    const measureKB = () => {
-      let kb = 0;
-      if (vv) {
-        // iOS: перекрытие layout-viewport клавиатурой
-        kb = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
-      }
-      // Android resizes-content: layout-viewport сжат при фокусе в поле
-      if (isTextField() && baseH > 0 && Math.abs(window.innerWidth - baseW) < 2) {
-        kb = Math.max(kb, baseH - docEl.clientHeight);
-      }
-      const open = kb > 140;
-      docEl.classList.toggle("kb-open", open);
-      docEl.style.setProperty("--kb-h", open ? `${Math.round(kb)}px` : "0px");
-      // baseline помним только БЕЗ клавиатуры и при неизменной ширине (не поворот)
-      if (!open && (baseW === 0 || Math.abs(window.innerWidth - baseW) < 2)) {
-        baseH = Math.max(baseH, docEl.clientHeight);
-        baseW = window.innerWidth;
-      }
-    };
-    const onOrient = () => {
-      baseH = 0;
-      baseW = 0;
-      measureKB();
-    };
-    measureKB();
-    vv?.addEventListener("resize", measureKB);
-    vv?.addEventListener("scroll", measureKB);
-    window.addEventListener("resize", measureKB);
-    window.addEventListener("orientationchange", onOrient);
-    document.addEventListener("focusin", measureKB);
-    document.addEventListener("focusout", measureKB);
+    /* ── Клавиатура ПЕРЕЕХАЛА в lib/use-visual-viewport.ts (P0.4 ТЗ):
+       один singleton-источник keyboardOpen + html.kb-open + --kb-h на всё
+       приложение. Панель при клавиатуре ПРОСТО СКРЫВАЕТСЯ классом
+       (display:none, без transform-переходов — P0.3/P1.14). */
 
     return () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("click", onClickTick);
-      vv?.removeEventListener("resize", measureKB);
-      vv?.removeEventListener("scroll", measureKB);
-      window.removeEventListener("resize", measureKB);
-      window.removeEventListener("orientationchange", onOrient);
-      document.removeEventListener("focusin", measureKB);
-      document.removeEventListener("focusout", measureKB);
-      document.documentElement.classList.remove("kb-open");
-      document.documentElement.style.removeProperty("--kb-h");
     };
   }, []);
 }
@@ -296,31 +240,54 @@ export function Portal() {
   const catMaterial = usePortal((s) => s.catMaterial);
   const title = useHeaderTitle();
   useWowEffects();
+  const keyboardOpen = useKeyboardOpen(); // подписка держит singleton живым; панель прячет класс .pill-hidden + html.kb-open
 
-  /* ── Пилюля (п.5 ТЗ): БЕЗ плавающей линзы и drag-механики ──────────────
-     Панель максимально стабильная: иконки не двигаются, геометрия капсулы
-     неизменна при смене вкладок, активный пункт подсвечивается СТАТИЧНЫМ
-     стеклом (.pill-item.is-on — цвет/прозрачность, без перемещений).
-     Хаптика: нативный switch (.pill-haptic) в каждом пункте играет системный
-     тик на iOS при прямом тапе; Android вибрирует через navigator.vibrate. */
+  /* ── Пилюля: ОДНО статичное стекло + ОДИН движущийся bubble (P0.2/P1.11) ──
+     Glass-слой один (backdrop-filter на .pill-shell, никогда не анимируется);
+     SVG-displacement-фильтр УДАЛЕН — на Android/Chromium он рендерился
+     отдельным слоем и визуально ОТРЫВАЛСЯ от панели (расслаивание стекла).
+     Активный пункт = один общий bubble, перемещаемый ТОЛЬКО transform'ом
+     (геометрия иконок неизменна). Хаптика .pill-haptic сохранена. */
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const bubbleRef = useRef<HTMLSpanElement | null>(null);
+  const itemRefs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
 
-  /* ── Liquid Glass (аудит v2.6): настоящее преломление на капсуле ──
-     Chromium: Canvas-карта смещений + feDisplacementMap ×3 с хроматической
-     аберрацией (backdrop-filter: url(#id)); Safari — CSS-fallback без ошибок. */
+  /* Bubble: замер позиции активного пункта → translateX (без setState на
+     каждый кадр; перерасчёт только на смену вкладки/товара/ширины). */
   useEffect(() => {
     const shell = shellRef.current;
-    if (!shell) return;
-    const glass = createLiquidGlass(shell, {
-      borderRadius: 999,
-      scale: -110,
-      aberration: [0, 7, 14],
-      blur: 9,
-      saturation: 1.5,
-      band: 14,
+    const bubble = bubbleRef.current;
+    if (!shell || !bubble) return;
+    const place = () => {
+      const activeKey: View | null = productId ? null : view;
+      const el = activeKey ? itemRefs.current[activeKey] : null;
+      if (!el) {
+        bubble.style.opacity = "0";
+        return;
+      }
+      // offsetLeft/offsetWidth — от .pill-shell (position:relative), без reflow-петель:
+      // читаем раз за смену состояния, пишем только transform/width
+      bubble.style.width = `${el.offsetWidth}px`;
+      bubble.style.transform = `translateX(${el.offsetLeft}px)`;
+      bubble.style.opacity = "1";
+    };
+    place();
+    // переход включается ПОСЛЕ первой установки — bubble не «прилетает» с нуля
+    const raf = requestAnimationFrame(() => bubble.classList.add("is-ready"));
+    const ro = new ResizeObserver(place);
+    ro.observe(shell);
+    window.addEventListener("resize", place);
+    let fontsRaf = 0;
+    document.fonts?.ready.then(() => {
+      fontsRaf = requestAnimationFrame(place);
     });
-    return () => glass.destroy();
-  }, []);
+    return () => {
+      cancelAnimationFrame(raf);
+      cancelAnimationFrame(fontsRaf);
+      ro.disconnect();
+      window.removeEventListener("resize", place);
+    };
+  }, [view, productId]);
 
   /* Чёлка iPhone (аудит v2.6): meta theme-color всегда в цвет АКТУАЛЬНОЙ темы
      приложения (не системной) — иначе Safari красит зону статуса серой полосой */
@@ -594,6 +561,10 @@ export function Portal() {
       const s = usePortal.getState();
       // Верхние слои (просмотрщик, drawer фильтров, дропдаун поиска) закрывают себя сами
       if (s.viewerOpen || s.filtersOpen || s.searchOpen) return;
+      // ГОНКА (v3.1): pswp гасит слой СИНХРОННО в этом же событии — к моменту
+      // bubble-фазы viewerOpen уже false, и без этой проверки портал сделал бы
+      // ВТОРОЙ back (закрыл и товар). Пока корень pswp в DOM — Esc не наш.
+      if (document.querySelector(".pswp")) return;
       if (searchFabOpen) {
         e.preventDefault();
         closeSearchPop();
@@ -693,7 +664,7 @@ export function Portal() {
           При скролле шапка становится ПОЛНОСТЬЮ прозрачной — остаётся только
           плавающая «Назад» (крупная). */}
       <div className={cn("sticky top-0 z-40 lg:ml-[248px]", scrolled && "header-collapsed")}>
-        <header className="glass flex items-center gap-2 px-3 pb-2 pt-[max(10px,env(safe-area-inset-top))] sm:px-4">
+        <header className="glass flex items-center gap-2 px-3 pb-2 pt-[max(10px,var(--sat))] sm:px-4">
           <div className="lg:hidden">
             <BackButton />
           </div>
@@ -715,7 +686,7 @@ export function Portal() {
       </div>
 
       {/* Контент */}
-      <main className="relative z-10 pb-[calc(104px+env(safe-area-inset-bottom))] lg:ml-[248px] lg:pb-10">
+      <main className="relative z-10 pb-[calc(104px+var(--sab))] lg:ml-[248px] lg:pb-10">
         <div className="mx-auto w-full max-w-[1240px] px-4 pt-4 sm:px-6 lg:pt-6">
           <AnimatePresence mode="wait">
             <motion.div
@@ -748,13 +719,16 @@ export function Portal() {
         </div>
       </main>
 
-      {/* Нижняя навигация — плавающая «пилюля» (Liquid Glass v6, iOS 18).
-          П.5 ТЗ: никаких движущихся элементов — линза удалена; активный
-          пункт = статичная стеклянная подложка (.is-on), геометрия панели
-          неизменна. Нативные switch (.pill-haptic) дают хаптику на iOS.
-          Реакция: листают — стекло растворяется (pill-dim); коснулись —
-          плотное активное стекло (pill-active) до тапа мимо. */}
-      <nav className="pill-nav lg:hidden" aria-label="Нижняя навигация">
+      {/* Нижняя навигация — плавающая «пилюля». ЕДИНЫЙ стеклянный объект
+          (P0.2): backdrop-filter на самой капсуле, никаких отдельных
+          движущихся glass-слоёв. Активный пункт = ОДИН bubble (P1.11),
+          движется transform'ом, иконки стоят на месте (P1.12).
+          Search Mode (P1.13) и клавиатура (P0.3) → панель скрыта (display:none,
+          без анимаций — P1.14). Хаптика .pill-haptic сохранена. */}
+      <nav
+        className={cn("pill-nav lg:hidden", (searchFabOpen || keyboardOpen) && "pill-hidden")}
+        aria-label="Нижняя навигация"
+      >
         <div
           ref={shellRef}
           className={cn(
@@ -763,11 +737,11 @@ export function Portal() {
             pillTouched && "pill-active",
           )}
         >
-          {/* Хроматическая кромка v4 («искажение по краям», как на картинке):
-              тонкое тёплое/шалфейное преломление на самой кромке стекла */}
+          {/* ОДИН общий активный bubble (P1.11): не пересоздаётся по пунктам,
+              движется translateX; ширина неизменна — все табы равные */}
+          <span ref={bubbleRef} className="pill-bubble" aria-hidden="true" />
+          {/* Хроматическая кромка v4: статичное оптическое кольцо на кромке */}
           <span className="pill-rim" aria-hidden="true" />
-          {/* П.5 ТЗ: линза-«жидкость» УДАЛЕНА — активный пункт подсвечивает
-              статичное стекло .pill-item.is-on, ничего не перемещается */}
           {NAV.map(({ key, short, Icon }) => {
             const on = view === key && !productId;
             return (
@@ -781,6 +755,9 @@ export function Portal() {
                     // iOS: хаптику сыграл .pill-haptic; Android — вибрируем
                     playTick("tap", { hapticOn: vibrateSupported() });
                   }
+                }}
+                ref={(el) => {
+                  itemRefs.current[key] = el;
                 }}
                 className={cn("pill-item", on && "is-on")}
                 aria-current={on ? "page" : undefined}

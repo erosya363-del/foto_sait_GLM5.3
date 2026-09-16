@@ -279,6 +279,9 @@ const titleAfterSearch = await headerTitle();
 ok("заголовок раздела НЕ подменяется «Поиск: …»", /^(Каталог|Остатки)$/.test(titleAfterSearch), titleAfterSearch);
 await page.evaluate(() => window.__portal.getState().applySearch(null));
 await page.waitForTimeout(300);
+/* v3.1: search mode прячет панель — закрываем карточку (крестик) перед тапом по пилюле */
+await page.evaluate(() => document.querySelector(".search-pop-close")?.click());
+await page.waitForTimeout(350);
 
 console.log("── 8. Карточки тканей: гамма + фото каталога, без счётчиков ──");
 await page.locator('nav.pill-nav button:has-text("Каталог")').click();

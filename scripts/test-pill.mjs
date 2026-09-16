@@ -69,9 +69,9 @@ const shellStyle = await shell.evaluate((el) => {
   };
 });
 ok("капсула fully-rounded (999px)", shellStyle.radius === "999px", shellStyle.radius);
-ok("стекло v6: Liquid Glass url(#lg…) в Chromium ИЛИ иней blur 18px (Safari-фолбэк)", /url\("#lg-/.test(shellStyle.blur) || (/18px/.test(shellStyle.blur) && /saturate/.test(shellStyle.blur) && /brightness/.test(shellStyle.blur)), shellStyle.blur);
-ok("Liquid Glass: SVG-фильтр линзы в DOM (преломление + аберрация)", (await page.locator("svg filter[id^='lg-']").count()) >= 1);
-ok("переливание — блик-анимация на стекле (::after)", shellStyle.sheenAnim === "pill-sheen", shellStyle.sheenAnim);
+ok("стекло v6.1: ЕДИНЫЙ CSS blur 18px+saturation (P0.2: SVG-фильтр удалён — на Android рвал слой)", /18px/.test(shellStyle.blur) && /saturate/.test(shellStyle.blur), shellStyle.blur);
+ok("P0.2: SVG-фильтра в backdrop-filter НЕТ (url(#lg…) запрещён)", !/url\(/.test(shellStyle.blur), shellStyle.blur);
+ok("P0.2: sheen-анимация УДАЛЕНА (background-position поверх стекла пересобирало слой)", shellStyle.sheenAnim === "none", shellStyle.sheenAnim);
 ok("ЛИНЗА УДАЛЕНА (п.5 ТЗ: ни одного движущегося элемента на панели)", (await page.locator(".pill-shell > .nav-lens").count()) === 0);
 
 const navStyle = await nav.evaluate((el) => {
@@ -103,8 +103,21 @@ const onStyle1 = await items.nth(0).evaluate((el) => {
   const cs = getComputedStyle(el);
   return { bg: cs.backgroundColor, shadow: cs.boxShadow };
 });
-ok("активный пункт — СТАТИЧНАЯ стеклянная подложка на месте (п.5 ТЗ)", onStyle1.bg !== "rgba(0, 0, 0, 0)", JSON.stringify(onStyle1));
-ok("подложка с внутренним бликом", /inset/.test(onStyle1.shadow), onStyle1.shadow);
+const bubbleState = await page.evaluate(() => {
+  const b = document.querySelector(".pill-bubble");
+  const cs = b ? getComputedStyle(b) : null;
+  return {
+    exists: Boolean(b),
+    bg: cs ? cs.backgroundColor : null,
+    shadow: cs ? cs.boxShadow : null,
+    transform: b ? b.style.transform : null,
+    bf: cs ? cs.backdropFilter : null,
+  };
+});
+ok("P1.11: активный пункт = ОДИН общий bubble", bubbleState.exists && bubbleState.bg !== "rgba(0, 0, 0, 0)", JSON.stringify(bubbleState.bg));
+ok("P1.11: bubble с внутренним бликом, БЕЗ своего backdrop (не второй glass-слой)", /inset/.test(bubbleState.shadow) && (bubbleState.bf === "none" || bubbleState.bf === ""), `${bubbleState.shadow} bf=${bubbleState.bf}`);
+ok("P1.11: bubble спозиционирован transform'ом (не left/width-анимация)", /translateX/.test(bubbleState.transform), bubbleState.transform);
+ok("активный пункт — только цвет, без личной подложки (bubble даёт фон)", onStyle1.bg === "rgba(0, 0, 0, 0)", JSON.stringify(onStyle1));
 
 const onColor = await items.nth(0).evaluate((el) => getComputedStyle(el).color);
 ok(
@@ -231,9 +244,11 @@ await page.waitForTimeout(450);
 const pop = page.locator(".search-pop");
 ok("подвесной поиск открылся", await pop.isVisible());
 const popBox = await pop.boundingBox();
-const navBox = await nav.boundingBox();
-const gapPx = navBox.y - (popBox.y + popBox.height);
-ok("карточка НАД панелью (не перекрывает)", popBox.y + popBox.height <= navBox.y + 1, `popBottom=${(popBox.y + popBox.height).toFixed(1)} navTop=${navBox.y.toFixed(1)}`);
+/* v3.1: в search mode панель display:none — меряем от ВИРТУАЛЬНОЙ позиции
+   панели (низ вьюпорта − 10px отступа − 64px высоты пилюли). */
+const virtualNavTop = await page.evaluate(() => window.innerHeight - 10 - 64);
+const gapPx = virtualNavTop - (popBox.y + popBox.height);
+ok("карточка НАД панелью (не перекрывает)", popBox.y + popBox.height <= virtualNavTop + 1, `popBottom=${(popBox.y + popBox.height).toFixed(1)} virtualNavTop=${virtualNavTop}`);
 ok("зазор 10–15мм (38–57px)", gapPx >= 36 && gapPx <= 60, `gap=${gapPx.toFixed(1)}`);
 const focused1 = await page.evaluate(() => {
   const ae = document.activeElement;
@@ -313,11 +328,15 @@ ok(
   /^rgba\(255,\s*255,\s*255/.test(lightBg),
   lightBg
 );
-const lightLens = await page.locator(".pill-item.is-on").evaluate((el) => {
+const lightBubble = await page.locator(".pill-bubble").evaluate((el) => {
   const cs = getComputedStyle(el);
-  return cs.backgroundColor + " | " + cs.boxShadow;
+  return cs.backgroundColor + " | " + cs.boxShadow + " | transform=" + el.style.transform;
 });
-ok("светлая тема: АКТИВНЫЙ пункт со стеклянной подложкой и бликом", /inset/.test(lightLens), lightLens);
+ok(
+  "светлая тема: ОДИН общий bubble со стеклом и бликом, позиция transform'ом (P1.11)",
+  /inset/.test(lightBubble) && /translateX/.test(lightBubble),
+  lightBubble
+);
 await page.screenshot({ path: "tool-results/pill-light.png" });
 await page.evaluate(() => {
   document.documentElement.classList.add("dark");

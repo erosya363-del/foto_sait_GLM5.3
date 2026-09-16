@@ -124,12 +124,14 @@ const focusAfterTap = await page.evaluate(() => {
 });
 ok("тап по полю → фокус (клавиатура открылась)", focusAfterTap);
 
-/* Карточка НАД панелью, зазор 10–15мм (38–57px) */
+/* Карточка НАД панелью, зазор 10–15мм (38–57px).
+   v3.1: в search mode панель display:none — меряем от ВИРТУАЛЬНОЙ позиции
+   панели (низ вьюпорта − 10px − 64px высоты пилюли). */
 const geo = await page.evaluate(() => {
   const pop = document.querySelector(".search-pop")?.getBoundingClientRect();
-  const nav = document.querySelector(".pill-nav")?.getBoundingClientRect();
-  if (!pop || !nav) return null;
-  return { gap: nav.top - pop.bottom, above: pop.bottom <= nav.top + 1 };
+  if (!pop) return null;
+  const virtualNavTop = window.innerHeight - Math.max(10, 0) - 64;
+  return { gap: virtualNavTop - pop.bottom, above: pop.bottom <= virtualNavTop + 1 };
 });
 ok("карточка НАД панелью с зазором 10–15мм", geo && geo.above && geo.gap >= 36 && geo.gap <= 60, JSON.stringify(geo));
 

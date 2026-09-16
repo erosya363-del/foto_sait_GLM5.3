@@ -141,6 +141,9 @@ const searchCrumb = await page.locator('[role="navigation"][aria-label="Путь
 ok("крошка «Поиск: «sky»»", searchCrumb > 0);
 const searchNew = await page.locator("main span:has-text('NEW')").count();
 ok("NEW-бейджи в поиске", searchNew > 0);
+/* v3.1: search mode прячет панель — закрываем карточку (крестик) перед тапом по пилюле */
+await page.evaluate(() => document.querySelector(".search-pop-close")?.click());
+await page.waitForTimeout(400);
 
 console.log("── 11. Склад: пружинный сегмент-контрол (Шаг 1) ──");
 await page.locator('nav.pill-nav button:has-text("Остатки")').click();

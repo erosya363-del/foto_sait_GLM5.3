@@ -1,40 +1,6 @@
 {
-  "startedAt": "2026-09-16T21:11:24.906Z",
-  "findings": [
-    {
-      "id": "F-001",
-      "priority": "P1",
-      "section": "Нижняя навигация",
-      "error": "фон пилюли на stock отличается при том же состоянии (rgba(56, 53, 49, 0.62) vs rgba(56, 53, 49, 0.616))",
-      "cause": "разные glass-токены",
-      "effect": "разная прозрачность на страницах",
-      "solution": "единый токен",
-      "risk": "низкий",
-      "evidence": ""
-    },
-    {
-      "id": "F-002",
-      "priority": "P1",
-      "section": "Нижняя навигация",
-      "error": "фон пилюли на upload отличается при том же состоянии (rgba(56, 53, 49, 0.62) vs rgba(56, 53, 49, 0.616))",
-      "cause": "разные glass-токены",
-      "effect": "разная прозрачность на страницах",
-      "solution": "единый токен",
-      "risk": "низкий",
-      "evidence": ""
-    },
-    {
-      "id": "F-003",
-      "priority": "P1",
-      "section": "Нижняя навигация",
-      "error": "фон пилюли на admin отличается при том же состоянии (rgba(56, 53, 49, 0.62) vs rgba(56, 53, 49, 0.616))",
-      "cause": "разные glass-токены",
-      "effect": "разная прозрачность на страницах",
-      "solution": "единый токен",
-      "risk": "низкий",
-      "evidence": ""
-    }
-  ],
+  "startedAt": "2026-09-16T23:52:47.781Z",
+  "findings": [],
   "stats": {
     "sections": {
       "catalog": {
@@ -65,13 +31,11 @@
           "2 (39×36)",
           "2 (39×36)",
           "2 (39×36)",
-          "BUTTON (36×36)",
-          "BUTTON (36×36)",
           "2 (39×36)"
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 56
+        "btnCount": 54
       },
       "upload": {
         "overflowX": 0,
@@ -115,14 +79,11 @@
           "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)",
-          "Редактировать привязку фото (28×28)",
-          "Редактировать привязку фото (28×28)",
-          "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)"
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 79
+        "btnCount": 73
       }
     },
     "viewports": {
@@ -137,7 +98,7 @@
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "360x640": {
@@ -151,7 +112,7 @@
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "375x667": {
@@ -165,7 +126,7 @@
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "390x760": {
@@ -179,7 +140,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "393x852": {
@@ -193,7 +154,7 @@
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "412x915": {
@@ -205,9 +166,9 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 0,
+          "overlapped": 1,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "430x932": {
@@ -221,7 +182,7 @@
           "overflowX": 0,
           "overlapped": 1,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "768x1024": {
@@ -235,7 +196,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "820x1180": {
@@ -249,7 +210,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "1024x1366": {
@@ -263,7 +224,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "1280x800": {
@@ -277,7 +238,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "1366x768": {
@@ -291,7 +252,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "1440x900": {
@@ -305,7 +266,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "1920x1080": {
@@ -319,7 +280,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "852x393": {
@@ -333,7 +294,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       },
       "932x430": {
@@ -347,7 +308,7 @@
           "overflowX": 0,
           "overlapped": 0,
           "broken": 0,
-          "btns": 59
+          "btns": 57
         }
       }
     },
@@ -361,7 +322,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu4lj55u000vseuqepd95m2u\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu4raokr000wsejiqefuev0v\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
@@ -372,10 +333,10 @@
           "shellH": 64,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 53, 49, 0.616)",
-          "blur": "url(\"#lg-1-v646y6\")",
+          "bg": "rgba(56, 53, 49, 0.62)",
+          "blur": "blur(18px) saturate(1.55) brightness(1.05)",
           "border": "rgba(255, 248, 238, 0.19)",
-          "shadow": "rgba(0, 0, 0, 0.65) 0px 21.9736px 49.9605px -14px, rgba(255,",
+          "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
           "mainPadB": "104px",
@@ -389,7 +350,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-v646y6\")",
+          "blur": "blur(18px) saturate(1.55) brightness(1.05)",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -405,7 +366,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-v646y6\")",
+          "blur": "blur(18px) saturate(1.55) brightness(1.05)",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -421,7 +382,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-v646y6\")",
+          "blur": "blur(18px) saturate(1.55) brightness(1.05)",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
