@@ -186,8 +186,8 @@ export function ProductManager() {
     },
   });
 
-  // Товары
-  const { data: variants } = useQuery<{ items: VariantRowData[] }>({
+  // Товары (ТЗ v3.0 п.9: isLoading → skeleton сразу, пустого экрана нет)
+  const { data: variants, isLoading } = useQuery<{ items: VariantRowData[] }>({
     queryKey: ["admin-variants"],
     queryFn: async () => {
       const r = await fetch("/api/admin?view=variants");
@@ -429,15 +429,21 @@ export function ProductManager() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Список товаров ── */}
+      {/* ── Список товаров: переход → skeleton → данные (ТЗ v3.0 п.9) ── */}
       <div className="grid max-h-[44dvh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-        {(variants?.items ?? []).map((v) => (
-          <VariantItem key={v.id} v={v} onChanged={() => qc.invalidateQueries({ queryKey: ["admin-variants"] })} />
-        ))}
-        {variants && variants.items.length === 0 && (
-          <p className="col-span-full py-6 text-center text-[12.5px] text-muted-foreground">
-            Товаров пока нет — создайте первый выше
-          </p>
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-16 rounded-2xl" />)
+        ) : (
+          <>
+            {(variants?.items ?? []).map((v) => (
+              <VariantItem key={v.id} v={v} onChanged={() => qc.invalidateQueries({ queryKey: ["admin-variants"] })} />
+            ))}
+            {variants && variants.items.length === 0 && (
+              <p className="col-span-full py-6 text-center text-[12.5px] text-muted-foreground">
+                Товаров пока нет — создайте первый выше
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

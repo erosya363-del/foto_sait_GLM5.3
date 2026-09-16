@@ -11,6 +11,12 @@ export function BootSplash() {
   const [done, setDone] = useState(false);
   const [progress, setProgress] = useState(8);
 
+  /* ТЗ v3.0 п.41 (сплэш только при первом запуске) реализован БЕЗ React-состояния:
+     beforeInteractive-скрипт в layout.tsx ставит sessionStorage-флаг «skovo-booted»
+     и на повторных загрузках (F5/возврат на вкладку) вешает на <html> класс
+     boot-skip — CSS (globals.css) прячет .boot-bg с первого кадра, до гидратации.
+     Внутренние переходы SPA сплэш не показывают и раньше (монтируется один раз). */
+
   // ФИКС ПОЛОСЫ v3: при первом запуске standalone-PWA iOS раскладывает страницу
   // во вьюпорт без нижнего safe-area. Серия пересчётов вьюпорта под сплэшем —
   // к моменту появления контента вьюпорт уже правильный.

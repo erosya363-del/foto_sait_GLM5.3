@@ -212,7 +212,7 @@ export function FabricManager() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const { data: d } = useQuery<Dictionaries>({
+  const { data: d, isLoading: dictsLoading } = useQuery<Dictionaries>({
     queryKey: ["dictionaries"],
     queryFn: async () => {
       const r = await fetch("/api/dictionaries");
@@ -385,22 +385,29 @@ export function FabricManager() {
         type="search"
       />
       <div className="grid max-h-[48dvh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-        {shown.map((f) => (
-          <FabricRow
-            key={f.id}
-            f={{ id: f.id, name: f.name, colorGroup: f.colorGroup ?? null, swatchUrl: f.swatchUrl ?? null }}
-            groups={groups}
-            onChanged={() => {
-              qc.invalidateQueries({ queryKey: ["dictionaries"] });
-              qc.invalidateQueries({ queryKey: ["catalog"] });
-            }}
-            onDelete={(id, n) => setDeleting({ id, name: n })}
-          />
-        ))}
-        {shown.length === 0 && (
-          <p className="col-span-full py-6 text-center text-[12.5px] text-muted-foreground">
-            {fabrics.length === 0 ? "Пока пусто — создайте первую ткань выше" : "Ничего не найдено по запросу"}
-          </p>
+        {dictsLoading ? (
+          /* ТЗ v3.0 п.9: skeleton вместо пустого экрана при первом входе */
+          Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-16 rounded-2xl" />)
+        ) : (
+          <>
+            {shown.map((f) => (
+              <FabricRow
+                key={f.id}
+                f={{ id: f.id, name: f.name, colorGroup: f.colorGroup ?? null, swatchUrl: f.swatchUrl ?? null }}
+                groups={groups}
+                onChanged={() => {
+                  qc.invalidateQueries({ queryKey: ["dictionaries"] });
+                  qc.invalidateQueries({ queryKey: ["catalog"] });
+                }}
+                onDelete={(id, n) => setDeleting({ id, name: n })}
+              />
+            ))}
+            {shown.length === 0 && (
+              <p className="col-span-full py-6 text-center text-[12.5px] text-muted-foreground">
+                {fabrics.length === 0 ? "Пока пусто — создайте первую ткань выше" : "Ничего не найдено по запросу"}
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>

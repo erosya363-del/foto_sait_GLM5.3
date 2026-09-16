@@ -1,6 +1,40 @@
 {
-  "startedAt": "2026-09-16T17:09:06.423Z",
-  "findings": [],
+  "startedAt": "2026-09-16T21:11:24.906Z",
+  "findings": [
+    {
+      "id": "F-001",
+      "priority": "P1",
+      "section": "Нижняя навигация",
+      "error": "фон пилюли на stock отличается при том же состоянии (rgba(56, 53, 49, 0.62) vs rgba(56, 53, 49, 0.616))",
+      "cause": "разные glass-токены",
+      "effect": "разная прозрачность на страницах",
+      "solution": "единый токен",
+      "risk": "низкий",
+      "evidence": ""
+    },
+    {
+      "id": "F-002",
+      "priority": "P1",
+      "section": "Нижняя навигация",
+      "error": "фон пилюли на upload отличается при том же состоянии (rgba(56, 53, 49, 0.62) vs rgba(56, 53, 49, 0.616))",
+      "cause": "разные glass-токены",
+      "effect": "разная прозрачность на страницах",
+      "solution": "единый токен",
+      "risk": "низкий",
+      "evidence": ""
+    },
+    {
+      "id": "F-003",
+      "priority": "P1",
+      "section": "Нижняя навигация",
+      "error": "фон пилюли на admin отличается при том же состоянии (rgba(56, 53, 49, 0.62) vs rgba(56, 53, 49, 0.616))",
+      "cause": "разные glass-токены",
+      "effect": "разная прозрачность на страницах",
+      "solution": "единый токен",
+      "risk": "низкий",
+      "evidence": ""
+    }
+  ],
   "stats": {
     "sections": {
       "catalog": {
@@ -24,16 +58,16 @@
           "Тёмная (28×28)",
           "Компактный вид (36×32)",
           "Карточки (36×32)",
-          "2 (38×28)",
-          "2 (38×28)",
-          "2 (38×28)",
-          "2 (38×28)",
-          "2 (38×28)",
-          "2 (38×28)",
-          "2 (38×28)",
-          "BUTTON (27×28)",
-          "BUTTON (27×28)",
-          "2 (38×28)"
+          "2 (39×36)",
+          "2 (39×36)",
+          "2 (39×36)",
+          "2 (39×36)",
+          "2 (39×36)",
+          "2 (39×36)",
+          "2 (39×36)",
+          "BUTTON (36×36)",
+          "BUTTON (36×36)",
+          "2 (39×36)"
         ],
         "overlapped": [],
         "invisible": [],
@@ -84,13 +118,11 @@
           "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)",
-          "Редактировать привязку фото (28×28)",
-          "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)"
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 83
+        "btnCount": 79
       }
     },
     "viewports": {
@@ -145,7 +177,7 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 0,
           "broken": 0,
           "btns": 59
         }
@@ -173,7 +205,7 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 0,
           "broken": 0,
           "btns": 59
         }
@@ -321,7 +353,7 @@
     },
     "back": {},
     "offline": {
-      "bodyLen": 449,
+      "bodyLen": 383,
       "hasSplash": true,
       "title": "Склад мебели · Askona"
     },
@@ -329,7 +361,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu4cvjb90002tmwb7879fdmh\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu4lj55u000vseuqepd95m2u\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
@@ -340,10 +372,10 @@
           "shellH": 64,
           "shellW": 362,
           "radius": "999px",
-          "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-n4chz9\")",
+          "bg": "rgba(56, 53, 49, 0.616)",
+          "blur": "url(\"#lg-1-v646y6\")",
           "border": "rgba(255, 248, 238, 0.19)",
-          "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
+          "shadow": "rgba(0, 0, 0, 0.65) 0px 21.9736px 49.9605px -14px, rgba(255,",
           "cls": "pill-shell pill-active",
           "bottomInset": "10px",
           "mainPadB": "104px",
@@ -357,7 +389,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-n4chz9\")",
+          "blur": "url(\"#lg-1-v646y6\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -373,7 +405,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-n4chz9\")",
+          "blur": "url(\"#lg-1-v646y6\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",
@@ -389,7 +421,7 @@
           "shellW": 362,
           "radius": "999px",
           "bg": "rgba(56, 53, 49, 0.62)",
-          "blur": "url(\"#lg-1-n4chz9\")",
+          "blur": "url(\"#lg-1-v646y6\")",
           "border": "rgba(255, 248, 238, 0.19)",
           "shadow": "rgba(0, 0, 0, 0.65) 0px 22px 50px -14px, rgba(255, 255, 255,",
           "cls": "pill-shell pill-active",

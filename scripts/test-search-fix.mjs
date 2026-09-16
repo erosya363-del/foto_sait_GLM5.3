@@ -140,8 +140,10 @@ ok(
   `было ${headerH0}px → стало ${headerH1}px`
 );
 
-console.log("\n— 3. Печать «тре» → результаты —");
-await page.keyboard.type("локо", { delay: 60 });
+console.log("\n— 3. Печать «nova» → результаты —");
+/* v3.0: «локо» в текущей БД нет (в каталоге модели Pola/Mira/Extra Nova) —
+   ищем по живым данным; несуществующий запрос проверяется отдельным assert'ом */
+await page.keyboard.type("nova", { delay: 60 });
 await page.waitForTimeout(1600); // debounce 220мс + запрос
 const dropdownHasResults = await page.evaluate(() => {
   const pop = document.querySelector(".search-pop");
@@ -149,22 +151,39 @@ const dropdownHasResults = await page.evaluate(() => {
   const txt = pop.textContent || "";
   const rows = pop.querySelectorAll("button").length;
   /* достаточно секции с результатами и ≥1 кнопки-строки */
-  return rows >= 1 && (txt.includes("Ткани") || txt.includes("Каталог фото"));
+  return rows >= 3 && (txt.includes("Ткани") || txt.includes("Каталог фото"));
 });
 ok("дропдаун в карточке показывает результаты (Ткани/Каталог фото)", dropdownHasResults);
+/* Несуществующий запрос → честный пустой стейт (без фантомных секций) */
+await page.locator("input[data-search-input]").fill("");
+await page.keyboard.type("локо", { delay: 40 });
+await page.waitForTimeout(1300);
+const emptyState = await page.evaluate(() => {
+  const dd = document.querySelector(".search-dd");
+  const t = dd?.textContent || "";
+  return t.includes("Ничего не найдено") && !t.includes("Каталог фото");
+});
+ok("несуществующий запрос → честный «Ничего не найдено»", emptyState);
+await page.locator("input[data-search-input]").fill("");
+await page.keyboard.type("nova", { delay: 40 });
+await page.waitForTimeout(1300);
 
 console.log("\n— 4. Enter → запрос применён, каталог отфильтрован —");
 await page.keyboard.press("Enter");
 await page.waitForTimeout(900);
-/* карточка ПРЕДСМОНТИРОВАНА — закрытие = исчезновение класса .is-open */
-const popClosed = await page.evaluate(() => !document.querySelector(".search-pop.is-open"));
-ok("карточка закрылась после применения запроса", popClosed);
-/* Карточка закрыта; над панелью — плавающий чип применённого поиска с крестиком */
+/* v3.0 ТЗ п.3/5: применение запроса НЕ закрывает карточку — режим поиска
+   самостоятельный, поле остаётся (закрытие только явное: крестик/свайп/раздел).
+   Плавающий чип появляется ПОСЛЕ явного закрытия карточки. */
+const popStillOpen = await page.evaluate(() => Boolean(document.querySelector(".search-pop.is-open")));
+ok("карточка ОСТАЛАСЬ открытой после Enter (v3.0: без авто-закрытия)", popStillOpen);
+// явное закрытие → чип применённого поиска над панелью
+await page.locator(".search-pop-close").click();
+await page.waitForTimeout(500);
 const applied = await page.evaluate(() => {
   const chip = document.querySelector(".search-chip");
-  return Boolean(chip && (chip.textContent || "").includes("локо"));
+  return Boolean(chip && (chip.textContent || "").includes("nova"));
 });
-ok("над панелью плавающий чип «Поиск: «локо»» (v5)", applied);
+ok("после явного закрытия — чип «Поиск: «nova»»", applied);
 const resetBtnVisible = await page.locator(".search-chip .search-chip-x").isVisible();
 ok("крестик-сброс на чипе виден", resetBtnVisible);
 const catalogFiltered = await page.evaluate(() => {

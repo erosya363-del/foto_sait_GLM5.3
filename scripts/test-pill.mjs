@@ -263,11 +263,18 @@ const ddGeom = await page.locator(".search-pop .search-dd").evaluate((el) => {
 ok("дропдаун ВЫШЕ поля (у низа экрана)", ddGeom.ddBottom <= ddGeom.popTop + 2, JSON.stringify(ddGeom));
 // крестик закрытия карточки
 ok("крестик закрытия есть", await page.locator(".search-pop-close").isVisible());
-// листание (>30px) закрывает карточку — класс is-open снялся
+/* v3.0 ТЗ п.1/2/5: скролл БОЛЬШЕ НЕ закрывает поиск — search mode самостоятелен.
+   Раньше листание >30px закрывало карточку — именно это давало состояние
+   «клавиатура открыта, а поиск исчез» (iOS подкручивает документ при фокусе,
+   Android клэмпит scrollY при сжатии viewport). Теперь закрытие только явное. */
 await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
 await page.waitForTimeout(500);
-/* карточка предсмонтирована — закрытие = снялся класс .is-open */
-ok("листание закрыло подвесной поиск", (await page.locator(".search-pop.is-open").count()) === 0);
+ok("листание НЕ закрывает поиск (v3.0: состояние самостоятельное)",
+  (await page.locator(".search-pop.is-open").count()) === 1);
+// явное закрытие крестиком по-прежнему работает
+await page.locator(".search-pop-close").click();
+await page.waitForTimeout(400);
+ok("крестик закрыл подвесной поиск", (await page.locator(".search-pop.is-open").count()) === 0);
 
 console.log("── 8. Повторный тап «Каталог»: пульс + мгновенный верх (Шаг 2) ──");
 await items.nth(0).click(); // из остатков → в каталог (обычный переход, без пульса)

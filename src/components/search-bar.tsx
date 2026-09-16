@@ -133,12 +133,17 @@ export function SearchBar() {
     return () => window.removeEventListener("pointerdown", onDown);
   }, [searchOpen, setSearchOpen]);
 
+  /* ТЗ v3.0 п.3/5: применение запроса НЕ выходит из режима поиска.
+     Поле остаётся на экране и в фокусе — клавиатура не схлопывается,
+     пользователь может продолжить ввод или тут же исправить запрос.
+     Результаты применённого фильтра видны за карточкой; закрывается режим
+     только ЯВНО: крестик карточки, свайп вниз, Escape, тап мимо, другой раздел
+     (за выбор варианта товара отвечает портал — карточка закрывается событием
+     portal:search-close). */
   const commit = (q: string | null) => {
     if (q) recordQuery(q);
     applySearch(q);
-    setSearchOpen(false);
     setValue(q ?? "");
-    inputRef.current?.blur();
   };
 
   const hasDropdown = searchOpen;
@@ -275,6 +280,10 @@ export function SearchBar() {
                     onClick={() => {
                       applySearch(null);
                       setSearchOpen(false);
+                      /* ТЗ v3.0: выбран конкретный результат — режим поиска выполнен
+                         свою задачу, карточка закрывается (иначе она висела бы над
+                         открытой карточкой товара) */
+                      window.dispatchEvent(new CustomEvent("portal:search-close"));
                       usePortal.getState().openProduct(v.id, "catalog");
                       setValue("");
                       inputRef.current?.blur();

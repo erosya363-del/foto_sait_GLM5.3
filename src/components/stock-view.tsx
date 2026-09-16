@@ -49,27 +49,20 @@ function StockRow({ item, index }: { item: StockItemDto; index: number }) {
   return (
     <motion.div
       layout
-      className="stock-row spot rise group flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:border-[rgba(var(--brand-rgb),0.45)]"
+      /* ТЗ v3.0 п.13: порядок чтения — товар → модель/категория → цвет/размер →
+         количество → доп. параметры. Имя — крупнейший текст строки, количество
+         смещено вправо как компактный сканируемый блок; тап-зоны кнопок
+         расширены через ::after (globals.css) до ≥44px без смены геометрии. */
+      className="stock-row spot rise group flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 transition-colors hover:border-[rgba(var(--brand-rgb),0.45)]"
       style={{ animationDelay: `${Math.min(index % 24, 14) * 22}ms` }}
     >
-      {/* Количество */}
-      <span
-        className={cn(
-          "qty-badge grid h-9 w-11 shrink-0 place-items-center rounded-lg border border-border bg-secondary text-[14px] font-bold tabular",
-          qtyClass(item.qty)
-        )}
-        title={`${item.qty} шт на складе`}
-      >
-        {item.qty}
-      </span>
-
-      {/* Название и мета */}
+      {/* Название и мета — ПЕРВЫЕ в строке */}
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 truncate text-[13px] font-semibold leading-tight">
+        <p className="flex items-center gap-1.5 truncate text-[14px] font-semibold leading-tight">
           {item.name}
           {item.sale && <span className="tag-mini tag-sale shrink-0">−{item.sale.discountPercent}%</span>}
         </p>
-        <p className="flex items-center gap-1.5 truncate text-[11.5px] text-muted-foreground">
+        <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] leading-tight text-muted-foreground">
           {item.category}
           {item.size && <><span className="text-border">·</span>{item.size}</>}
           {item.feature && <><span className="text-border">·</span>{item.feature}</>}
@@ -81,13 +74,25 @@ function StockRow({ item, index }: { item: StockItemDto; index: number }) {
         </p>
       </div>
 
-      {/* Действия — на мобилке компактнее (разбор: «иконки занимают много места») */}
+      {/* Количество — компактный сканируемый блок справа */}
+      <span
+        className={cn(
+          "qty-badge grid h-10 w-12 shrink-0 place-items-center rounded-lg border border-border bg-secondary text-[15px] font-bold tabular",
+          qtyClass(item.qty)
+        )}
+        title={`${item.qty} шт на складе`}
+      >
+        {item.qty}
+      </span>
+
+      {/* Действия — на мобилке компактнее (разбор: «иконки занимают много места»);
+          тап-зоны расширены ::after до ≥44px (globals.css) */}
       <button
         type="button"
         onClick={copyName}
         title="Скопировать название"
         aria-label="Скопировать название"
-        className="hidden h-7 w-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:grid sm:h-8 sm:w-8"
+        className="hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:grid"
       >
         {copied ? <Check size={14} strokeWidth={2.5} className="text-[color:var(--brand)]" /> : <Copy size={13.5} strokeWidth={2} />}
       </button>
@@ -95,15 +100,15 @@ function StockRow({ item, index }: { item: StockItemDto; index: number }) {
         <button
           type="button"
           onClick={() => openProduct(pm.variantId, "stock")}
-          className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-[rgba(var(--brand-rgb),0.4)] bg-[color:var(--brand)]/10 px-1.5 text-[11px] font-bold text-[color:var(--brand)] transition-colors hover:bg-[color:var(--brand)]/20 sm:h-8 sm:gap-1.5 sm:px-2.5 sm:text-[11.5px]"
+          className="flex h-9 min-w-9 shrink-0 items-center justify-center gap-1 rounded-lg border border-[rgba(var(--brand-rgb),0.4)] bg-[color:var(--brand)]/10 px-1.5 text-[11px] font-bold text-[color:var(--brand)] transition-colors hover:bg-[color:var(--brand)]/20 sm:h-9 sm:gap-1.5 sm:px-2.5 sm:text-[11.5px]"
           title={`Совпадение: ${pm.variantName}`}
         >
-          <ImageIcon size={13} strokeWidth={2.3} />
+          <ImageIcon size={14} strokeWidth={2.3} />
           {pm.photoCount > 1 && <span>{pm.photoCount}</span>}
         </button>
       ) : (
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-dashed border-border text-muted-foreground/50 sm:h-8 sm:w-8" title="Фото пока нет">
-          <ImageIcon size={13} strokeWidth={2} />
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-dashed border-border text-muted-foreground/50" title="Фото пока нет">
+          <ImageIcon size={14} strokeWidth={2} />
         </span>
       )}
     </motion.div>

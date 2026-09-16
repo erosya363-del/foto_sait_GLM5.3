@@ -101,11 +101,11 @@ export function ProductView() {
               <figure
                 key={p.id}
                 className="photo-frame group rise"
-                onClick={() => openViewer(data.photos.map((ph) => ph.url), i)}
+                onClick={() => openViewer(data.photos.map((ph) => ({ url: ph.url, thumbUrl: ph.thumbUrl })), i)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") openViewer(data.photos.map((ph) => ph.url), i);
+                  if (e.key === "Enter" || e.key === " ") openViewer(data.photos.map((ph) => ({ url: ph.url, thumbUrl: ph.thumbUrl })), i);
                 }}
                 style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }}
               >

@@ -171,27 +171,71 @@ function useWowEffects() {
     };
     document.addEventListener("click", onClickTick, { passive: true });
 
+    /* ── Клавиатура (ТЗ v3.0 п.1/2/4/6): класс kb-open + высота --kb-h ──
+       ДВА механизма, т.к. платформы ведут себя по-разному:
+       • iOS Safari: layout-viewport НЕ сжимается — клавиатура ПЕРЕКРЫВАЕт его
+         снизу → kb = innerHeight − (vv.offsetTop + vv.height);
+       • Android Chrome (interactiveWidget: resizes-content): сжимается САМ
+         layout-viewport → innerHeight − vv.height ≈ 0, старый детект НЕ
+         срабатывал и пилюля ВСПЛЫВАЛА НАД клавиатурой (жалоба: на одном
+         экране клавиатура + навигация + поиск + контент). Вторая метрика —
+         падение высоты layout-viewport ниже baseline (запомненной высоты
+         без клавиатуры при той же ширине окна).
+       ВАЖНО (ТЗ п.2): геометрия клавиатуры НИЧЕГО не закрывает и не открывает —
+       search-state не зависит от focus/blur/resize. Эти события только
+       двигают --kb-h (подъём карточки поиска) и прячут пилюлю. */
     const vv = window.visualViewport;
-    const onVV = () => {
-      if (!vv) return;
-      const open = window.innerHeight - vv.height > 140;
-      document.documentElement.classList.toggle("kb-open", open);
-      /* Высота клавиатуры для .search-pop: карточка поиска «стоит» НАД панелью,
-         а при открытой клавиатуре плавно поднимается НАД клавиатурой
-         (bottom: ... + var(--kb-h)); keyboardTop = vv.offsetTop + vv.height. */
-      const kb = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
-      document.documentElement.style.setProperty("--kb-h", open ? `${Math.round(kb)}px` : "0px");
+    const docEl = document.documentElement;
+    let baseH = 0; // высота layout-viewport без клавиатуры (baseline)
+    let baseW = 0; // ширина baseline (поворот сбрасывает)
+    const isTextField = () => {
+      const el = document.activeElement as HTMLElement | null;
+      return Boolean(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable));
     };
-    vv?.addEventListener("resize", onVV);
-    vv?.addEventListener("scroll", onVV);
+    const measureKB = () => {
+      let kb = 0;
+      if (vv) {
+        // iOS: перекрытие layout-viewport клавиатурой
+        kb = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
+      }
+      // Android resizes-content: layout-viewport сжат при фокусе в поле
+      if (isTextField() && baseH > 0 && Math.abs(window.innerWidth - baseW) < 2) {
+        kb = Math.max(kb, baseH - docEl.clientHeight);
+      }
+      const open = kb > 140;
+      docEl.classList.toggle("kb-open", open);
+      docEl.style.setProperty("--kb-h", open ? `${Math.round(kb)}px` : "0px");
+      // baseline помним только БЕЗ клавиатуры и при неизменной ширине (не поворот)
+      if (!open && (baseW === 0 || Math.abs(window.innerWidth - baseW) < 2)) {
+        baseH = Math.max(baseH, docEl.clientHeight);
+        baseW = window.innerWidth;
+      }
+    };
+    const onOrient = () => {
+      baseH = 0;
+      baseW = 0;
+      measureKB();
+    };
+    measureKB();
+    vv?.addEventListener("resize", measureKB);
+    vv?.addEventListener("scroll", measureKB);
+    window.addEventListener("resize", measureKB);
+    window.addEventListener("orientationchange", onOrient);
+    document.addEventListener("focusin", measureKB);
+    document.addEventListener("focusout", measureKB);
 
     return () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("click", onClickTick);
-      vv?.removeEventListener("resize", onVV);
-      vv?.removeEventListener("scroll", onVV);
+      vv?.removeEventListener("resize", measureKB);
+      vv?.removeEventListener("scroll", measureKB);
+      window.removeEventListener("resize", measureKB);
+      window.removeEventListener("orientationchange", onOrient);
+      document.removeEventListener("focusin", measureKB);
+      document.removeEventListener("focusout", measureKB);
       document.documentElement.classList.remove("kb-open");
+      document.documentElement.style.removeProperty("--kb-h");
     };
   }, []);
 }
@@ -304,20 +348,19 @@ export function Portal() {
     window.history.replaceState(snapshot(), "");
   }, []);
 
-  // Скролл: сворачивает шапку (>6px), закрывает подвесной поиск при реальном листании
+  /* ── КОРЕНЬ КРИТИЧЕСКОГО БАГА v3.0 («клавиатура есть, а поиска нет») ──
+     Раньше листание >30px закрывало подвесной поиск. Но когда открывалась
+     клавиатура, СТРАНИЦА СКАКЛА САМА: iOS подкручивает документ, чтобы
+     показать поле в fixed-карточке, а Android (resizes-content) сжимает
+     viewport и клэмпит scrollY — scroll-событие с дельтой >30 закрывало
+     карточку, клавиатура оставалась. ТЗ п.1/2/5: search mode — САМОСТОЯТЕЛЬНОЕ
+     состояние, скролл/resize/focus/клавиатура его НЕ трогают. Скролл теперь
+     управляет только сворачиванием шапки. */
   useEffect(() => {
     let raf = 0;
-    let lastY = window.scrollY;
     const onScroll = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const y = window.scrollY;
-        setScrolled(y > 6);
-        if (Math.abs(y - lastY) > 30) {
-          lastY = y;
-          closeSearchPop();
-        }
-      });
+      raf = requestAnimationFrame(() => setScrolled(window.scrollY > 6));
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
@@ -461,16 +504,16 @@ export function Portal() {
     };
   }, [searchFabOpen]);
 
-  // Поиск применён (Enter/чип/ткань) → карточка сворачивается в кнопку на пилюле,
-  // а над панелью появляется плавающий чип «Поиск: «X»» с крестиком-сбросом
-  const appliedQueryRef = useRef<string | null>(null);
+  /* ТЗ v3.0 п.3/5: применение запроса (Enter/чип/ткань) БОЛЬШЕ НЕ закрывает
+     карточку поиска — поле остаётся на экране, пользователь может продолжить
+     ввод (клавиатура закрылась/открылась — режим жив). Плавающий чип
+     «Поиск: «X»» появляется после ЯВНОГО закрытия карточки. Выход из режима —
+     только крестик / свайп вниз / Escape / тап мимо / другой раздел. */
   useEffect(() => {
-    if (searchQuery && searchQuery !== appliedQueryRef.current) {
-      appliedQueryRef.current = searchQuery;
-      closeSearchPop();
-    }
-    if (!searchQuery) appliedQueryRef.current = null;
-  }, [searchQuery]);
+    const close = () => closeSearchPop();
+    window.addEventListener("portal:search-close", close);
+    return () => window.removeEventListener("portal:search-close", close);
+  });
 
   // ── History API: каждый новый слой/раздел — отдельная запись ─────
   // ФИКС F-001: в deps включены ВСЕ слои (cat*/searchQuery) — раньше запись

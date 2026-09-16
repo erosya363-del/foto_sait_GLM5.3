@@ -7,6 +7,11 @@ export type Warehouse = "Обухово" | "Владимир";
 export type CatalogMode = "grid" | "rows" | "large";
 export type StockMode = "compact" | "cards";
 
+/** Фото для просмотрщика (ТЗ v3.0 п.35/36): thumb показывается мгновенно,
+ *  полная версия (optimized) подгружается следом и незаметно замещает —
+ *  никакого пустого чёрного экрана и никаких мыльных 5×-зумов с thumbnail. */
+export type ViewerPhoto = { url: string; thumbUrl: string };
+
 const SS_KEY = "skovo-portal-state";
 /** Предпочтения вида — в localStorage: живут и после закрытия вкладки/браузера.
  *  Остальное (слой каталога, товар) — по-прежнему sessionStorage. */
@@ -98,7 +103,7 @@ type PortalState = {
   productFrom: "catalog" | "stock";
   saleOnly: boolean;
   filtersOpen: boolean;
-  viewerPhotos: string[];
+  viewerPhotos: ViewerPhoto[];
   viewerIndex: number;
   viewerOpen: boolean;
   /** Открыт дропдаун поиска — верхний слой для Escape */
@@ -125,7 +130,7 @@ type PortalState = {
   closeProduct: () => void;
   setSaleOnly: (v: boolean) => void;
   setFiltersOpen: (v: boolean) => void;
-  openViewer: (photos: string[], index: number) => void;
+  openViewer: (photos: ViewerPhoto[], index: number) => void;
   closeViewer: () => void;
   setViewerIndex: (i: number) => void;
   setSearchOpen: (v: boolean) => void;

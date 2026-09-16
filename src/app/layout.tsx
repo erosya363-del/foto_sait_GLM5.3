@@ -70,6 +70,16 @@ export default function RootLayout({
         <Script id="ios-viewport-nudge" strategy="beforeInteractive">
           {`(function () {
             try {
+              /* ТЗ v3.0 п.41: сплэш только при ПЕРВОМ запуске сессии. Флаг ставим
+                 до гидратации; на повторных загрузках (F5/возврат на вкладку)
+                 класс boot-skip прячет .boot-bg с первого кадра (CSS). */
+              try {
+                if (sessionStorage.getItem("skovo-booted") === "1") {
+                  document.documentElement.classList.add("boot-skip");
+                } else {
+                  sessionStorage.setItem("skovo-booted", "1");
+                }
+              } catch (e) {}
               /* ЧЁЛКА (аудит v2.6): цвет статуса = тема приложения ДО первой
                  отрисовки (next-themes хранит ключ "theme": light/dark/system) */
               var syncMeta = function () {

@@ -295,7 +295,7 @@ export function PhotoBank() {
   const [confirm, setConfirm] = useState<null | "delete" | "purgeSel" | "purgeAll">(null);
   const [editing, setEditing] = useState<string | null>(null); // id фото в редакторе привязки
 
-  const { data: photos } = useQuery<{ items: PhotoRow[] }>({
+  const { data: photos, isLoading: photosLoading } = useQuery<{ items: PhotoRow[] }>({
     queryKey: ["photobank"],
     enabled: mode === "active",
     queryFn: async () => {
@@ -305,7 +305,7 @@ export function PhotoBank() {
     },
   });
 
-  const { data: trash, refetch: refetchTrash } = useQuery<{ items: TrashItem[]; trashDays: number }>({
+  const { data: trash, isLoading: trashLoading, refetch: refetchTrash } = useQuery<{ items: TrashItem[]; trashDays: number }>({
     queryKey: ["admin-trash"],
     enabled: mode === "trash",
     queryFn: async () => {
@@ -435,6 +435,9 @@ export function PhotoBank() {
       {/* ── Активные ── */}
       {mode === "active" && (
         <div className="grid max-h-[54dvh] grid-cols-2 gap-3 overflow-y-auto overscroll-contain pr-1 sm:grid-cols-4 lg:grid-cols-5">
+          {photosLoading &&
+            /* ТЗ v3.0 п.9: skeleton вместо пустого экрана при первом входе */
+            Array.from({ length: 10 }).map((_, i) => <div key={i} className="skeleton aspect-[4/3] rounded-xl" />)}
           {photoRows.map((p) => {
             const on = selected.has(p.id);
             return (
@@ -477,7 +480,7 @@ export function PhotoBank() {
               </div>
             );
           })}
-          {photos && photoRows.length === 0 && (
+          {photos && !photosLoading && photoRows.length === 0 && (
             <p className="col-span-full py-8 text-center text-[12.5px] text-muted-foreground">
               Активных фото пока нет
             </p>
@@ -489,6 +492,9 @@ export function PhotoBank() {
       {mode === "trash" && (
         <>
           <div className="grid max-h-[54dvh] grid-cols-2 gap-3 overflow-y-auto overscroll-contain pr-1 sm:grid-cols-4 lg:grid-cols-5">
+            {trashLoading &&
+              /* ТЗ v3.0 п.9: skeleton вместо пустого экрана */
+              Array.from({ length: 10 }).map((_, i) => <div key={i} className="skeleton aspect-[4/3] rounded-xl" />)}
             {trashItems.map((p) => {
               const on = selected.has(p.id);
               return (
@@ -521,7 +527,7 @@ export function PhotoBank() {
                 </button>
               );
             })}
-            {trash && trashItems.length === 0 && (
+            {trash && !trashLoading && trashItems.length === 0 && (
               <p className="col-span-full py-8 text-center text-[12.5px] text-muted-foreground">
                 Корзина пуста — удалённые фото будут появляться здесь
               </p>
