@@ -91,3 +91,8 @@ sait_copy_2
 # SQLite WAL sidecars (сессионные, в git не нужны)
 db/custom.db-shm
 db/custom.db-wal
+
+# Бэкап-копия №4 (v3.0, >100МБ лимита GitHub — в git не кладём, живёт в public/)
+/public/sait_copy_4.tar.gz
+/download/sait_copy_4.tar.gz
+/public/uploads/optimized/sait_copy_4.tar.gz

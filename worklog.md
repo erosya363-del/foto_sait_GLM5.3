@@ -700,3 +700,21 @@ Stage Summary:
 - Фото — полноценный современный просмотрщик: зум/пан/перелист/шер/скачивание с системными шитами iOS/Android и fallback'ами; качество — optimized, не thumbnail.
 - Админка: ни одного пустого экрана; сплэш — один раз за сессию.
 - На реальном iPhone/Android проверить: pinch-жесты в Safari (touch-action:none на стейдже), системный Share Sheet с файлом, поведение --kb-h при живой клавиатуре, автоскрытие панелей.
+
+---
+Task ID: 38 (копия №4 проекта + /api/backup)
+Agent: main (Super Z)
+Task: «создаем резервную копию и сразу мне ссылку для копирования» — свежий бэкап v3.0 и рабочая ссылка на скачивание.
+
+Work Log:
+- Копия №4 собрана scripts/make-copy4.sh (состав копии №3): public/sait_copy_4.tar.gz, 125МБ (130 247 987 Б), 3300 записей, префикс sait_copy_4/ — .git (1339), .env, .zscripts, CHECKPOINT.md, skills-lock.json, src (106), prisma, db (WAL чекпоинчена), public (без старых tar), scripts, tests, skills (1536), data, agent, download. Исключены: node_modules, .next, tool-results, dot-папки агентов, *.tar.gz. gzip OK. Дубль в .next/standalone/public/ и download/. MD5 e021762d095ad1ada465bd4b8e1d8f20.
+- ДИАГНОЗ внешней раздачи: edge-шлюз (Alibaba FC) отдаёт сайт из ДЕПЛОЯ-СНИМКА проекта на момент последнего коммита (build id f_Zc8… = v3.0), а не из живого :3000: HEAD вообще 403 FCCommonError; новые после деплоя файлы статики 404 (probe, copy_4), старые 200 (logo, sw.js, copy_2 из git); динамические роуты живые, БД общая (13 items, тот же id). Рестарт restart.sh на внешнюю раздачу больше НЕ влияет.
+- РЕШЕНИЕ: новый роут src/app/api/backup/[name]/route.ts — GET, только sait_copy_<N>.tar.gz (regex-белый список), стриминг Readable.toWeb, Content-Disposition attachment, ищет файл в standalone/public, ../…/public и по абсолютному пути /home/z/my-project/public (fallback). После следующего деплоя /api/backup/sait_copy_4.tar.gz отдаст архив снаружи (роут в снапшоте + файл в копии).
+- Временный обход до деплоя: копия архива в public/uploads/optimized/ (роут /uploads/[...path] динамический) — снаружи 404: у деплоя СВОЯ файловая копия (uploads в git, но файл добавлен уже после деплоя) — подтверждает модель «деплой = снимок на коммит».
+- .gitignore: + /public/sait_copy_4.tar.gz, /download/sait_copy_4.tar.gz, /public/uploads/optimized/sait_copy_4.tar.gz (125МБ > лимита GitHub 100МБ — в git НЕ класть).
+- Локально проверено: :3000 и caddy:81 отдают /api/backup/sait_copy_4.tar.gz (200, 130247987 Б, attachment) и /uploads/optimized/… (200); 400 на bad name, 404 на отсутствующий файл; MD5 локального = отданного.
+- Коммит + push → платформа передеплоит → проверка внешней ссылки.
+
+Stage Summary:
+- Точка восстановления №4: public/sait_copy_4.tar.gz (v3.0, main + /api/backup). Восстановление: tar -xzf → папка sait_copy_4/ → bun install && bun run build.
+- Архитектура раздачи зафиксирована: внешний сайт = деплой-снимок на коммит; публикация НОВЫХ файлов снаружи = коммит (+ждать деплой), а не рестарт :3000. Это критично для будущих бэкапов и любых новых статических файлов.
