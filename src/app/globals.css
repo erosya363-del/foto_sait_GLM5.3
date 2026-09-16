@@ -1355,7 +1355,10 @@ html.kb-open .search-chip {
 }
 .field:focus {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 4px var(--focus-ring), inset 0 1px 0 var(--glass-spec);
+  /* Бирюзовое кольцо 0 0 0 4px var(--focus-ring) УБРАНО: при фокусе поля
+     ничего не должно «загораться» вокруг (жалоба владельца на обводки).
+     Осталась только смена кромки — слабая и без смены геометрии. */
+  box-shadow: inset 0 1px 0 var(--glass-spec);
   background: transparent;
 }
 /* Мобилка: поля плотнее (разбор §2: «поля занимают весь экран — неудобно») */
@@ -1451,10 +1454,20 @@ html.kb-open .search-chip {
 }
 
 /* ─── a11y / движение ────────────────────────────────────────────────────── */
+/* Клавиатурная навигация (Tab на десктопе) — контур; ПОДСВЕТКА ГЕОМЕТРИИ НЕТ:
+   border-radius: 6px здесь ломал форму ВСЕХ круглых элементов при фокусе
+   («полукруг становится квадратным» — жалоба владельца) — убран. */
 :focus-visible {
   outline: 2px solid rgba(var(--brand-rgb), 0.7);
   outline-offset: 2px;
-  border-radius: 6px;
+}
+/* Текстовые поля: браузеры матчат :focus-visible на них даже при ТАПЕ —
+   поэтому у полей единственный признак фокуса — мигающий курсор.
+   Никаких обводок/колец/смены цвета при фокусе (прямая просьба владельца). */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

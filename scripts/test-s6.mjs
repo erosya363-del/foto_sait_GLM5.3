@@ -233,6 +233,16 @@ const dd = page.locator(".search-pop .search-dd").first();
 /* П.9 ТЗ: при открытии карточки поле БЕЗ фокуса — дропдауна ещё НЕТ,
    клавиатура не вскакивает; дропдаун появится после тапа по полю */
 ok("при открытии дропдауна нет (поле не в фокусе)", !(await dd.isVisible().catch(() => false)));
+await page.waitForTimeout(400);
+/* Фокус-жалоба v2.9: снимаем БАЗОВЫЙ стиль поля (карточка открыта, фокуса НЕТ) —
+   после тапа сравним: при фокусе НИЧЕГО не должно меняться */
+const baseInp = await page
+  .locator("input[data-search-input]")
+  .first()
+  .evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { bg: cs.backgroundColor, bc: cs.borderColor, br: cs.borderRadius, ol: cs.outlineStyle, h: cs.height, w: cs.width };
+  });
 await page.locator("input[data-search-input]").first().click();
 await page.waitForTimeout(400);
 ok("дропдаун открылся после тапа по полю", await dd.isVisible());
@@ -243,10 +253,14 @@ ok("фон за дропдауном размыт", /blur/.test(ddBlur), ddBlur)
 const input = page.locator("input[data-search-input]").first(); // поле одно — в карточке над панелью
 const inpStyle = await input.evaluate((el) => {
   const cs = getComputedStyle(el);
-  return { bw: cs.borderWidth, bs: cs.borderStyle, bg: cs.backgroundColor, anim: cs.animationName };
+  return { bw: cs.borderWidth, bs: cs.borderStyle, bg: cs.backgroundColor, bc: cs.borderColor, br: cs.borderRadius, ol: cs.outlineStyle, h: cs.height, w: cs.width, anim: cs.animationName };
 });
 ok("тонкая рамка 1px", inpStyle.bw === "1px" && inpStyle.bs === "solid", JSON.stringify(inpStyle));
-ok("поле нейтральное графит-стекло (фокус = --field-strong ~0.15; палитра «Изумруд»)", Math.abs(alphaOf(inpStyle.bg) - 0.15) < 0.03, inpStyle.bg);
+/* ФОКУС = НОЛЬ ИЗМЕНЕНИЙ (прямая просьба владельца v2.9): тот же фон, кромка,
+   форма (radius), никакой обводки — единственный признак фокуса — курсор */
+ok("поле при фокусе НЕ меняет фон/кромку/форму", inpStyle.bg === baseInp.bg && inpStyle.bc === baseInp.bc && inpStyle.br === baseInp.br, JSON.stringify({ base: baseInp, focused: inpStyle }));
+ok("нет обводки при фокусе (outline none — бирюза убрана)", inpStyle.ol === "none", inpStyle.ol);
+ok("геометрия поля стабильна при фокусе", inpStyle.h === baseInp.h && inpStyle.w === baseInp.w, JSON.stringify({ base: `${baseInp.h}×${baseInp.w}`, focused: `${inpStyle.h}×${inpStyle.w}` }));
 ok("нет анимаций на поле (не мигает)", inpStyle.anim === "none", inpStyle.anim);
 ok("старая мигающая рамка .search-frame удалена", (await page.locator(".search-frame").count()) === 0);
 const chips = await page.locator(".search-pop .search-dd button").allTextContents();

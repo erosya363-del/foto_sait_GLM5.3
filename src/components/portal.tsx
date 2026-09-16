@@ -677,9 +677,16 @@ export function Portal() {
           <AnimatePresence mode="wait">
             <motion.div
               key={productId ? `product-${productId}` : view}
-              initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, filter: "blur(4px)" }}
+              /* ФИКС «ПОДЁРГИВАНИЯ» ВКЛАДОК: из анимации УБРАН filter: blur(4px).
+                 Блюр всей страницы поверх backdrop-filter-стёкол (Загрузка —
+                 гигантская стеклянная панель, Остатки/Админ — стеклянные карточки)
+                 заставлял GPU перерисовывать страницу целиком КАЖДЫЙ кадр →
+                 тяжёлые вкладки дёргались (Каталог — лёгкий, был плавным).
+                 Остались только композиторные opacity+y — то же «погружение».
+                 Выход ускорен 0.22→0.13s: меньше пустой паузы mode="wait". */
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, transition: { duration: 0.13, ease: "easeIn" } }}
               transition={{ duration: 0.22, ease: "easeOut" }}
             >
               {productId ? (

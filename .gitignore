@@ -87,3 +87,7 @@ sait_copy_2
 # Бэкап-копия №3 (146МБ > лимита GitHub 100МБ — в git не кладём, живёт в public/)
 /public/sait_copy_3.tar.gz
 /download/sait_copy_3.tar.gz
+
+# SQLite WAL sidecars (сессионные, в git не нужны)
+db/custom.db-shm
+db/custom.db-wal

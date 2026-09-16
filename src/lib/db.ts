@@ -7,7 +7,9 @@ const globalForPrisma = globalThis as unknown as {
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: ['query'],
+    /* 'query' убран: каждый SELECT лил в server.log сотни строк (564КБ за день) —
+       лишний IO в горячем пути запросов. Ошибки и предупреждения остаются. */
+    log: ['error', 'warn'],
   })
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db

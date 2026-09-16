@@ -179,13 +179,12 @@ export function SearchBar() {
           enterKeyHint="search"
           autoComplete="off"
           // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass: блюр 80px.
-          // П.10 ТЗ: при focus НИКАКИХ рамок/колец/смены геометрии — размеры
-          // (h-11, w-full) зафиксированы; живёт только слабая смена фона/кромки
-          // + мигающий курсор. transition-all ЗАПРЕЩЁН — транзионил бы
-          // унаследованный visibility (карточка открывается в кадре тапа):
-          // в первый кадр computed visibility оставался «hidden» и focus()
-          // молча отказывал.
-          className="h-11 w-full rounded-full border border-border bg-field pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] transition-[background-color,border-color] placeholder:text-muted-foreground focus:border-[var(--border-strong)] focus:bg-field-strong sm:text-[14px]"
+          // П.10 ТЗ + повторная жалоба: при focus НИЧЕГО не меняется — ни рамки,
+          // ни фона, ни цвета, ни геометрии (h-11, w-full, rounded-full зафиксированы);
+          // единственный признак фокуса — мигающий курсор. transition УБРАН совсем:
+          // транзионить больше нечего, а transition-all запрещён (транзионил бы
+          // унаследованный visibility и рвал фокус в кадре тапа).
+          className="h-11 w-full rounded-full border border-border bg-field pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] placeholder:text-muted-foreground sm:text-[14px]"
         />
         {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
         {!(value || searchQuery) && !searchOpen && (

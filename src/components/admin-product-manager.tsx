@@ -19,7 +19,10 @@ import {
 
 /**
  * «Товары» — лёгкое создание и контроль контента.
- * Верхняя карточка: мастер создания (категория → модель → ткань/размер → фото).
+ * Верхняя карточка: мастер создания — категория и модель ЗАДАЮТСЯ ОДНИМ ПОЛЕМ:
+ * можно выбрать подсказку из существующих, а можно просто вписать новую —
+ * переключатели «из списка / + новая» убраны (путали владельца: «зачем выбирать
+ * старое?»). Сервер сам создаст новые категорию/модель (quickCreateVariant).
  * Ниже: список всех товаров: переименование подписи + УДАЛЕНИЕ (мягкое:
  * товар исчезает, фото — в корзину; «Вернуть» из корзины оживляет товар).
  */
@@ -166,7 +169,12 @@ function VariantItem({ v, onChanged }: { v: VariantRowData; onChanged: () => voi
 export function ProductManager() {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [pending, setPending] = useState<null | { categoryName: string; modelName: string }>(null);
+  const [pending, setPending] = useState<null | {
+    categoryName: string;
+    modelName: string;
+    isNewCategory: boolean;
+    isNewModel: boolean;
+  }>(null);
 
   // Справочники
   const { data: d } = useQuery<Dictionaries>({
@@ -188,11 +196,11 @@ export function ProductManager() {
     },
   });
 
-  const [categoryMode, setCategoryMode] = useState<"existing" | "new">("existing");
-  const [modelMode, setModelMode] = useState<"existing" | "new">("existing");
-  const [categoryId, setCategoryId] = useState("");
+  /* ── ОДНО поле вместо переключателей «из списка / + новая» ──────────
+     Печатаем новое значение или выбираем подсказку — старый список больше
+     не заставляет себя листать. Совпадения разрешаются БЕЗ УЧЁТА РЕГИСТРА:
+     «кровати» переиспользует «Кровати», дубли не плодятся. */
   const [categoryName, setCategoryName] = useState("");
-  const [modelId, setModelId] = useState("");
   const [modelName, setModelName] = useState("");
   const [materialId, setMaterialId] = useState("");
   const [sizeId, setSizeId] = useState("");
@@ -200,14 +208,38 @@ export function ProductManager() {
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const modelsOfCategory = useMemo(
-    () => (d?.models ?? []).filter((m) => m.categoryId === categoryId && m.active),
-    [d, categoryId]
+  const activeCategories = useMemo(() => (d?.categories ?? []).filter((c) => c.active), [d]);
+  const activeModels = useMemo(() => (d?.models ?? []).filter((m) => m.active), [d]);
+
+  /** Введённая категория совпала с существующей → переиспользуем её, а не создаём дубли */
+  const matchedCategory = useMemo(() => {
+    const q = categoryName.trim().toLowerCase();
+    if (!q) return null;
+    return activeCategories.find((c) => c.name.toLowerCase() === q) ?? null;
+  }, [activeCategories, categoryName]);
+
+  /** Подсказки моделей: у совпавшей категории — её модели; пока категория не определена — все активные */
+  const modelSuggestions = useMemo(
+    () => (matchedCategory ? activeModels.filter((m) => m.categoryId === matchedCategory.id) : activeModels),
+    [activeModels, matchedCategory]
   );
 
+  /** Введённая модель совпала с существующей в этой категории → переиспользуем */
+  const matchedModel = useMemo(() => {
+    const q = modelName.trim().toLowerCase();
+    if (!q || !matchedCategory) return null;
+    return activeModels.find((m) => m.categoryId === matchedCategory.id && m.name.toLowerCase() === q) ?? null;
+  }, [activeModels, matchedCategory, modelName]);
+
+  /** Подсказки подписи — из уже заведённых товаров (Угловой, Прямой, С ПМ…) */
+  const signatureSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of variants?.items ?? []) if (it.variantName) set.add(it.variantName);
+    return [...set].sort((a, b) => a.localeCompare(b, "ru"));
+  }, [variants]);
+
   function resetForm() {
-    setCategoryMode("existing"); setCategoryId(""); setCategoryName("");
-    setModelMode("existing"); setModelId(""); setModelName("");
+    setCategoryName(""); setModelName("");
     setMaterialId(""); setSizeId(""); setVariantName("");
     setFiles([]);
     if (fileRef.current) fileRef.current.value = "";
@@ -216,13 +248,16 @@ export function ProductManager() {
   async function doCreate() {
     setBusy(true);
     try {
-      // 1) Создаём товар (категория/модель — готовые или на лету)
+      const cat = categoryName.trim();
+      const mod = modelName.trim();
+      // Совпавшие с существующими (без учёта регистра) уходят id'шниками —
+      // переиспользование; новые — именами: сервер сам их создаст
       const created = (await api({
         action: "quickCreateVariant",
-        categoryId: categoryMode === "existing" ? categoryId : "",
-        categoryName: categoryMode === "new" ? categoryName : "",
-        modelId: modelMode === "existing" ? modelId : "",
-        modelName: modelMode === "new" ? modelName : "",
+        categoryId: matchedCategory?.id ?? "",
+        categoryName: matchedCategory ? "" : cat,
+        modelId: matchedModel?.id ?? "",
+        modelName: matchedModel ? "" : mod,
         materialId,
         sizeId,
         variantName,
@@ -264,21 +299,23 @@ export function ProductManager() {
   }
 
   function submit() {
-    const cat = categoryMode === "new" ? categoryName.trim() : categoryId;
-    const mod = modelMode === "new" ? modelName.trim() : modelId;
-    if (!cat) return toast.error("Выберите или введите категорию");
-    if (!mod) return toast.error("Выберите или введите модель");
+    const cat = categoryName.trim();
+    const mod = modelName.trim();
+    if (!cat) return toast.error("Укажите категорию — выберите из подсказок или впишите новую");
+    if (!mod) return toast.error("Укажите модель — выберите из подсказок или впишите новую");
     if (files.length > 10) return toast.error("Максимум 10 фото за раз");
     setPending({
-      categoryName: categoryMode === "new" ? categoryName.trim() : (d?.categories.find((c) => c.id === categoryId)?.name ?? ""),
-      modelName: modelMode === "new" ? modelName.trim() : (d?.models.find((m) => m.id === modelId)?.name ?? ""),
+      categoryName: matchedCategory?.name ?? cat,
+      modelName: matchedModel?.name ?? mod,
+      isNewCategory: !matchedCategory,
+      isNewModel: !matchedModel,
     });
   }
 
   const whatWillHappen = pending
     ? [
-        `категория${categoryName === pending.categoryName && categoryMode === "new" ? " (создастся)" : ""}: ${pending.categoryName}`,
-        `модель: ${pending.modelName}`,
+        `категория: ${pending.categoryName}${pending.isNewCategory ? " (создастся)" : ""}`,
+        `модель: ${pending.modelName}${pending.isNewModel ? " (создастся)" : ""}`,
         files.length ? `фото: ${files.length} шт.` : "без фото (добавите позже)",
       ].join(", ")
     : "";
@@ -288,70 +325,56 @@ export function ProductManager() {
       {/* ── Мастер создания ── */}
       <div className="glass flex flex-col gap-3 rounded-2xl p-3 sm:p-4">
         <p className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Новый товар · три поля и фото
+          Новый товар · категория, модель и фото
         </p>
 
-        {/* Категория */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex gap-1">
-            {(["existing", "new"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setCategoryMode(m)}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-all active:scale-95",
-                  categoryMode === m
-                    ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--brand)]"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {m === "existing" ? "Категория из списка" : "+ Новая категория"}
-              </button>
-            ))}
-          </div>
-          {categoryMode === "existing" ? (
-            <select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setModelId(""); }} className="field cursor-pointer">
-              <option value="">Категория *</option>
-              {(d?.categories ?? []).filter((c) => c.active).map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          ) : (
-            <input value={categoryName} onChange={(e) => setCategoryName(e.target.value)} placeholder="Например: Кресла" className="field" />
-          )}
-        </div>
+        {/* Подсказки (нативный datalist): старый список доступен, но НЕ навязан —
+            можно просто вписать новое значение */}
+        <datalist id="dl-categories">
+          {activeCategories.map((c) => (
+            <option key={c.id} value={c.name} />
+          ))}
+        </datalist>
+        <datalist id="dl-models">
+          {modelSuggestions.map((m) => (
+            <option key={m.id} value={m.name} />
+          ))}
+        </datalist>
+        <datalist id="dl-signatures">
+          {signatureSuggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
 
-        {/* Модель */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex gap-1">
-            {(["existing", "new"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setModelMode(m)}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-all active:scale-95",
-                  modelMode === m
-                    ? "bg-[rgba(var(--brand-rgb),0.18)] text-[color:var(--brand)]"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {m === "existing" ? "Модель из списка" : "+ Новая модель"}
-              </button>
-            ))}
-          </div>
-          {modelMode === "existing" ? (
-            <select value={modelId} onChange={(e) => setModelId(e.target.value)} className="field cursor-pointer" disabled={!categoryId}>
-              <option value="">{categoryId ? "Модель *" : "Сначала выберите категорию"}</option>
-              {modelsOfCategory.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          ) : (
-            <input value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="Например: Ричмонд" className="field" />
-          )}
-        </div>
+        {/* Категория — одно поле: выбрать или вписать новую */}
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Категория — из списка или новая *
+          </span>
+          <input
+            value={categoryName}
+            onChange={(e) => setCategoryName(e.target.value)}
+            list="dl-categories"
+            placeholder="Например: Кровати"
+            className="field"
+            autoComplete="off"
+          />
+        </label>
+
+        {/* Модель — одно поле: выбрать или вписать новую */}
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            Модель / серия — из списка или новая *
+          </span>
+          <input
+            value={modelName}
+            onChange={(e) => setModelName(e.target.value)}
+            list="dl-models"
+            placeholder="Например: Ergomotion X"
+            className="field"
+            autoComplete="off"
+          />
+        </label>
 
         {/* Ткань / размер / подпись — по желанию */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -367,7 +390,7 @@ export function ProductManager() {
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
-          <input value={variantName} onChange={(e) => setVariantName(e.target.value)} placeholder="Подпись (напр. «Угловой»)" className="field" />
+          <input value={variantName} onChange={(e) => setVariantName(e.target.value)} list="dl-signatures" placeholder="Подпись: Угловой, Прямой, С ПМ…" className="field" />
         </div>
 
         {/* Фото */}

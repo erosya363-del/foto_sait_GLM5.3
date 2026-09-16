@@ -8,6 +8,18 @@ export const dynamic = "force-dynamic";
 const TRASH_DAYS = 30;
 const TRASH_MS = TRASH_DAYS * 24 * 3600 * 1000;
 
+/** Понятные сообщения вместо голого «Ошибка сервера»:
+ *  P2025 — запись уже удалена (устаревший список/двойной тап),
+ *  P2024/P1008 — база занята (гонка записи и чтения SQLite),
+ *  P2002 — дубликат уникального поля. Реальная ошибка идёт в лог сервера. */
+function dbErrorText(e: unknown): string {
+  const code = (e as { code?: string } | null)?.code ?? "";
+  if (code === "P2025") return "Запись уже удалена — обновите список";
+  if (code === "P2024" || code === "P1008") return "База занята — повторите через пару секунд";
+  if (code === "P2002") return "Такая запись уже существует";
+  return "Ошибка сервера";
+}
+
 /**
  * АВТООЧИСТКА корзины: фото старше 30 дней в корзине удаляются ФИЗИЧЕСКИ
  * (файлы с диска + строка в БД). Товары, удалённые >30 дней назад и у которых
@@ -148,8 +160,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ error: "Укажите view=trash, view=variants или view=photos" }, { status: 400 });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
+    console.error("[admin GET]", new Date().toISOString(), e);
+    return NextResponse.json({ error: dbErrorText(e) }, { status: 500 });
   }
 }
 
@@ -498,8 +510,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
+    console.error("[admin POST]", new Date().toISOString(), e);
+    return NextResponse.json({ error: dbErrorText(e) }, { status: 500 });
   }
 }
 
