@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import sharp from "sharp";
@@ -15,9 +15,16 @@ import { UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR } from "@/lib/paths";
  *    modelId*, materialId?, sizeId?, comment?, tagIds? («,»-join id);
  *  — вариант ищется по (категория+модель+материал+размер); если нет — создаётся;
  *  — каждый файл: sharp → optimized (до 1600px) + thumb (420px);
- *    файлы пишутся в public/uploads/{optimized,thumbs} по абсолютным путям
- *    (paths.ts — якорь DATABASE_URL, работает и в standalone);
+ *    файлы пишутся в RUNTIME-зону download/runtime/uploads/{optimized,thumbs}
+ *    по абсолютным путям (src/lib/runtime.ts — вне git и .next, переживает
+ *    деплой/rebuild); URL раздачи — /api/media/* (edge проксирует /api/*
+ *    живьём, новые фото видны снаружи сразу — см. docs/FIX_REPORT.md);
  *  — строки Photo создаются с sortOrder = max+1…, общий comment на все;
+ *  — ОТКАТ ЧАСТИЧНОЙ ЗАПИСИ: если строка БД не создалась — файлы,
+ *    записанные ЭТИМ запросом (уникальные имена — они не могли существовать
+ *    раньше), удаляются; файлы, существовавшие до POST, не трогаются;
+ *  — если вариант создан этим запросом и ни одно фото не сохранилось —
+ *    пустой вариант удаляется;
  *  — ответ: { ok, variantId, uploaded, rejected: [{ name, reason }] }.
  */
 
@@ -142,10 +149,12 @@ export async function POST(req: NextRequest) {
     let variant = await db.productVariant.findFirst({
       where: { categoryId, modelId, materialId, sizeId, deletedAt: null },
     });
+    let variantCreatedHere = false;
     if (!variant) {
       variant = await db.productVariant.create({
         data: { categoryId, modelId, materialId, sizeId },
       });
+      variantCreatedHere = true;
     }
 
     // Признаки: привязать к варианту (дубликаты отсекаем вручную — skipDuplicates
@@ -172,29 +181,41 @@ export async function POST(req: NextRequest) {
     let uploaded = 0;
 
     for (const p of prepared) {
+      const optPath = path.join(UPLOADS_OPT_DIR, p.name);
+      const thumbPath = path.join(UPLOADS_THUMB_DIR, p.thumbName);
       try {
-        await Promise.all([
-          writeFile(path.join(UPLOADS_OPT_DIR, p.name), p.optBuf),
-          writeFile(path.join(UPLOADS_THUMB_DIR, p.thumbName), p.thumbBuf),
-        ]);
+        await Promise.all([writeFile(optPath, p.optBuf), writeFile(thumbPath, p.thumbBuf)]);
         await db.photo.create({
           data: {
             variantId: variant.id,
-            url: `/uploads/optimized/${p.name}`,
-            thumbUrl: `/uploads/thumbs/${p.thumbName}`,
+            url: `/api/media/optimized/${p.name}`,
+            thumbUrl: `/api/media/thumbs/${p.thumbName}`,
             comment,
             sortOrder: sortOrder++,
           },
         });
         uploaded++;
       } catch {
+        // ОТКАТ ЧАСТИЧНОЙ ЗАПИСИ: имена p.name/p.thumbName генерируются
+        // уникально (Date.now+random) — эти файлы созданы ТОЛЬКО этой попыткой,
+        // их удаление не задевает чужие данные. Существовавшие до POST файлы
+        // не трогаются никогда.
+        await Promise.allSettled([unlink(optPath), unlink(thumbPath)]);
         rejected.push({ name: p.name, reason: "Не удалось сохранить файл" });
       }
     }
 
     if (uploaded === 0) {
+      // Вариант создан ЭТИМ запросом и остался пуст — убираем оболочку
+      // (иначе в каталоге появится пустышка; найденный ранее вариант не трогаем)
+      if (variantCreatedHere) {
+        await db.productVariantTag
+          .deleteMany({ where: { variantId: variant.id } })
+          .catch(() => {});
+        await db.productVariant.delete({ where: { id: variant.id } }).catch(() => {});
+      }
       return NextResponse.json(
-        { error: "Ни одно фото не принято", variantId: variant.id, uploaded: 0, rejected },
+        { error: "Ни одно фото не принято", uploaded: 0, rejected },
         { status: 400 }
       );
     }

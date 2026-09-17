@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import path from "path";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, unlink, writeFile } from "fs/promises";
 import sharp from "sharp";
 import { db } from "@/lib/db";
 import { UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR } from "@/lib/paths";
@@ -64,24 +64,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Не удалось обработать изображение (файл повреждён?)" }, { status: 400 });
   }
 
-  // Абсолютные пути проекта (cwd у standalone = .next/standalone — см. paths.ts)
+  // Абсолютные пути runtime-зоны (вне git и .next — см. src/lib/runtime.ts)
   await mkdir(UPLOADS_OPT_DIR, { recursive: true });
   await mkdir(UPLOADS_THUMB_DIR, { recursive: true });
 
   const name = `${randomUUID()}.webp`;
-  await writeFile(path.join(UPLOADS_OPT_DIR, name), full);
-  await writeFile(path.join(UPLOADS_THUMB_DIR, name), thumb);
+  const optPath = path.join(UPLOADS_OPT_DIR, name);
+  const thumbPath = path.join(UPLOADS_THUMB_DIR, name);
 
-  const swatchUrl = `/uploads/optimized/${name}`;
-  const thumbUrl = `/uploads/thumbs/${name}`;
+  // URL через /api/media/* — edge проксирует /api/* живьём (см. FIX_REPORT)
+  const swatchUrl = `/api/media/optimized/${name}`;
+  const thumbUrl = `/api/media/thumbs/${name}`;
 
-  // Старый файл каталога ткани (если был загружен, а не сид из /catalog/) — стереть
-  if (material.swatchUrl && material.swatchUrl.startsWith("/uploads/")) {
-    const oldThumb = material.swatchUrl.replace("/uploads/optimized/", "/uploads/thumbs/");
-    await purgePhotoFiles(material.swatchUrl, oldThumb).catch(() => {});
+  // Старый файл каталога ткани (если был загружен, а не сид из /catalog/) — стереть.
+  // Принимаем и легаси-префикс /uploads/ (старые строки БД), и текущий /api/media/
+  const oldSwatch = material.swatchUrl;
+  const isUploadedSwatch =
+    oldSwatch && (oldSwatch.startsWith("/uploads/") || oldSwatch.startsWith("/api/media/"));
+  let oldCleaned = false;
+  if (isUploadedSwatch && oldSwatch) {
+    const oldThumb = oldSwatch.includes("/thumbs/")
+      ? oldSwatch
+      : oldSwatch.replace("/optimized/", "/thumbs/");
+    oldCleaned = await purgePhotoFiles(oldSwatch, oldThumb).catch(() => false);
   }
 
-  await db.material.update({ where: { id: materialId }, data: { swatchUrl } });
+  // Пишем файлы и строку БД; при сбое — откат файлов, записанных этой попыткой
+  try {
+    await Promise.all([writeFile(optPath, full), writeFile(thumbPath, thumb)]);
+    await db.material.update({ where: { id: materialId }, data: { swatchUrl } });
+  } catch (e) {
+    await Promise.allSettled([unlink(optPath), unlink(thumbPath)]);
+    throw e;
+  }
 
-  return NextResponse.json({ ok: true, swatchUrl, thumbUrl });
+  return NextResponse.json({ ok: true, swatchUrl, thumbUrl, oldCleaned });
 }
