@@ -1,12 +1,24 @@
 // E2E Шаг 5: корзина, физическое удаление, быстрое создание товара, регресс.
 // Запуск: bash scripts/restart.sh && bun scripts/test-s5.mjs
+// СТАБИЛИЗАЦИЯ: мутирующий тест — ЗАПУСКАТЬ ТОЛЬКО ЧЕРЕЗ ИЗОЛИРОВАННУЮ СРЕДУ:
+//   bash scripts/run-isolated.sh bun scripts/test-s5.mjs
+//   (поднимает сервер на :3100 с копией production-данных; оригинал не трогается)
 import sharp from "sharp";
 import path from "path";
 import fs from "fs";
 import { execSync } from "child_process";
 
-const ROOT = "/home/z/my-project";
-const BASE = "http://localhost:3000";
+const ROOT = process.env.E2E_ROOT || "/home/z/my-project";
+const BASE = process.env.E2E_BASE || "http://localhost:3000";
+const E2E_RUNTIME = process.env.E2E_RUNTIME || path.join(ROOT, "download", "runtime");
+
+/** URL фото → путь на диске в runtime-зоне (/uploads/* легаси и /api/media/* текущие) */
+function mediaPath(url) {
+  const m = String(url).match(/^\/(?:uploads|api\/media)\/(optimized|thumbs)\/(.+)$/);
+  if (!m) throw new Error(`не media-URL: ${url}`);
+  return path.join(E2E_RUNTIME, "uploads", m[1], m[2]);
+}
+const MEDIA_OPT_RE = /^\/(?:uploads|api\/media)\/optimized\//;
 let pass = 0, fail = 0;
 const results = [];
 
@@ -114,7 +126,7 @@ catalog = await (await fetch(`${BASE}/api/catalog`)).json();
 check("фото скрылось из каталога", !catalog.items.find((i) => i.id === qc.json.variantId)?.photos.some((p) => p.id === photoA.id));
 let trash = await (await fetch(`${BASE}/api/admin?view=trash`)).json();
 check("фото в корзине, daysLeft=30", trash.items.some((p) => p.id === photoA.id && p.daysLeft === 30));
-const fileOnDisk = path.join(ROOT, "public", photoA.url);
+const fileOnDisk = mediaPath(photoA.url);
 check("файл ещё на диске (мягкость)", fs.existsSync(fileOnDisk));
 const rest = await api({ action: "restoreFromTrash", id: photoA.id });
 check("restoreFromTrash ok", rest.json.ok === true);
@@ -135,11 +147,11 @@ check("строка исчезла из корзины", !trash.items.some((p) =
 // АУДИТ v2.7: сид-фото переехали с префикса /catalog/ на конвейер /uploads/optimized
 // + /uploads/thumbs (thumbUrl==url больше нет), защита теперь по НАЛИЧИЮ имени
 // в public/catalog (см. photo-fs.isSeedFile), а не по префиксу url.
-const item2 = catalog.items.find((i) => i.photos.some((p) => p.url.startsWith("/uploads/optimized/")));
-const seedPhoto = item2.photos.find((p) => p.url.startsWith("/uploads/optimized/"));
+const item2 = catalog.items.find((i) => i.photos.some((p) => MEDIA_OPT_RE.test(p.url)));
+const seedPhoto = item2.photos.find((p) => MEDIA_OPT_RE.test(p.url));
 await fetch(`${BASE}/api/admin?photoId=${seedPhoto.id}`, { method: "DELETE" });
 const purgeSeed = await api({ action: "purgePhoto", id: seedPhoto.id });
-check("сид-фото (uploads/optimized, имя из catalog) защищено (файл остался)", purgeSeed.json.filesRemoved === false && fs.existsSync(path.join(ROOT, "public", seedPhoto.url)));
+check("сид-фото (optimized, имя из catalog) защищено (файл остался)", purgeSeed.json.filesRemoved === false && fs.existsSync(mediaPath(seedPhoto.url)));
 await api({ action: "restoreFromTrash", id: seedPhoto.id });
 
 // ────────────────────────────────────────────────────────────────
@@ -158,11 +170,11 @@ if (!up2.ok) console.log("DEBUG up2:", JSON.stringify(up2));
 const cat3 = await (await fetch(`${BASE}/api/catalog`)).json();
 const afterPhotos = cat3.items.find((i) => i.id === qc.json.variantId).photos;
 const p3 = afterPhotos.find((p) => !beforeUp.includes(p.id));
-check("новая загрузка опознана диффом", !!p3 && p3.url.startsWith("/uploads/optimized/"), JSON.stringify(p3 ?? {}));
+check("новая загрузка опознана диффом", !!p3 && MEDIA_OPT_RE.test(p3.url), JSON.stringify(p3 ?? {}));
 await fetch(`${BASE}/api/admin?photoId=${p3.id}`, { method: "DELETE" });
 const pt = await api({ action: "purgeTrash" });
 check("purgeTrash ok", pt.json.ok === true && pt.json.purged >= 1, JSON.stringify(pt.json));
-check("файл стёрт очисткой корзины", !fs.existsSync(path.join(ROOT, "public", p3.url)));
+check("файл стёрт очисткой корзины", !fs.existsSync(mediaPath(p3.url)));
 
 // ────────────────────────────────────────────────────────────────
 // 7. АВТООЧИСТКА 30 ДНЕЙ (симуляция: deletedAt = 40 дней назад)
@@ -176,7 +188,7 @@ const up3 = await (await fetch(`${BASE}/api/upload`, { method: "POST", body: fd3
 if (!up3.ok) { console.log("DEBUG up3:", JSON.stringify(up3)); }
 const cat4 = await (await fetch(`${BASE}/api/catalog`)).json();
 const item4 = cat4.items.find((i) => i.id === qc.json.variantId);
-const p4 = item4?.photos.find((p) => p.url.startsWith("/uploads/"));
+const p4 = item4?.photos.find((p) => /^\/(?:uploads|api\/media)\//.test(p.url));
 if (!p4) {
   console.log("DEBUG: вариант:", item4 ? `фото: ${item4.photos.length}` : "ОТСУТСТВУЕТ В КАТАЛОГЕ");
   const vs = (await (await fetch(`${BASE}/api/admin?view=variants`)).json()).items;
@@ -185,7 +197,7 @@ if (!p4) {
 await fetch(`${BASE}/api/admin?photoId=${p4.id}`, { method: "DELETE" });
 execSync(`python3 -c "
 import sqlite3, time
-c = sqlite3.connect('${ROOT}/db/custom.db')
+c = sqlite3.connect('${E2E_RUNTIME}/database/custom.db')
 # Prisma хранит DateTime в SQLite как INTEGER (unix ms) — иначе сравнение типов ломает lt
 old = int((time.time() - 40*86400) * 1000)
 cur = c.execute('SELECT \\"deletedAt\\" FROM photos WHERE \\"id\\"=?', ('${p4.id}',)).fetchone()
@@ -196,7 +208,7 @@ print('изменено строк:', upd.rowcount)
 "`, { stdio: "pipe" });
 const auto = await (await fetch(`${BASE}/api/admin?view=trash`)).json();
 check("автоочистка сработала (autoPurged≥1)", auto.autoPurged >= 1, `autoPurged=${auto.autoPurged}`);
-check("просроченный файл стёрт", !fs.existsSync(path.join(ROOT, "public", p4.url)));
+check("просроченный файл стёрт", !fs.existsSync(mediaPath(p4.url)));
 check("просроченное фото исчезло из корзины", !auto.items.some((p) => p.id === p4.id));
 
 // ────────────────────────────────────────────────────────────────
@@ -219,7 +231,7 @@ check("regress: главная 200", (await fetch(`${BASE}/`)).status === 200);
 const cl = await api({ action: "purgeTrash" });
 execSync(`python3 -c "
 import sqlite3
-c = sqlite3.connect('${ROOT}/db/custom.db')
+c = sqlite3.connect('${E2E_RUNTIME}/database/custom.db')
 c.execute('PRAGMA foreign_keys=ON')
 c.execute('DELETE FROM product_variants WHERE \\"id\\"=?', ('${qc.json.variantId}',))
 c.execute('DELETE FROM models WHERE \\"id\\"=?', ('${qc.json.modelId}',))

@@ -5,7 +5,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.E2E_BASE || "http://localhost:3000"; // изоляция: scripts/run-isolated.sh
 const browser = await chromium.launch();
 let fails = 0;
 

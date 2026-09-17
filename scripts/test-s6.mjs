@@ -7,7 +7,7 @@
  */
 import { chromium } from "playwright";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.E2E_BASE || "http://localhost:3000"; // изоляция: scripts/run-isolated.sh
 let passed = 0;
 let failed = 0;
 const errors = [];

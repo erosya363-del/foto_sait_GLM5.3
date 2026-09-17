@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-16T23:52:47.781Z",
+  "startedAt": "2026-09-17T12:22:00.626Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -79,11 +79,13 @@
           "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
+          "Редактировать привязку фото (28×28)",
           "Редактировать привязку фото (28×28)"
         ],
         "overlapped": [],
         "invisible": [],
-        "btnCount": 73
+        "btnCount": 77
       }
     },
     "viewports": {
@@ -101,77 +103,7 @@
           "btns": 57
         }
       },
-      "360x640": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 1,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "375x667": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 1,
-          "broken": 0,
-          "btns": 57
-        }
-      },
       "390x760": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "393x852": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 1,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "412x915": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 1,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "430x932": {
         "catalog": {
           "overflowX": 0,
           "overlapped": 0,
@@ -199,63 +131,7 @@
           "btns": 57
         }
       },
-      "820x1180": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "1024x1366": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 57
-        }
-      },
       "1280x800": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "1366x768": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "1440x900": {
         "catalog": {
           "overflowX": 0,
           "overlapped": 0,
@@ -282,34 +158,6 @@
           "broken": 0,
           "btns": 57
         }
-      },
-      "852x393": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 57
-        }
-      },
-      "932x430": {
-        "catalog": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 29
-        },
-        "stock": {
-          "overflowX": 0,
-          "overlapped": 0,
-          "broken": 0,
-          "btns": 57
-        }
       }
     },
     "back": {},
@@ -322,7 +170,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu4raokr000wsejiqefuev0v\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu5i26sk0001r4fjbjwrt9e1\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
