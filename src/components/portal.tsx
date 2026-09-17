@@ -786,7 +786,10 @@ export function Portal() {
           <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
             © 2026 Ярослав Федоренко
             <br />
-            Склад мебели · v1.4
+            {/* СТАБИЛИЗАЦИЯ: единый источник версии — next.config.ts собирает
+                её из package.json + git SHA на этапе сборки (NEXT_PUBLIC_APP_VERSION).
+                Раньше номер был захардкожен («v1.4») и расходился с реальностью. */}
+            Склад мебели · {process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}
           </p>
         </div>
       </aside>
