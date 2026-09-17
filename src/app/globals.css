@@ -904,32 +904,41 @@ html.kb-open .pill-nav {
 }
 
 /* ── PHASE2 ТЗ 2.8–2.10: NAV↔SEARCH — морф ЕДИНОГО glass-материала ──
-   Раньше searchOpen = display:none в ПЕРВЫЙ кадр (резкий обрыв).
-   Теперь: панель уходит вниз/сжимается и гаснет (240 мс), search surface
-   симметрично приезжает снизу и расширяется. visibility с задержкой —
-   элемент не ловит тапы сразу после начала fade. CSS-транзишны обратимы:
-   rapid toggle просто меняет класс — анимация реверсирует (interruptible). */
+   PHASE 2.1: переход ГОРИЗОНТАЛЬНЫЙ / shared (а не NAV вниз + SEARCH снизу).
+   Геометрия: кнопка поиска — крайний правый элемент панели (50px + 5px
+   padding controls + 14px padding nav ⇒ её центр ВСЕГДА ≈45px от правого
+   края viewport на любом телефоне). Оба слоя морфа используют ОДНУ точку:
+   • панель сжимается ВПРАВО В КНОПКУ ПОИСКА (scale к origin на кнопке);
+   • карточка поиска вырастает ИЗ ТОЙ ЖЕ ТОЧКИ (blob ≈ размер кнопки,
+     растягивается влево в полную карточку, radius 999→22px).
+   Тайминги одинаковы (260 мс, одна кривая) — материал визуально ПЕРЕТЕКАЕТ
+   из панели в поиск. CSS-транзишны обратимы: rapid toggle реверсирует. */
 .pill-nav {
+  /* origin = центр кнопки поиска — на обеих концах перехода (иначе
+     интерполяция transform при снятии класса даст скачок) */
+  transform-origin: calc(100% - 45px) 50%;
+
   transition:
-    opacity 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .pill-nav.pill-morph-out {
   opacity: 0;
 
+  /* НЕ вниз, а ВПРАВО: панель сжимается-втекает в кнопку поиска
+     (scaleX сильнее — «аккордеон» по горизонтали, scaleY мягче) */
   transform:
-    translateY(18px)
-    scale(0.9);
+    scale(0.42, 0.85);
 
   visibility: hidden;
 
   pointer-events: none;
 
   transition:
-    opacity 240ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
-    visibility 0s linear 240ms;
+    opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 260ms;
 }
 
 .pill-shell {
@@ -1384,19 +1393,26 @@ header.glass {
 
   pointer-events: none;
 
-  /* PHASE2: старт чуть ниже и мельче — surface «поднимается» из-под кромки
-     панели и расширяется до места (симметрично морфу панели) */
+  /* PHASE 2.1: старт = «капля» В ТОЧКЕ кнопки поиска (горизонтальный shared
+     morph, см. комментарий у .pill-morph-out): карточка зажата до размера
+     кнопки (scaleX ≈ 50px/ширина карточки, scaleY ≈ 52/60) у её правого
+     края, radius 999px — визуально та же капля, что кнопка/линза панели;
+     при открытии растягивается влево в полную карточку (radius 999→22). */
+  transform-origin: calc(100% - 33px) 50%;
   transform:
-    translateY(16px)
-    scale(0.96);
+    scale(0.14, 0.86);
+
+  border-radius: 999px;
 
   /* КРИТИЧНО (ТЗ v4): НЕ транзионить bottom — положение обязано ехать
      синхронно с visualViewport, а не догонять клавиатуру CSS-переходом.
-     PHASE2 ТЗ 2.10: тайминг поднят с 180 до 240 мс (окно морфа 240–300 мс). */
+     PHASE 2.1: тайминг синхронизирован с морфом панели (260 мс, одна
+     кривая) + border-radius в общем переходе (капля → карточка). */
   transition:
-    opacity 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    visibility 0s linear 240ms;
+    opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-radius 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 260ms;
 }
 
 /* Liquid Glass v4: глянец + преломление по краям на подвесной карточке поиска
@@ -1432,9 +1448,12 @@ header.glass {
     translateY(0)
     scale(1);
 
+  border-radius: 22px;
+
   transition:
     opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-radius 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 /*
@@ -1563,13 +1582,17 @@ html.kb-open .search-chip {
   pointer-events: none;
 }
 @media (min-width: 1024px) {
-  /* Десктоп: карточка поиска — по центру, ПОД шапкой (панели снизу нет) */
+  /* Десктоп: карточка поиска — по центру, ПОД шапкой (панели снизу нет).
+     PHASE 2.1: горизонтальный shared-морф мобильной панели здесь НЕ живет —
+     возвращаем центр-origin и постоянный радиус 22px (без «капли»). */
   .search-pop {
     left: 50%;
     right: auto;
     bottom: auto;
     top: calc(var(--sat) + 64px);
     width: min(600px, calc(100vw - 48px));
+    transform-origin: 50% 50%;
+    border-radius: 22px;
     transform: translateX(-50%) translateY(-10px) scale(0.98);
   }
   .search-pop.is-open {
