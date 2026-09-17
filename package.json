@@ -8,10 +8,13 @@
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "verify": "bun run typecheck && bun run lint && bun run build",
+    "verify:static": "bun run typecheck && bun run lint && bun run build",
+    "verify:e2e": "bash scripts/run-isolated.sh bun scripts/test-s4.mjs && bash scripts/run-isolated.sh bun scripts/test-s5.mjs && bash scripts/run-isolated.sh node scripts/audit-full.mjs --quick && bash scripts/run-isolated.sh node scripts/stabilize-viewport-audit.mjs",
+    "verify:runtime": "bun scripts/regression-photo-persistence.mjs && bash scripts/test-restore-roundtrip.sh",
+    "verify": "bun run verify:static && bun run verify:e2e && bun run verify:runtime",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev"
+    "db:push": "bash scripts/db-push.sh",
+    "db:migrate": "bash scripts/db-push.sh --migrate"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
