@@ -126,6 +126,23 @@
      владельца); оптика стекла, НЕ обрамление */
   --rim-warm: rgba(255, 205, 165, 0.42);
   --rim-cool: rgba(190, 220, 200, 0.3);
+  /* Жидкая капля навигации (эффект с видео): мятное выпуклое стекло,
+     перекрывающее пилюлю. Тёмная тема — светящаяся бирюза */
+  --drop-solid: rgb(84, 206, 190);
+  --drop-a: rgba(158, 242, 227, 0.98);
+  --drop-b: rgba(45, 190, 173, 0.96);
+  --drop-c: rgba(16, 128, 117, 0.98);
+  --drop-hi: rgba(255, 255, 255, 0.5);
+  --drop-rim-top: rgba(255, 255, 255, 0.55);
+  --drop-rim-bottom: rgba(6, 68, 62, 0.45);
+  --drop-ring: rgba(255, 255, 255, 0.12);
+  /* Каустики «неровного стекла» панели (статичные, искажаются #pill-uneven) */
+  --caust-1: rgba(94, 234, 212, 0.14);
+  --caust-2: rgba(255, 196, 140, 0.1);
+  --caust-3: rgba(120, 180, 255, 0.12);
+  --caust-4: rgba(255, 255, 255, 0.07);
+  --caust-blend: screen;
+  --caust-opacity: 0.6;
   /* ── P0.5 ТЗ: safe-area считается ОДИН раз, понятным способом ── */
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
@@ -203,6 +220,22 @@
   --glass-spec-strong: rgba(255, 255, 255, 0.9);
   --rim-warm: rgba(232, 196, 156, 0.5);
   --rim-cool: rgba(178, 212, 190, 0.38);
+  /* Жидкая капля навигации: светлое мятное стекло (как в видео-референсе) */
+  --drop-solid: rgb(198, 240, 233);
+  --drop-a: rgba(255, 255, 255, 0.98);
+  --drop-b: rgba(198, 244, 237, 0.96);
+  --drop-c: rgba(150, 228, 216, 0.98);
+  --drop-hi: rgba(255, 255, 255, 0.9);
+  --drop-rim-top: rgba(255, 255, 255, 0.95);
+  --drop-rim-bottom: rgba(13, 148, 136, 0.22);
+  --drop-ring: rgba(255, 255, 255, 0.55);
+  /* Каустики: мягкие цветные пятна «неровного стекла» на светлом */
+  --caust-1: rgba(20, 184, 166, 0.16);
+  --caust-2: rgba(255, 190, 130, 0.13);
+  --caust-3: rgba(130, 190, 255, 0.14);
+  --caust-4: rgba(255, 255, 255, 0.5);
+  --caust-blend: normal;
+  --caust-opacity: 0.55;
 }
 
 *,
@@ -853,6 +886,13 @@ html.boot-skip .boot-bg {
   padding: 0 14px;
   pointer-events: none;
 }
+/* Обёртка: координатное пространство капли = капсула (inset goo = padding-box) */
+.pill-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
 /* Search Mode (карточка поиска открыта) — панель скрыта ПОЛНОСТЬЮ (P1.13) */
 .pill-nav.pill-hidden {
   display: none;
@@ -864,11 +904,10 @@ html.kb-open .pill-nav {
 }
 .pill-shell {
   pointer-events: auto;
-  position: relative; /* bubble, глянец и кромка позиционируются от капсулы */
+  position: relative;
+  z-index: 1; /* капля (.pill-goo, z:3) рисуется НАД стеклом */
   display: flex;
-  margin: 0 auto;
   width: 100%;
-  max-width: 500px;
   /* Шаг 2 (v5): панель НИЖЕ — 64px вместо 76px, iOS-компактно */
   height: 64px;
   padding: 5px;
@@ -880,7 +919,12 @@ html.kb-open .pill-nav {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) brightness(1.05);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) brightness(1.05);
   border: 1px solid var(--border);
-  box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -1px 1px rgba(255, 255, 255, 0.04);
+  /* ВЫПУКЛОЕ стекло: тень снизу + внутренняя кривизна сверху/снизу */
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.04),
+    inset 0 -10px 16px -10px rgba(0, 0, 0, 0.35);
   transition: background 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
   /* Drag-to-select: движение пальца по капсуле НЕ скроллит страницу
      и не вызывает выделение текста/долгий тап-коллаут */
@@ -888,7 +932,7 @@ html.kb-open .pill-nav {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-  overflow: hidden; /* глянец/кромка/bubble не выходят за капсулу */
+  overflow: hidden; /* каустики/кромка/глянец не выходят за капсулу */
 }
 /* ГЛЯНЕЦ v4: верхний блик стекла (radial + screen) — «жидкое» стекло
    как на приложенной картинке: фон просвечивает, верх ловит свет */
@@ -932,29 +976,97 @@ html.kb-open .pill-nav {
 .light .pill-rim {
   opacity: 0.8;
 }
-/* ОДИН общий активный bubble (P1.11 ТЗ): НЕ пересоздаётся по пунктам —
-   единый элемент, позиция меняется ТОЛЬКО transform'ом (width одинаков у
-   всех табов). Без собственного backdrop-filter (иначе — второй glass-слой,
-   запрет P0.2). Иконки/подписи при движении НЕ сдвигаются (P1.12). */
+/* ── ЖИДКАЯ КАПЛЯ (эффект с видео) ──────────────────────────────
+   .pill-goo — слой с SVG-фильтром metaball (blur + alpha-контраст + atop):
+   основная капля .pill-bubble движется CSS-spring'ом, «призрак» .pill-ghost
+   отстаёт на своей rAF-пружине — фильтр растягивает между ними «шею»,
+   она перетягивается: капля ОТДЕЛЯЕТСЯ и СОБИРАЕТСЯ.
+   Слой НЕ обрезан (без overflow:hidden) — капля выпуклая, выходит за
+   границы пилюли, как в референсе. pointer-events:none — тапы проходят.
+   НЕ backdrop-filter (урок P0.2) — второго тела на Android нет. */
+.pill-goo {
+  position: absolute;
+  /* координатное пространство = padding-box капсулы: inset 1px = её рамка */
+  inset: 1px;
+  z-index: 3;
+  pointer-events: none;
+  filter: url(#pill-goo);
+  opacity: 0.84; /* «стеклянность» капли: равномерная, ПОСЛЕ фильтра */
+}
+.pill-ghost,
 .pill-bubble {
   position: absolute;
-  top: 5px;
-  bottom: 5px;
+  /* капля выше панели — выпирает, как стекло-линза в видео */
+  top: -6px;
+  bottom: -6px;
   left: 0;
   width: 0;
   border-radius: 999px;
-  background: var(--lens-bg);
-  box-shadow: inset 0 1px 0 var(--glass-spec-strong);
-  opacity: 0;
-  z-index: 0;
-  transition:
-    transform 0.45s var(--ease-spring),
-    width 0.45s var(--ease-spring),
-    opacity 0.2s ease;
+  will-change: transform;
 }
-/* Первая установка позиции — без анимации (bubble не «прилетает» с нуля) */
-.pill-bubble:not(.is-ready) {
-  transition: none;
+/* Отстающая капля: видна только в полёте (.is-live), в покое слита с основной */
+.pill-ghost {
+  z-index: 0;
+  opacity: 0;
+  background-color: var(--drop-solid);
+  background-image: linear-gradient(165deg, var(--drop-a), var(--drop-b) 58%, var(--drop-c));
+  box-shadow: inset 0 1px 1px var(--drop-rim-top);
+  transition: opacity 0.24s ease;
+}
+.pill-goo.is-live .pill-ghost {
+  opacity: 1;
+}
+/* Основная капля: выпуклое мятное стекло — блик сверху, тёмная брюшная
+   кромка, цветовой ореол (БЕЗ внешних теней — они goo-фильтром превратились
+   бы в лишние «капли»: только внутренние тени). Transform'ом управляет
+   rAF-пружина (translateX + scaleX/scaleY «тянучки») — CSS-перехода на
+   transform НЕТ, иначе он конфликтовал бы с покадровой записью */
+.pill-bubble {
+  z-index: 1;
+  opacity: 0;
+  background-color: var(--drop-solid);
+  background-image:
+    radial-gradient(120% 85% at 30% 0%, var(--drop-hi), transparent 56%),
+    linear-gradient(165deg, var(--drop-a), var(--drop-b) 58%, var(--drop-c));
+  box-shadow:
+    inset 0 1.5px 1px var(--drop-rim-top),
+    inset 0 -3px 4px var(--drop-rim-bottom),
+    inset 0 0 0 1px var(--drop-ring);
+  transition: opacity 0.2s ease;
+}
+/* «Неровное стекло» панели: цветные каустики, статично искажённые
+   #pill-uneven (turbulence+displacement) — преломление и неравномерность
+   цвета, как у толстого стекла. Слой обычный (НЕ backdrop) — расслоения нет;
+   растр каустик статичен — нулевая стоимость после первой отрисовки */
+.pill-caustic {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 65% at 12% 18%, var(--caust-1), transparent 65%),
+    radial-gradient(38% 60% at 86% 12%, var(--caust-2), transparent 65%),
+    radial-gradient(50% 70% at 68% 95%, var(--caust-3), transparent 65%),
+    radial-gradient(60% 45% at 45% 50%, var(--caust-4), transparent 70%);
+  filter: url(#pill-uneven);
+  mix-blend-mode: var(--caust-blend);
+  opacity: var(--caust-opacity);
+}
+.pill-svg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+/* Reduced motion: капля без хвоста и без пружины (функция не страдает) */
+@media (prefers-reduced-motion: reduce) {
+  .pill-ghost {
+    display: none;
+  }
+  .pill-bubble {
+    transition-duration: 0.01s, 0.01s, 0.01s;
+  }
 }
 /* Листают — стекло почти исчезает; ТЕКСТ пунктов остаётся чётким
    (без прозрачности — просьба пользователя): приглушает только активный
@@ -1004,10 +1116,10 @@ html.kb-open .pill-nav {
   font-weight: 600;
   letter-spacing: 0.01em;
 }
-/* Активный пункт (P1.11): ТОЛЬКО цвет текста/иконки — подложку даёт
-   общий bubble; фон у пункта убран (иначе — «bubble на bubble») */
+/* Активный пункт (как в видео-референсе): бирюзовый текст/иконка над каплей;
+   подложку даёт жидкая капля в goo-слое */
 .pill-item.is-on {
-  color: var(--foreground);
+  color: var(--brand-strong);
 }
 /* Нативный switch под пальцем — НАСТОЯЩАЯ хаптика на iOS (Safari 17.4+,
    включая 26.5+, где программные тики запрещены): палец тапает сам switch.
@@ -1026,11 +1138,12 @@ html.kb-open .pill-nav {
   clip-path: inset(0 round 999px);
   cursor: pointer;
 }
-/* «Линза» и вся её механика УДАЛЕНЫ (п.5 ТЗ) — см. .pill-item.is-on выше */
+/* Светлая тема: та же выпуклость стекла — мягкая нижняя внутренняя кривизна */
 .light .pill-shell {
   box-shadow:
     0 16px 40px -16px rgba(23, 42, 51, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -10px 16px -10px rgba(23, 42, 51, 0.12);
 }
 /* Шаг 2 (v5), АУДИТ v2.6: поиск — РЯД ПИЛЮЛИ: разделитель .pill-sep УДАЛЁН,
    кнопка того же размера, что табы (54px, вся высота ряда) — единая капсула */

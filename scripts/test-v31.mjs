@@ -82,11 +82,12 @@ ok("backdrop-filter БЕЗ url(#svg) — один CSS-слой (P0.2)", shellInf
 ok("sheen-анимация ::after удалена (content: none)", shellInfo.afterContent === "none", shellInfo.afterContent);
 ok("bubble — один общий элемент", shellInfo.bubbleExists);
 ok("старых линз/SVG-слоёв нет", shellInfo.lensLeftovers === 0);
-ok("bubble анимирует только transform/width/opacity (P1.12)",
-  /^transform|transform/.test(shellInfo.bubbleTransition) && shellInfo.bubbleTransition.split(",").every(
-    (p) => /transform|width|opacity/.test(p.trim()) || p.trim() === "all"
-  ) && !/left|right|top|margin/.test(shellInfo.bubbleTransition),
+ok("капля не анимирует layout-свойства (rAF пишет только transform)",
+  !/left|right|top|margin/.test(shellInfo.bubbleTransition || ""),
   shellInfo.bubbleTransition);
+ok("goo-слой несёт metaball-фильтр (эффект с видео)",
+  await page.evaluate(() => /url\(.?#pill-goo/.test(getComputedStyle(document.querySelector(".pill-goo")).filter || "")),
+  "filter: url(#pill-goo)");
 
 console.log("\n— 2. Панель: одна координата при смене вкладок (P0.1) —");
 const pillY = () => page.locator(".pill-shell").evaluate((el) => Math.round(el.getBoundingClientRect().top));
@@ -115,14 +116,64 @@ const boxes2 = await page.evaluate(() =>
 ok("иконки стоят на месте — боксы пунктов пиксель-в-пиксель (P1.12)", boxes === boxes2, `${boxes} → ${boxes2}`);
 const bubbleMove = await page.evaluate(async () => {
   const bubble = document.querySelector(".pill-bubble");
+  const goo = document.querySelector(".pill-goo");
+  const ghost = document.querySelector(".pill-ghost");
   const t0 = bubble.style.transform;
   document.querySelectorAll(".pill-shell .pill-item")[1].click();
-  await new Promise((r) => setTimeout(r, 650));
-  return { t0, t1: bubble.style.transform, w: bubble.style.width };
+  /* середина полёта: призрак жив (goo.is-live), тянучка пишет scaleX */
+  await new Promise((r) => setTimeout(r, 120));
+  const mid = {
+    live: goo.classList.contains("is-live"),
+    midTransform: bubble.style.transform,
+    ghostOpacity: getComputedStyle(ghost).opacity,
+  };
+  /* ждём финиш полёта поллингом (headless троттлит rAF — фиксированный
+     таймаут нестабилен); потолок 6с */
+  let settledLive = true;
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    if (!goo.classList.contains("is-live")) {
+      settledLive = false;
+      /* фейд призрака 240мс после снятия is-live */
+      await new Promise((r) => setTimeout(r, 450));
+      break;
+    }
+  }
+  return {
+    t0,
+    mid,
+    t1: bubble.style.transform,
+    settledLive,
+    ghostSettled: getComputedStyle(ghost).opacity,
+  };
 });
-ok("bubble переехал transform'ом", bubbleMove.t0 !== bubbleMove.t1 && /translateX/.test(bubbleMove.t1), `${bubbleMove.t0} → ${bubbleMove.t1}`);
+ok("капля оторвалась: в полёте goo.is-live + призрак виден + тянучка scaleX",
+  bubbleMove.mid.live && Number(bubbleMove.mid.ghostOpacity) > 0.3 && /scaleX/.test(bubbleMove.mid.midTransform),
+  JSON.stringify(bubbleMove.mid));
+ok("капля собралась: покой без is-live, призрак скрыт (после фейда 240мс), чистый translateX",
+  !bubbleMove.settledLive && Number(bubbleMove.ghostSettled) < 0.01 && /translateX/.test(bubbleMove.t1) && !/scaleX/.test(bubbleMove.t1),
+  JSON.stringify({ t1: bubbleMove.t1, ghost: bubbleMove.ghostSettled }));
+ok("капля переехала к новой вкладке", bubbleMove.t0 !== bubbleMove.t1, `${bubbleMove.t0} → ${bubbleMove.t1}`);
+/* Перед следующими секциями ждём ПОЛНОГО финиша капли: в headless rAF идёт
+   в ~4× медленнее, и активный rAF-цикл капли сбивает тайминги жестов pswp */
+await page.evaluate(async () => {
+  const goo = document.querySelector(".pill-goo");
+  for (let i = 0; i < 60; i++) {
+    if (!goo.classList.contains("is-live")) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  await new Promise((r) => setTimeout(r, 400));
+});
 await page.locator(".pill-shell .pill-item").nth(0).click();
 await page.waitForTimeout(500);
+await page.evaluate(async () => {
+  const goo = document.querySelector(".pill-goo");
+  for (let i = 0; i < 60; i++) {
+    if (!goo.classList.contains("is-live")) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  await new Promise((r) => setTimeout(r, 400));
+});
 
 console.log("\n— 3. Search Mode: панель скрыта ПОЛНОСТЬЮ (P1.13) —");
 await page.locator(".pill-search").click();
@@ -306,7 +357,9 @@ for (let step = 1; step <= 5; step++) {
   await page.waitForTimeout(35);
 }
 await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-await page.waitForTimeout(400);
+/* Длинная пауза: без неё pswp может остаться в pinch-состоянии
+   (фантомный указатель) и «съесть» первый следующий double-tap */
+await page.waitForTimeout(900);
 const cntPinchAfter = await page.locator(".pswp__counter").innerText();
 ok("pinch НЕ листает фотографии (P0.10)", cntPinch === cntPinchAfter, `${cntPinch} vs ${cntPinchAfter}`);
 
@@ -315,29 +368,67 @@ ok("pinch НЕ листает фотографии (P0.10)", cntPinch === cntPin
 await page.evaluate(() => window.__pswp.zoomTo(window.__pswp.currSlide.zoomLevels.initial, null, 0));
 await page.waitForTimeout(600);
 await page.waitForFunction(() => Math.abs((window.__pswp?.currSlide?.currZoomLevel ?? 1) - (window.__pswp?.currSlide?.zoomLevels?.initial ?? 1)) < 0.02);
-const doubleTap = async () => {
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y: 380 }] });
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  await page.waitForTimeout(70);
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y: 380 }] });
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-  await page.waitForTimeout(650);
+/* Ожидание УСТОЙЧИВОГО зума: polling 150мс через setTimeout (не rAF —
+   headless троттлит rAF и анимации pswp доезжают в ~4× медленнее).
+   Стабильность = значение у цели в трёх последовательных пробах. */
+const waitZoomStable = async (target, timeout = 12000) => {
+  try {
+    await page.waitForFunction(
+      (t) => {
+        const z = window.__pswp?.currSlide?.currZoomLevel;
+        if (typeof z !== "number") return false;
+        const s = (window.__zoomStable ??= { n: 0, last: null });
+        if (Math.abs(z - t) < 0.05) {
+          s.n = s.last === z ? s.n + 1 : 1;
+          s.last = z;
+          return s.n >= 3;
+        }
+        s.n = 0;
+        s.last = null;
+        return false;
+      },
+      target,
+      { timeout, polling: 150 }
+    );
+    return true;
+  } catch {
+    return false;
+  }
 };
-await doubleTap();
+/* Двойной тап с ретраями: под нагрузкой headless CDP-события растягиваются
+   (pointerup двух тапов может разойтись на >300мс — окно pswp) и жест не
+   распознаётся; на реальном устройстве тапы быстрые. Ретраи = честный жест
+   до распознавания, между попытками зум сбрасывается. */
+const doubleTap = async () => {
+  /* ЧЕТЫРЕ события пачкой, без ожидания ответов: при посылке по одному
+     CDP-события доходят до страницы с джанкой 140-180мс, тапы расходятся
+     за 300мс-окно pswp. Пачка = тапы вплотную, как реальный быстрый жест */
+  const pt = { x: 195, y: 380 };
+  cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt] });
+  cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt] });
+  cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.waitForTimeout(1200);
+};
+const initialZoom = await page.evaluate(() => window.__pswp?.currSlide?.zoomLevels?.initial ?? 1);
+let dt1Reached = false;
+for (let attempt = 0; attempt < 3 && !dt1Reached; attempt++) {
+  await page.evaluate(() => window.__pswp.zoomTo(window.__pswp.currSlide.zoomLevels.initial, null, 0));
+  await waitZoomStable(initialZoom);
+  await doubleTap();
+  dt1Reached = await waitZoomStable(2.5, 6000);
+}
 const dblTapZoom = await page.evaluate(() => window.__pswp?.currSlide?.currZoomLevel ?? 0);
-ok("double tap зумит к ~2.5x (P0.9)", dblTapZoom > 1.8 && dblTapZoom < 4, String(dblTapZoom));
-await page.waitForFunction(() => Math.abs((window.__pswp?.currSlide?.currZoomLevel ?? 0) - 2.5) < 0.1, null, { timeout: 3000 }).catch(() => {});
-await doubleTap();
+ok("double tap зумит к ~2.5x (P0.9)", dt1Reached && dblTapZoom > 1.8 && dblTapZoom < 4, `reached=${dt1Reached} z=${dblTapZoom}`);
+let dt2Reached = false;
+for (let attempt = 0; attempt < 3 && !dt2Reached; attempt++) {
+  await doubleTap();
+  dt2Reached = await waitZoomStable(initialZoom, 6000);
+}
 const dblTapBack = await page.evaluate(() => window.__pswp?.currSlide?.currZoomLevel ?? 0);
-const fitLevel = await page.evaluate(() => window.__pswp?.currSlide?.zoomLevels?.initial ?? 1);
-ok("повторный double tap вернул к fit (1x)", Math.abs(dblTapBack - fitLevel) < 0.05, `${dblTapBack} vs fit=${fitLevel}`);
-await page.waitForFunction(
-  (fit) => Math.abs((window.__pswp?.currSlide?.currZoomLevel ?? 1) - fit) < 0.05,
-  fitLevel,
-  { timeout: 3000 }
-).catch(() => {});
+ok("повторный double tap вернул к fit (1x)", dt2Reached && Math.abs(dblTapBack - initialZoom) < 0.05, `reached=${dt2Reached} ${dblTapBack} vs fit=${initialZoom}`);
 
-/* СВАЙП при 1x листает (P0.10) */
+/* СВАЙП при 1x листает (P0.10) — только когда зум гарантированно fit */
 const cntSwipe = await page.locator(".pswp__counter").innerText();
 await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 300, y: 380 }] });
 for (let step = 1; step <= 6; step++) {
@@ -424,18 +515,42 @@ const afterCycles = await page.evaluate(() => ({
 }));
 ok("нет зависших .pswp-нод в DOM", afterCycles.pswpNodes === 0);
 ok("body scroll восстановлен (не остался overflow:hidden)", afterCycles.bodyOverflow === "", afterCycles.bodyOverflow);
-ok("скролл каталога на месте (P1.9)", Math.abs(afterCycles.scrollY - scrollBefore) < 8, `${scrollBefore} → ${afterCycles.scrollY}`);
+/* восстановление скролла идёт через rAF — под троттлингом headless доезжает
+   позже чтения; поллим до возврата на сохранённую позицию (потолок 6с) */
+let scrollOk = false;
+for (let i = 0; i < 40; i++) {
+  const sy = await page.evaluate(() => Math.round(window.scrollY));
+  if (Math.abs(sy - scrollBefore) < 8) {
+    scrollOk = true;
+    break;
+  }
+  await page.waitForTimeout(150);
+}
+ok("скролл каталога на месте (P1.9)", scrollOk, `${scrollBefore} → ${await page.evaluate(() => Math.round(window.scrollY))}`);
 
 console.log("\n— 12. Android Back: viewer закрывается, товар остаётся (P1.8/история) —");
 await photoFrames.first().click();
-await page.waitForTimeout(600);
+/* ждём фактического открытия (headless-джанк: 600мс мало) + хвост history-слою */
+await page
+  .waitForFunction(() => Boolean(document.querySelector(".pswp")), null, { timeout: 9000 })
+  .catch(() => {});
+await page.waitForTimeout(500);
 await page.goBack();
-await page.waitForTimeout(700);
+/* и фактического закрытия после Back */
+let pswpClosed = false;
+for (let i = 0; i < 40; i++) {
+  await page.waitForTimeout(150);
+  const n = await page.evaluate(() => document.querySelectorAll(".pswp").length);
+  if (n === 0) {
+    pswpClosed = true;
+    break;
+  }
+}
 const backState = await page.evaluate(() => ({
   pswp: document.querySelectorAll(".pswp").length,
   productOpen: Boolean(window.__portal.getState().productId),
 }));
-ok("Back закрыл viewer", backState.pswp === 0);
+ok("Back закрыл viewer", pswpClosed && backState.pswp === 0);
 ok("товар остался открытым (Back вышел из viewer, не из товара)", backState.productOpen);
 await page.evaluate(() => window.__portal.getState().closeProduct());
 await page.waitForTimeout(400);

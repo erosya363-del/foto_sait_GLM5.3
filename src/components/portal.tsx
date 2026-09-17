@@ -242,50 +242,176 @@ export function Portal() {
   useWowEffects();
   const keyboardOpen = useKeyboardOpen(); // подписка держит singleton живым; панель прячет класс .pill-hidden + html.kb-open
 
-  /* ── Пилюля: ОДНО статичное стекло + ОДИН движущийся bubble (P0.2/P1.11) ──
-     Glass-слой один (backdrop-filter на .pill-shell, никогда не анимируется);
-     SVG-displacement-фильтр УДАЛЕН — на Android/Chromium он рендерился
-     отдельным слоем и визуально ОТРЫВАЛСЯ от панели (расслаивание стекла).
-     Активный пункт = один общий bubble, перемещаемый ТОЛЬКО transform'ом
-     (геометрия иконок неизменна). Хаптика .pill-haptic сохранена. */
+  /* ── Пилюля: ОДНО статичное стекло + ЖИДКАЯ капля (эффект с видео) ──
+     Glass-слой панели один (backdrop-filter на .pill-shell, не анимируется).
+     Активный пункт = капля .pill-bubble внутри .pill-goo — слоя с SVG-фильтром
+     metaball: капля движется spring'ом, «призрак» .pill-ghost отстаёт на своей
+     rAF-пружине, фильтр растягивает между ними «шею», она перетягивается —
+     капля ОТДЕЛЯЕТСЯ и СОБИРАЕТСЯ (как в референсе). Иконки стоят на месте.
+     ВАЖНО (P0): фильтр url() живёт на ОБЫЧНОМ слое над стеклом, а НЕ в
+     backdrop-filter — на Android/Chromium это не создаёт второго тела;
+     призрак анимируется rAF + transform, без setState в кадре. */
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const gooRef = useRef<HTMLDivElement | null>(null);
+  const ghostRef = useRef<HTMLSpanElement | null>(null);
   const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const itemRefs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
+  const prevDropX = useRef<number | null>(null);
+  const dropAnim = useRef({
+    mx: 0,
+    mv: 0,
+    gx: 0,
+    gv: 0,
+    target: 0,
+    raf: 0,
+    last: 0,
+    live: false,
+    sim: 0,
+  });
+  const reducedMotion = useRef(false);
 
-  /* Bubble: замер позиции активного пункта → translateX (без setState на
-     каждый кадр; перерасчёт только на смену вкладки/товара/ширины). */
+  /* prefers-reduced-motion: капля без хвоста-призрака (функция не страдает) */
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => {
+      reducedMotion.current = mq.matches;
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  /* Замер позиции активного пункта → капля. Читаем offsetLeft/offsetWidth
+     РАЗ за смену состояния (без reflow-петель), пишем только transform/width. */
   useEffect(() => {
     const shell = shellRef.current;
+    const goo = gooRef.current;
     const bubble = bubbleRef.current;
-    if (!shell || !bubble) return;
-    const place = () => {
+    const ghost = ghostRef.current;
+    if (!shell || !goo || !bubble || !ghost) return;
+
+    const a = dropAnim.current;
+
+    /* Один rAF-цикл на обе капли (P0.7: только transform, без setState):
+       главная капля — жёсткая пружина + «тянучка» (растяжение по скорости,
+       объём сохраняется: scaleY = 1/scaleX);
+       призрак — мягкая пружина, отстаёт: goo-фильтр тянет между ними «шею»,
+       шея перетягивается — капля ОТДЕЛЯЕТСЯ и СОБИРАЕТСЯ (референс-видео). */
+    const step = (t: number) => {
+      a.raf = 0;
+      if (!a.live) return;
+      const dt = a.last ? Math.min((t - a.last) / 1000, 0.033) : 0.016;
+      a.last = t;
+      a.sim += dt;
+      const am = (a.target - a.mx) * 180 - a.mv * 21;
+      a.mv += am * dt;
+      a.mx += a.mv * dt;
+      const ag = (a.target - a.gx) * 110 - a.gv * 14.5;
+      a.gv += ag * dt;
+      a.gx += a.gv * dt;
+      const sx = 1 + Math.min(Math.abs(a.mv) * 0.0016, 0.34);
+      const sy = 1 / sx;
+      bubble.style.transform = `translateX(${a.mx.toFixed(2)}px) scaleX(${sx.toFixed(4)}) scaleY(${sy.toFixed(4)})`;
+      ghost.style.transform = `translate3d(${a.gx.toFixed(2)}px,0,0) scale(0.82)`;
+      /* Защитный лимит сим-времени: при троттлинге rAF (фоновая вкладка,
+         системная нагрузка) пружина обязана гарантированно финишировать */
+      const settled =
+        a.sim > 0.9 ||
+        (Math.abs(a.target - a.mx) < 0.4 &&
+          Math.abs(a.mv) < 8 &&
+          Math.abs(a.target - a.gx) < 0.4 &&
+          Math.abs(a.gv) < 8);
+      if (settled) {
+        a.mx = a.gx = a.target;
+        a.mv = a.gv = 0;
+        a.last = 0;
+        a.sim = 0;
+        a.live = false;
+        bubble.style.transform = `translateX(${a.mx}px)`;
+        ghost.style.transform = `translate3d(${a.gx}px,0,0) scale(0.82)`;
+        goo.classList.remove("is-live");
+        return;
+      }
+      a.raf = requestAnimationFrame(step);
+    };
+
+    const settle = (x: number) => {
+      if (a.raf) {
+        cancelAnimationFrame(a.raf);
+        a.raf = 0;
+      }
+      a.live = false;
+      a.last = 0;
+      a.sim = 0;
+      a.mv = 0;
+      a.gv = 0;
+      a.mx = a.gx = a.target = x;
+      bubble.style.transform = `translateX(${x}px)`;
+      ghost.style.transform = `translate3d(${x}px,0,0) scale(0.82)`;
+      goo.classList.remove("is-live");
+    };
+
+    const place = (withTail: boolean) => {
       const activeKey: View | null = productId ? null : view;
       const el = activeKey ? itemRefs.current[activeKey] : null;
       if (!el) {
+        /* Открыт товар — капли нет; пружины останавливаем */
         bubble.style.opacity = "0";
+        if (a.raf) {
+          cancelAnimationFrame(a.raf);
+          a.raf = 0;
+        }
+        a.live = false;
+        goo.classList.remove("is-live");
         return;
       }
-      // offsetLeft/offsetWidth — от .pill-shell (position:relative), без reflow-петель:
-      // читаем раз за смену состояния, пишем только transform/width
-      bubble.style.width = `${el.offsetWidth}px`;
-      bubble.style.transform = `translateX(${el.offsetLeft}px)`;
+      const x = el.offsetLeft;
+      const w = el.offsetWidth;
+      bubble.style.width = `${w}px`;
       bubble.style.opacity = "1";
+      ghost.style.width = `${w}px`;
+      const from = prevDropX.current;
+      const jumped = from === null || Math.abs(from - x) < 1;
+      if (a.live) {
+        /* Полёт уже идёт (быстрая смена вкладки / поворот экрана /
+           догрузка шрифтов) — НЕ убиваем его: обновляем цель и ширины,
+           пружины сами доедут (без телепорта капли) */
+        a.target = x;
+      } else if (!withTail || jumped || reducedMotion.current) {
+        /* Первый рендер / reduced motion — капля сразу в цель */
+        settle(x);
+      } else {
+        /* Капля ОТРЫВАЕТСЯ: главная летит с текущей точки, призрак
+           стартует ТОЧНО от старой позиции и догоняет */
+        a.target = x;
+        a.live = true;
+        a.last = 0;
+        a.sim = 0;
+        a.gx = from;
+        a.gv = 0;
+        goo.classList.add("is-live");
+        ghost.style.transform = `translate3d(${a.gx}px,0,0) scale(0.82)`;
+        a.raf = requestAnimationFrame(step);
+      }
+      prevDropX.current = x;
     };
-    place();
-    // переход включается ПОСЛЕ первой установки — bubble не «прилетает» с нуля
-    const raf = requestAnimationFrame(() => bubble.classList.add("is-ready"));
-    const ro = new ResizeObserver(place);
+
+    place(true);
+    const onResize = () => place(false);
+    const ro = new ResizeObserver(onResize);
     ro.observe(shell);
-    window.addEventListener("resize", place);
+    window.addEventListener("resize", onResize);
     let fontsRaf = 0;
     document.fonts?.ready.then(() => {
-      fontsRaf = requestAnimationFrame(place);
+      fontsRaf = requestAnimationFrame(onResize);
     });
     return () => {
-      cancelAnimationFrame(raf);
       cancelAnimationFrame(fontsRaf);
+      if (a.raf) cancelAnimationFrame(a.raf);
+      a.raf = 0;
+      a.live = false;
       ro.disconnect();
-      window.removeEventListener("resize", place);
+      window.removeEventListener("resize", onResize);
     };
   }, [view, productId]);
 
@@ -719,29 +845,67 @@ export function Portal() {
         </div>
       </main>
 
-      {/* Нижняя навигация — плавающая «пилюля». ЕДИНЫЙ стеклянный объект
-          (P0.2): backdrop-filter на самой капсуле, никаких отдельных
-          движущихся glass-слоёв. Активный пункт = ОДИН bubble (P1.11),
-          движется transform'ом, иконки стоят на месте (P1.12).
-          Search Mode (P1.13) и клавиатура (P0.3) → панель скрыта (display:none,
-          без анимаций — P1.14). Хаптика .pill-haptic сохранена. */}
+      {/* SVG-фильтры эффекта (одни на приложение):
+          #pill-goo — metaball-слияние: капля отделяется/собирается при смене
+          вкладки (blur + alpha-контраст + atop — классический gooey-рецепт);
+          #pill-uneven — статичное «неровное стекло» панели (turbulence +
+          displacement по градиентам caustic-слоя). Фильтры НЕ в backdrop —
+          расслоения стекла на Android нет (урок P0.2). */}
+      <svg aria-hidden="true" focusable="false" width="0" height="0" className="pill-svg-defs">
+        <defs>
+          <filter id="pill-goo" x="-10%" y="-30%" width="120%" height="160%" colorInterpolationFilters="sRGB">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+            <feColorMatrix
+              in="blur"
+              type="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -12"
+              result="goo"
+            />
+            <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+          </filter>
+          <filter id="pill-uneven" x="-15%" y="-30%" width="130%" height="160%" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.011 0.028" numOctaves="2" seed="7" result="noise" />
+            <feDisplacementMap
+              in="SourceGraphic"
+              in2="noise"
+              scale="16"
+              xChannelSelector="R"
+              yChannelSelector="G"
+            />
+          </filter>
+        </defs>
+      </svg>
+
+      {/* Нижняя навигация — плавающая «пилюля» с жидкой каплей. ЕДИНЫЙ
+          стеклянный объект (P0.2): backdrop-filter на самой капсуле.
+          .pill-goo (метaball-капля) лежит НАД стеклом и НЕ обрезается —
+          капля выпуклая, выходит за границы пилюли, как в референсе.
+          Search Mode (P1.13) и клавиатура (P0.3) → панель скрыта
+          (display:none, без анимаций — P1.14). Хаптика .pill-haptic сохранена. */}
       <nav
         className={cn("pill-nav lg:hidden", (searchFabOpen || keyboardOpen) && "pill-hidden")}
         aria-label="Нижняя навигация"
       >
-        <div
-          ref={shellRef}
-          className={cn(
-            "pill-shell",
-            scrolled && !pillTouched && "pill-dim",
-            pillTouched && "pill-active",
-          )}
-        >
-          {/* ОДИН общий активный bubble (P1.11): не пересоздаётся по пунктам,
-              движется translateX; ширина неизменна — все табы равные */}
-          <span ref={bubbleRef} className="pill-bubble" aria-hidden="true" />
-          {/* Хроматическая кромка v4: статичное оптическое кольцо на кромке */}
-          <span className="pill-rim" aria-hidden="true" />
+        <div className="pill-wrap">
+          {/* Жидкая капля: призрак (отстающая капля) + основная капля.
+              pointer-events:none — тапы проходят к кнопкам пилюли */}
+          <div ref={gooRef} className="pill-goo" aria-hidden="true">
+            <span ref={ghostRef} className="pill-ghost" />
+            <span ref={bubbleRef} className="pill-bubble" aria-hidden="true" />
+          </div>
+          <div
+            ref={shellRef}
+            className={cn(
+              "pill-shell",
+              scrolled && !pillTouched && "pill-dim",
+              pillTouched && "pill-active",
+            )}
+          >
+            {/* «Неровное стекло»: статичные цветные каустики, искажённые
+                #pill-uneven (преломление + цветовая неравномерность стекла) */}
+            <span className="pill-caustic" aria-hidden="true" />
+            {/* Хроматическая кромка: статичное оптическое кольцо */}
+            <span className="pill-rim" aria-hidden="true" />
           {NAV.map(({ key, short, Icon }) => {
             const on = view === key && !productId;
             return (
@@ -785,7 +949,8 @@ export function Portal() {
             <input type="checkbox" {...{ switch: "" }} className="pill-haptic" aria-hidden="true" tabIndex={-1} />
             <Search size={22} strokeWidth={2.1} />
           </button>
-        </div>
+          </div>{/* /.pill-shell */}
+        </div>{/* /.pill-wrap */}
       </nav>
 
       {/* Применённый поиск — плавающий чип над панелью (шаг 3):

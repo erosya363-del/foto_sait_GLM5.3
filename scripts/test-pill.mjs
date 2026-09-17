@@ -117,12 +117,30 @@ const bubbleState = await page.evaluate(() => {
 ok("P1.11: активный пункт = ОДИН общий bubble", bubbleState.exists && bubbleState.bg !== "rgba(0, 0, 0, 0)", JSON.stringify(bubbleState.bg));
 ok("P1.11: bubble с внутренним бликом, БЕЗ своего backdrop (не второй glass-слой)", /inset/.test(bubbleState.shadow) && (bubbleState.bf === "none" || bubbleState.bf === ""), `${bubbleState.shadow} bf=${bubbleState.bf}`);
 ok("P1.11: bubble спозиционирован transform'ом (не left/width-анимация)", /translateX/.test(bubbleState.transform), bubbleState.transform);
-ok("активный пункт — только цвет, без личной подложки (bubble даёт фон)", onStyle1.bg === "rgba(0, 0, 0, 0)", JSON.stringify(onStyle1));
+
+console.log("── 2-бис. Жидкая капля: goo-слой, призрак, тянучка (эффект с видео) ──");
+const gooInfo = await page.evaluate(() => {
+  const goo = document.querySelector(".pill-goo");
+  const ghost = document.querySelector(".pill-ghost");
+  const cs = goo ? getComputedStyle(goo) : null;
+  return {
+    gooExists: Boolean(goo),
+    filter: cs ? cs.filter : null,
+    pointerEvents: cs ? cs.pointerEvents : null,
+    live: goo ? goo.classList.contains("is-live") : null,
+    ghostOpacity: ghost ? getComputedStyle(ghost).opacity : null,
+    ghostExists: Boolean(ghost),
+  };
+});
+ok("goo-слой существует и несёт metaball-фильтр url(#pill-goo)", gooInfo.gooExists && /url\(.?#pill-goo/.test(gooInfo.filter || ""), JSON.stringify(gooInfo));
+ok("goo-слой не ловит тапы (pointer-events: none)", gooInfo.pointerEvents === "none", gooInfo.pointerEvents);
+ok("призрак скрыт в покое (is-live снят, opacity 0)", gooInfo.ghostExists && gooInfo.live === false && gooInfo.ghostOpacity === "0", JSON.stringify(gooInfo));
+ok("активный пункт — только цвет, без личной подложки (капля даёт фон)", onStyle1.bg === "rgba(0, 0, 0, 0)", JSON.stringify(onStyle1));
 
 const onColor = await items.nth(0).evaluate((el) => getComputedStyle(el).color);
 ok(
-  "активный пункт чётким цветом текста (iOS-стиль, без бирюзы)",
-  onColor === "rgb(246, 244, 240)",
+  "активный пункт — бирюзовый акцент как в видео-референсе (жидкая капля)",
+  onColor === "rgb(45, 212, 191)",
   onColor
 );
 
