@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-17T12:22:00.626Z",
+  "startedAt": "2026-09-17T14:04:53.766Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -112,7 +112,7 @@
         },
         "stock": {
           "overflowX": 0,
-          "overlapped": 1,
+          "overlapped": 0,
           "broken": 0,
           "btns": 57
         }
@@ -170,7 +170,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu5i26sk0001r4fjbjwrt9e1\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu5lqhyv0001r48pvf569g8d\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {

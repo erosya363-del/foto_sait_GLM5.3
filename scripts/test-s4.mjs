@@ -1,10 +1,12 @@
 /**
  * E2E Шаг 4 + регресс Шагов 1–3 (после восстановления).
- * Запуск: node scripts/test-s4.mjs (сервер должен быть на :3000)
+ * МУТИРУЮЩИЙ ТЕСТ — только через изоляцию (fail-closed, без E2E_BASE → REFUSE):
+ *   bash scripts/run-isolated.sh bun scripts/test-s4.mjs
  */
+import "./e2e-guard.mjs";
 import { chromium } from "playwright";
 
-const BASE = process.env.E2E_BASE || "http://localhost:3000"; // изоляция: scripts/run-isolated.sh
+const BASE = process.env.E2E_BASE;
 let passed = 0;
 let failed = 0;
 const errors = [];

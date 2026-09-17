@@ -1,16 +1,22 @@
 // E2E Шаг 5: корзина, физическое удаление, быстрое создание товара, регресс.
-// Запуск: bash scripts/restart.sh && bun scripts/test-s5.mjs
-// СТАБИЛИЗАЦИЯ: мутирующий тест — ЗАПУСКАТЬ ТОЛЬКО ЧЕРЕЗ ИЗОЛИРОВАННУЮ СРЕДУ:
+// МУТИРУЮЩИЙ ТЕСТ — запуск ТОЛЬКО через изолированную среду (fail-closed):
 //   bash scripts/run-isolated.sh bun scripts/test-s5.mjs
 //   (поднимает сервер на :3100 с копией production-данных; оригинал не трогается)
+// Прямой запуск без E2E_BASE/E2E_RUNTIME → REFUSE TO RUN, а не production.
+import "./e2e-guard.mjs";
 import sharp from "sharp";
 import path from "path";
 import fs from "fs";
 import { execSync } from "child_process";
 
 const ROOT = process.env.E2E_ROOT || "/home/z/my-project";
-const BASE = process.env.E2E_BASE || "http://localhost:3000";
-const E2E_RUNTIME = process.env.E2E_RUNTIME || path.join(ROOT, "download", "runtime");
+const BASE = process.env.E2E_BASE;
+const E2E_RUNTIME = process.env.E2E_RUNTIME;
+if (!E2E_RUNTIME) {
+  console.error("✗ REFUSE TO RUN: E2E_RUNTIME не задан — фолбэк на production runtime запрещён (fail-closed)");
+  console.error("  Правильный запуск: bash scripts/run-isolated.sh bun scripts/test-s5.mjs");
+  process.exit(1);
+}
 
 /** URL фото → путь на диске в runtime-зоне (/uploads/* легаси и /api/media/* текущие) */
 function mediaPath(url) {

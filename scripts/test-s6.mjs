@@ -3,11 +3,13 @@
  * растворение при скролле, шапка-вкладка (п.8), поиск без autofocus (п.9),
  * карточки тканей, админка: Ткани/Справочники без дублей (п.3),
  * фотобанк с редактором привязки (п.4) и панелью над пилюлей.
- * Запуск: node scripts/test-s6.mjs (сервер на :3000)
+ * МУТИРУЮЩИЙ ТЕСТ (админка/фотобанк) — только через изоляцию (fail-closed):
+ *   bash scripts/run-isolated.sh bun scripts/test-s6.mjs
  */
+import "./e2e-guard.mjs";
 import { chromium } from "playwright";
 
-const BASE = process.env.E2E_BASE || "http://localhost:3000"; // изоляция: scripts/run-isolated.sh
+const BASE = process.env.E2E_BASE;
 let passed = 0;
 let failed = 0;
 const errors = [];

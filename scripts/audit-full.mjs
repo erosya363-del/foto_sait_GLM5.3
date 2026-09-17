@@ -1,7 +1,8 @@
 /**
  * ПОЛНЫЙ АУДИТ ФРОНТЕНДА (ЭТАПЫ 1–6, 14 плана стабилизации).
- * Запуск: node scripts/audit-full.mjs [--quick]
- * Сервер должен отвечать на http://localhost:3000
+ * МУТИРУЮЩИЙ ТЕСТ (секция H грузит реальные фото через API) — только через
+ * изоляцию (fail-closed, без E2E_BASE → REFUSE):
+ *   bash scripts/run-isolated.sh node scripts/audit-full.mjs [--quick]
  *
  * Проверяет:
  *  A. Сплэш: показ при старте, НЕ показ при внутренних переходах, показ при F5
@@ -15,8 +16,9 @@
  */
 import { chromium } from "playwright";
 import fs from "node:fs";
+import "./e2e-guard.mjs";
 
-const BASE = process.env.E2E_BASE || "http://localhost:3000"; // изоляция: scripts/run-isolated.sh
+const BASE = process.env.E2E_BASE;
 const QUICK = process.argv.includes("--quick");
 const out = { startedAt: new Date().toISOString(), findings: [], stats: {} };
 let fid = 0;
