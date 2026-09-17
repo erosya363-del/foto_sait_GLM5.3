@@ -782,3 +782,23 @@ Stage Summary:
 - Эффект из видео воспроизведён: капля перетекает между вкладками с отделением/сбором (metaball), панель — выпуклое неровное стекло с каустиками, активный таб бирюзовый.
 - P0-архитектура v3.1 не тронута: панель не трансформируется, клавиатура/search mode = display:none, один glass-слой (каустики — обычный слой, НЕ backdrop), rAF+refs без setState, listeners с cleanup, reduced-motion без деградации функции.
 - Коммит 3f566e3 → push (деплой-снимок обновится платформой; проверка снаружи — после деплоя).
+
+---
+Task ID: deploy-fix-1
+Agent: main (Super Z)
+Task: Пользователь: «не вышло запустить — ошибка в коде, выясни». Внешний сайт https://j1jr777qg2d0-d.space-z.ai отдавал 500 + страницу платформы «Sorry, there was a problem deploying the code».
+
+Work Log:
+- Локально dev (:3000) и bun run build проходили — ошибка только в деплое платформы
+- Воспроизвёл платформенный пайплайн: чистый git clone -> bun install -> bun run build
+- Нашёл: при сборке клона Turbopack warning «inferred your workspace root» из-за чужих lockfile/node_modules выше по дереву -> в .next/standalone НЕ создавался server.js (были только node_modules/public) -> старт-команда платформы node .next/standalone/server.js падала -> «problem deploying the code»
+- Подтвердил экспериментом: явный turbopack.root -> server.js создаётся
+- Второй дефект: на платформе нет .env -> DATABASE_URL отсутствовал -> Prisma падал на каждом запросе; добавлен фолбэк file:<cwd>/db/custom.db
+- Восстановлен случайно удалённый (uncommitted) src/app/api/upload/route.ts; остальное дерево — chmod-шум, откачен
+- Проверка на чистом клоне БЕЗ .env: build exit=0, server.js есть, GET / -> 200, /api/catalog отдаёт данные БД («Диваны», «Ника ПРО»)
+- Перезапущен dev после смены конфига: :3000 -> 200, API ок
+
+Stage Summary:
+- Коммит 0e30c86 запушен: next.config.ts (turbopack.root: process.cwd()), src/lib/db.ts (фолбэк DATABASE_URL), восстановлен upload-роут
+- Причина сбоя деплоя: Turbopack workspace-root mis-inference -> нет standalone/server.js; вторично: отсутствие DATABASE_URL на платформе
+- Ждём редеплой платформы на 0e30c86, затем проверить https://j1jr777qg2d0-d.space-z.ai
