@@ -21,7 +21,8 @@ import { PUBLIC_DIR, UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR } from "@/lib/paths";
  */
 
 function safeTarget(dir: string, url: string | null | undefined): string | null {
-  if (!url || !url.startsWith("/uploads/")) return null; // не uploads → не трогаем
+  // /uploads/ — легаси-префикс, /api/media/ — текущий (разница только в маршруте раздачи)
+  if (!url || (!url.startsWith("/uploads/") && !url.startsWith("/api/media/"))) return null;
   const file = path.resolve(dir, path.basename(url));
   if (!file.startsWith(dir + path.sep)) return null; // traversal → отказ
   return file;

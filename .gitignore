@@ -96,3 +96,20 @@ db/custom.db-wal
 /public/sait_copy_4.tar.gz
 /download/sait_copy_4.tar.gz
 /public/uploads/optimized/sait_copy_4.tar.gz
+
+# ── СТАБИЛИЗАЦИЯ: runtime-данные (БД + пользовательские фото) вне git ──
+# Live-зона: переживает откат песочницы, не выпекается в сборку, не затирается деплоем
+/download/runtime/
+/download/backups/
+# Легаси-пути runtime (файлы остаются на диске как страховка, в git не храним)
+/db/custom.db
+/db/custom.db-shm
+/db/custom.db-wal
+# Шаблон пустой схемы (0 строк) — ИСКЛЮЧЕНИЕ, это исходник
+!/db/schema-template-empty.db
+/public/uploads/
+# Резервные архивы/снапшоты проекта — приватные зоны, в git не храним
+/public/*.tar.gz
+/download/snapshots/
+/download/logs/
+*.tar.gz

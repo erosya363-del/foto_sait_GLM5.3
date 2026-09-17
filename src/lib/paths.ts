@@ -1,25 +1,24 @@
 import path from "path";
+import {
+  PROJECT_ROOT,
+  UPLOADS_OPT_DIR,
+  UPLOADS_THUMB_DIR,
+} from "@/lib/runtime";
 
 /**
- * Шаг 5, критический фикс:
- * standalone-сервер Next.js делает process.chdir(__dirname) → внутри
- * .next/standalone. Все относительные пути (public/…) при записи попадали
- * в КОПИЮ сборки и уничтожались при каждом ребилде, а статика кэширует
- * список файлов на старте — свежие загрузки не отдавались без рестарта.
+ * СТАБИЛИЗАЦИЯ: пути runtime-данных переехали в src/lib/runtime.ts
+ * (download/runtime — вне git и вне .next, см. docs/FIX_REPORT.md).
  *
- * Решение: единственный надёжный якорь корня проекта — DATABASE_URL
- * (file:/<проект>/db/custom.db), он одинаково доступен в dev и standalone.
+ * Исторический контекст (Шаг 5): standalone-сервер Next.js делает
+ * process.chdir(__dirname) → внутри .next/standalone. Все относительные пути
+ * (public/…) при записи попадали в КОПИЮ сборки и уничтожались при каждом
+ * ребилде. Якорем был DATABASE_URL; теперь якорь — явный projectRoot()
+ * из runtime.ts (устойчив к chdir) + env RUNTIME_ROOT/DATABASE_URL/UPLOADS_ROOT.
+ *
+ * Этот модуль оставлен как единая точка импорта для существующего кода.
  */
 
-export function projectRoot(): string {
-  const url = process.env.DATABASE_URL ?? "";
-  if (url.startsWith("file:")) {
-    const dbFile = url.slice("file:".length);
-    if (path.isAbsolute(dbFile)) return path.dirname(path.dirname(dbFile));
-  }
-  return process.cwd();
-}
+export { PROJECT_ROOT, UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR };
 
-export const PUBLIC_DIR = path.join(projectRoot(), "public");
-export const UPLOADS_OPT_DIR = path.join(PUBLIC_DIR, "uploads", "optimized");
-export const UPLOADS_THUMB_DIR = path.join(PUBLIC_DIR, "uploads", "thumbs");
+/** Публичная статика исходников (public/catalog — сид-фото, это КОД). */
+export const PUBLIC_DIR = path.join(PROJECT_ROOT, "public");

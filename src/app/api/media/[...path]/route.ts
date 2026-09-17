@@ -6,17 +6,18 @@ import { UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR } from "@/lib/paths";
 export const dynamic = "force-dynamic";
 
 /**
- * ЛЕГАСИ-маршрут раздачи загруженных файлов (оставлен для старых ссылок/кэша).
+ * СТАБИЛИЗАЦИЯ: раздача пользовательских фото через /api/media/*.
  *
- * История: standalone-сервер кэшировал список public-файлов на старте и делал
- * chdir в .next/standalone — свежезагруженные файлы отдавались 404 до
- * рестарта, а ребилд стирал их. Этот роут читает файлы напрямую.
+ * ПОЧЕМУ НЕ /uploads/*: edge-шлюз платформы отдаёт СТАТИКУ только из снапшота
+ * деплоя — файлы, добавленные в public/ после деплоя, снаружи 404 (проверено
+ * probe-тестом, см. docs/FIX_REPORT.md). /api/* проксируется живьём, поэтому
+ * фото, загруженные СЕЙЧАС, видны снаружи СРАЗУ и не зависят от снапшота.
  *
- * СТАБИЛИЗАЦИЯ: новые записи БД получают URL /api/media/* — этот маршрут
- * проксируется edge-шлюзом ЖИВЬЁМ (статика edge = только снапшот деплоя,
- * новые файлы /uploads/* снаружи были 404). Файлы теперь лежат в
- * download/runtime/uploads (src/lib/runtime.ts). Оба маршрута читают ОДНИ
- * и те же каталоги.
+ * Источник файлов — RUNTIME-зона (download/runtime/uploads, src/lib/runtime.ts):
+ * вне git, вне .next — ни деплой, ни rebuild не могут их затереть.
+ *
+ * URL /uploads/* сохранён как легаси-маршрут (те же каталоги), чтобы старые
+ * ссылки/письма/кэш не ломались.
  */
 
 const TYPES: Record<string, string> = {
@@ -34,7 +35,7 @@ export async function GET(
   const { path: parts } = await params;
   const rel = parts.join("/");
 
-  // Только optimized/ и thumbs/ внутри uploads — остальное отдаёт статика Next
+  // Только optimized/ и thumbs/ — никаких других файлов
   if (!rel.startsWith("optimized/") && !rel.startsWith("thumbs/")) {
     return NextResponse.json({ error: "Не найдено" }, { status: 404 });
   }
@@ -53,6 +54,7 @@ export async function GET(
       headers: {
         "Content-Type": type,
         "Content-Length": String(data.length),
+        // имена файлов уникальны (timestamp+random) и содержимое не меняется
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
