@@ -22,10 +22,10 @@ type SearchResp = {
   }>;
 };
 
-/* ── Последние запросы (аудит v2.6): только личная история, по свежести, ≤4.
+/* Последние запросы (аудит v2.6): только личная история, по свежести, ≤4.
    «Популярное» (личный топ за 7 дней + глобальные подсказки API) УДАЛЕНО —
    прямая просьба владельца: «популярное убери, последнее что искали,
-   и то не более 3-4 шт.» ── */
+   и то не более 3-4 шт.» —— */
 const LOG_KEY = "skovo-search-log";
 type SearchLog = Record<string, number[]>;
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -81,6 +81,9 @@ const PLACEHOLDER = "Ткань, модель, размер…";
  *  — дропдаун всегда один DOM-узел, секции внутри не анимируются по отдельности;
  *  — фон дропдауна полностью непрозрачный (никаких «призраков»);
  *  — результат печати применяется только по Enter/выбору (ввод не трогает страницу).
+ *
+ * PATCH v5: блюр поля + дропдауна теперь через var(--glass-blur) — iOS 26 Liquid Glass.
+ * Хардкодный 80px заменён на CSS-переменную: backdrop-blur-[var(--glass-blur)].
  */
 export function SearchBar() {
   const [value, setValue] = useState("");
@@ -125,11 +128,7 @@ export function SearchBar() {
 
   /* ТЗ v3.0 п.3/5: применение запроса НЕ выходит из режима поиска.
      Поле остаётся на экране и в фокусе — клавиатура не схлопывается,
-     пользователь может продолжить ввод или тут же исправить запрос.
-     Результаты применённого фильтра видны за карточкой; закрывается режим
-     только ЯВНО: крестик карточки, свайп вниз, Escape, тап мимо, другой раздел
-     (за выбор варианта товара отвечает портал — карточка закрывается событием
-     portal:search-close). */
+     пользователь может продолжить ввод или тут же исправить запрос. */
   const commit = (q: string | null) => {
     if (q) recordQuery(q);
     applySearch(q);
@@ -147,7 +146,10 @@ export function SearchBar() {
   return (
     <div className="relative">
       {/* Поле: серое, полупрозрачное (80%), тонкая чёткая рамка — никаких
-          анимированных/мигающих рамок (просьба пользователя) */}
+          анимированных/мигающих рамок (просьба пользователя)
+
+          PATCH v5: backdrop-blur-[var(--glass-blur)] — теперь через CSS-переменную
+          (iOS 26: 40px вместо старых 80px). */}
       <div className="relative">
         <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 z-[1] -translate-y-1/2 text-muted-foreground" />
         <input
@@ -178,13 +180,7 @@ export function SearchBar() {
           aria-label="Единый поиск: ткань, модель, размер"
           enterKeyHint="search"
           autoComplete="off"
-          // 16px на мобильных — iOS не зумит поле; капсула Liquid Glass: блюр 80px.
-          // П.10 ТЗ + повторная жалоба: при focus НИЧЕГО не меняется — ни рамки,
-          // ни фона, ни цвета, ни геометрии (h-11, w-full, rounded-full зафиксированы);
-          // единственный признак фокуса — мигающий курсор. transition УБРАН совсем:
-          // транзионить больше нечего, а transition-all запрещён (транзионил бы
-          // унаследованный visibility и рвал фокус в кадре тапа).
-          className="h-11 w-full rounded-full border border-border bg-field pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[80px] placeholder:text-muted-foreground sm:text-[14px]"
+          className="h-11 w-full rounded-full border border-border bg-field pl-10 pr-10 text-[16px] font-medium text-foreground shadow-[inset_0_1px_0_var(--glass-spec)] outline-none backdrop-blur-[var(--glass-blur)] placeholder:text-muted-foreground sm:text-[14px]"
         />
         {/* Подсказка «/» — только десктоп, пока поле пустое и не открыто */}
         {!(value || searchQuery) && !searchOpen && (
@@ -212,9 +208,11 @@ export function SearchBar() {
           без внутренней анимации секций. Геометрия (.search-dd) в globals.css:
           на мобиле дропдаун открывается ВСЕГДА ВВЕРХ от поля (ТЗ v4 п.22 —
           карточка стоит над клавиатурой, вниз результаты попали бы под неё);
-          на десктопе карточка у шапки — дропдаун вниз (media-блок). */}
+          на десктопе карточка у шапки — дропдаун вниз (media-блок).
+
+          PATCH v5: backdrop-blur-[var(--glass-blur)] — iOS 26 Liquid Glass. */}
       {hasDropdown && (
-        <div className="search-dd rounded-2xl border border-border bg-[var(--glass-strong)] p-2.5 shadow-2xl shadow-black/25 backdrop-blur-[80px]">
+        <div className="search-dd rounded-2xl border border-border bg-[var(--glass-strong)] p-2.5 shadow-2xl shadow-black/25 backdrop-blur-[var(--glass-blur)]">
           {!debounced && personal.length > 0 && (
             <>
               <p className="px-1.5 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
