@@ -30,14 +30,18 @@ snapshot_counts() { # $1 = runtime dir → "photos|variants|categories"
       .then(([a,b,c]) => { console.log(a + '|' + b + '|' + c); return p.\$disconnect(); });
   "
 }
-dir_md5() { (cd "$1" && find uploads database -type f -exec md5sum {} \; 2>/dev/null | sort -k2 | md5sum | cut -d' ' -f1); }
+uploads_md5() { (cd "$1" && find uploads -type f -exec md5sum {} \; 2>/dev/null | sort -k2 | md5sum | cut -d' ' -f1); }
+# ПРАВКА v2: БД после VACUUM INTO отличается БАЙТАМИ при идентичном содержимом
+# (компакция/перепаковка страниц — это и есть цель атомарного снапшота).
+# Поэтому: uploads сравниваются побайтово, БД — по счётчикам + integrity +
+# fail-closed сверке manifest внутри самого restore (шаг [5/7] ниже).
 
 echo "── [1/7] Копия production → fixture"
 rm -rf "$FIXTURE" && mkdir -p "$FIXTURE"
 cp -a "$PROD/." "$FIXTURE/"
 BEFORE_COUNTS=$(snapshot_counts "$FIXTURE")
-BEFORE_MD5=$(dir_md5 "$FIXTURE")
-echo "   состояние: $BEFORE_COUNTS, md5=$BEFORE_MD5"
+BEFORE_UPLOADS_MD5=$(uploads_md5 "$FIXTURE")
+echo "   состояние: $BEFORE_COUNTS, uploads_md5=$BEFORE_UPLOADS_MD5"
 
 echo "── [2/7] Бэкап копии"
 RUNTIME_ROOT="$FIXTURE" bash scripts/backup-runtime.sh "restore-rt" > /tmp/rt-backup.log 2>&1
@@ -83,16 +87,24 @@ cleanup; trap - EXIT
 echo "── [5/7] Восстановление из архива"
 RUNTIME_ROOT="$FIXTURE" bash scripts/restore-runtime.sh "$ARCHIVE" > /tmp/rt-restore.log 2>&1
 grep -q "Восстановлено" /tmp/rt-restore.log; check $? "restore отработал"
+grep -q "manifest: ПОЛНОЕ СООТВЕТСТВИЕ" /tmp/rt-restore.log; check $? "fail-closed сверка manifest пройдена (restore)"
+if grep -qE "MANIFEST MISMATCH|REFUSE" /tmp/rt-restore.log; then check 1 "restore без противоречий manifest"; else check 0 "restore без противоречий manifest"; fi
 
 echo "── [6/7] Сверка AFTER == BACKUP"
 AFTER_COUNTS=$(snapshot_counts "$FIXTURE")
 [ "$AFTER_COUNTS" = "$BEFORE_COUNTS" ]; check $? "счётчики БД восстановлены: $AFTER_COUNTS"
-AFTER_MD5=$(dir_md5 "$FIXTURE")
-[ "$AFTER_MD5" = "$BEFORE_MD5" ]; check $? "md5 всех файлов+БД совпадают с бэкапом"
+AFTER_UPLOADS_MD5=$(uploads_md5 "$FIXTURE")
+[ "$AFTER_UPLOADS_MD5" = "$BEFORE_UPLOADS_MD5" ]; check $? "uploads совпадают побайтово с моментом бэкапа"
+DB_INTEGRITY=$(DB_ABS="$FIXTURE/database/custom.db" bun -e "
+  const { PrismaClient } = require('@prisma/client');
+  const p = new PrismaClient({ datasourceUrl: 'file:' + process.env.DB_ABS });
+  p.\$queryRawUnsafe('PRAGMA integrity_check').then((r) => { console.log(String(r[0]?.integrity_check)); return p.\$disconnect(); });
+")
+[ "$DB_INTEGRITY" = "ok" ]; check $? "восстановленная БД проходит integrity_check"
 
 echo "── [7/7] Production не тронут"
-PROD_MD5=$(dir_md5 "$PROD")
-[ -n "$PROD_MD5" ]; check $? "production runtime доступен (md5=$PROD_MD5)"
+PROD_UPLOADS_MD5=$(uploads_md5 "$PROD")
+[ -n "$PROD_UPLOADS_MD5" ]; check $? "production runtime доступен (uploads_md5=$PROD_UPLOADS_MD5)"
 
 # уборка: .bak-каталоги от restore + fixture
 rm -rf "$FIXTURE" "$FIXTURE".bak-* /tmp/rt-photo.jpg
