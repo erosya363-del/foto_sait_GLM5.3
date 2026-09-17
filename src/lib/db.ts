@@ -1,11 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 import { DATABASE_URL, ensureRuntime } from "@/lib/runtime";
 
-/* СТАБИЛИЗАЦИЯ: до создания клиента гарантируем наличие runtime-зоны и БД
-   (bootstrap-копирование легаси/шаблона, только если файла НЕТ — никаких
-   reset/seed/перезаписей, см. src/lib/runtime.ts). Раньше фолбэк был
-   file:<cwd>/db/custom.db — в standalone это БД ВНУТРИ .next/standalone,
-   которую стирал каждый rebuild (первопричина потери фото №2). */
+/* СТАБИЛИЗАЦИЯ: до создания клиента гарантируем наличие runtime-зоны и БД.
+   НИКАКИХ reset/seed/перезаписей. ПРАВКА РЕВЬЮ v2: legacy-фолбэк
+   (db/custom.db) убран — в production без runtime-БД процесс падает ГРОМКО
+   с инструкцией по восстановлению, данные не подменяются (см. runtime.ts).
+   Раньше фолбэк был file:<cwd>/db/custom.db — в standalone это БД ВНУТРИ
+   .next/standalone, которую стирал каждый rebuild (первопричина потери фото №2). */
 ensureRuntime();
 
 const globalForPrisma = globalThis as unknown as {
