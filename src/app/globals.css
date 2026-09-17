@@ -2089,7 +2089,8 @@ a img,
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: var(--tap-min);
+  /* PHASE2 ТЗ 1.6: высота элементов sheet — НЕ МЕНЕЕ 48px (было 44) */
+  min-height: 48px;
   padding: 10px 12px;
   border-radius: 14px;
   color: #fff;
