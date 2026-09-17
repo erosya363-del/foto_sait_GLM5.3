@@ -473,7 +473,7 @@ export function PhotoBank() {
                     e.stopPropagation();
                     setEditing(p.id);
                   }}
-                  className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-white/40 bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/65 active:scale-90"
+                  className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-white/40 bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/65 active:scale-90 after:absolute after:-inset-2 after:rounded-full after:content-['']"
                 >
                   <Pencil size={12} strokeWidth={2.6} />
                 </button>

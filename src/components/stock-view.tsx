@@ -171,6 +171,7 @@ export function StockView() {
             onClick={() => setMode("compact" as StockMode)}
             className={cn(
               "relative grid h-8 w-9 place-items-center rounded-lg transition-colors",
+              "after:absolute after:-inset-1.5 after:rounded-lg after:content-['']",
               mode === "compact" ? "bg-[color:var(--brand)] text-[color:var(--primary-foreground)]" : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -184,6 +185,7 @@ export function StockView() {
             onClick={() => setMode("cards" as StockMode)}
             className={cn(
               "relative grid h-8 w-9 place-items-center rounded-lg transition-colors",
+              "after:absolute after:-inset-1.5 after:rounded-lg after:content-['']",
               mode === "cards" ? "bg-[color:var(--brand)] text-[color:var(--primary-foreground)]" : "text-muted-foreground hover:text-foreground"
             )}
           >

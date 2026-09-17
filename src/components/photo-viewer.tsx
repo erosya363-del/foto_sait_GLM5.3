@@ -235,7 +235,10 @@ export function PhotoViewer() {
          перебивает каскад — ставим инлайн (важнее любого порядка чанков):
          выше app-навигации (--z-nav 40/--z-pop 50), ниже sheet (--z-photo-viewer-ui). */
       pswp.element?.style.setProperty("z-index", "var(--z-photo-viewer)");
-      (window as unknown as Record<string, unknown>).__pswp = pswp;
+      /* Отладочный глобал — только в dev (СТАБИЛИЗАЦИЯ: в production мусор в window не льём) */
+      if (process.env.NODE_ENV !== "production") {
+        (window as unknown as Record<string, unknown>).__pswp = pswp;
+      }
     })();
 
     /* Доп. клавиши (десктоп): + / − / 0 — зум (остальное делает pswp).
@@ -274,7 +277,9 @@ export function PhotoViewer() {
         pswpRef.current = null;
         closingByAppRef.current = false;
       }
-      (window as unknown as Record<string, unknown>).__pswp = null;
+      if (process.env.NODE_ENV !== "production") {
+        (window as unknown as Record<string, unknown>).__pswp = null;
+      }
       setSheet(false);
     };
     // photos/index — ТОЛЬКО для первичного открытия; внутри pswp листает сам

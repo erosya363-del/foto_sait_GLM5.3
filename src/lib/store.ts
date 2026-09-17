@@ -339,8 +339,10 @@ export function isPushSuppressed() {
   return suppressPush;
 }
 
-/** Отладочный доступ к стору из консоли (window.__portal) */
-if (typeof window !== "undefined") {
+/** Отладочный доступ к стору из консоли (window.__portal).
+ *  СТАБИЛИЗАЦИЯ: только dev — в production-сборке глобала нет
+ *  (standalone-сервер форсирует NODE_ENV=production). */
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
   (window as unknown as Record<string, unknown>).__portal = usePortal;
 }
 

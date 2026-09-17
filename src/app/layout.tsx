@@ -39,9 +39,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // iOS: страница не зумится при фокусе в поиск (зум только внутри просмотрщика фото)
-  maximumScale: 1,
-  userScalable: false,
+  // СТАБИЛИЗАЦИЯ (этап 15 ТЗ): maximumScale:1 / userScalable:false УДАЛЕНЫ —
+  // браузерный zoom разрешён (доступность). iOS Safari всё равно игнорирует
+  // user-scalable=no; авто-зум при фокусе в поля предотвращается font-size ≥16px
+  // в инпутах (globals.css). Zoom просмотрщика фото (PhotoSwipe) не заменяет
+  // zoom страницы. viewportFit/interactiveWidget — без изменений (safe-area,
+  // поведение клавиатуры).
   viewportFit: "cover",
   // П.11 ТЗ (клавиатура): Android/Chrome сжимает layout-viewport на высоту
   // клавиатуры → 100dvh/модалки/нижняя панель считаются от ВИДИМОЙ области

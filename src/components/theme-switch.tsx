@@ -47,12 +47,13 @@ export function ThemeSwitch({ compact = false, mini = false }: { compact?: boole
             onClick={() => setTheme(key)}
             className={cn(
               "relative grid place-items-center rounded-full transition-all duration-300 active:scale-90",
+              "after:absolute after:-inset-2 after:rounded-full after:content-['']",
               mini ? "h-7 w-7" : "h-8 w-8",
               on ? "text-[color:var(--foreground)]" : "text-muted-foreground hover:text-foreground"
             )}
           >
             {on && (
-              <span className="absolute inset-0 rounded-full border border-[color:var(--lens-border)] bg-[color:var(--lens-bg)] shadow-[inset_0_1px_0_var(--glass-spec-strong)]" />
+              <span className="pointer-events-none absolute inset-0 rounded-full border border-[color:var(--lens-border)] bg-[color:var(--lens-bg)] shadow-[inset_0_1px_0_var(--glass-spec-strong)]" />
             )}
             <Icon size={mini ? 14 : 15} strokeWidth={2.1} className="relative" />
           </button>
