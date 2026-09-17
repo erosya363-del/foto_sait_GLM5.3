@@ -907,3 +907,25 @@ Work Log:
 Stage Summary:
 - Причина потери фото при каждом деплое установлена и устранена: деплой теперь несёт данные (БД + фото) в артефакте; возврат данных с живого сайта — scripts/sync-from-live.sh ПЕРЕД каждым редеплоем
 - Протокол: sync-from-live → правки → verify → редеплой; потерянные 20 фото требуют одной повторной загрузки после редеплоя с v3
+
+---
+Task ID: mobile-nav-v4
+Agent: Super Z (main)
+Task: ТЗ v4 — перестройка мобильной нижней Liquid Glass панели и режима поиска (32 пункта)
+
+Work Log:
+- Изучены все 5 целевых файлов + CSS-блоки панели/поиска/переменных
+- portal.tsx: удалены searchFabOpen/pillTouched/prevDropX/.pill-haptic inputs/старый animation-effect; добавлены перманентный spring-controller ([]-эффект) + target-эффект [view, productId]; goCatalog упрощён; поиск — единый state searchOpen; closeSearchPop с blur; openSearch с focusInput только для «/»; DOM панели пересобран (один shell: caustic+goo+rim+controls); SVG — только #pill-goo (uneven удалён)
+- globals.css: панель заменена целиком (стабильный shell 64px, линза 52px внутри, controls z:4 сверху); drop-переменные ослаблены (dark/light); --pill-bg-dim/active, caust-4/blend/opacity удалены; fx-vignette/grain 44/45→20/21; .search-pop — место панели (bottom max(12px,--sab), kb → calc(--kb-overlay+8px), без transition bottom); .search-dd всегда вверх; native-ios-shell оверрайд с 12mm удалён
+- use-visual-viewport.ts: разделены keyboardHeight (--kb-h) и overlayInset (--kb-overlay), uninstall чистит обе
+- search-bar.tsx: удалён дублирующий outside-pointerdown (режимом управляет Portal)
+- tick.ts: комментарии переписаны — .pill-haptic запрещён, хаптика только через playTick/web-haptics
+- scripts/test-mobile-nav-search.mjs: fail-closed E2E (390×844) — DOM-композиция, 10 циклов быстрых переключений, поиск, headless-симуляция клавиатуры, закрытие, 6 скриншотов + видео→mp4
+- Прогон: run-isolated (production standalone :3100) — PASS=33 FAIL=0; typecheck/lint/build PASS
+- Отчёт docs/MOBILE_NAV_FIX_REPORT.md; коммит e58def8 (только 7 файлов из списка §31), push origin main
+
+Stage Summary:
+- Коммит e58def8 в GitHub main — готов к ручному redeploy владельцем
+- Real iPhone: NOT TESTED — чек-лист приёмки п.29 в отчёте
+- Артефакты: tool-results/mobile-nav/ (6 PNG + mobile-nav-final.mp4), в git не входят
+- Data не тронута: download/runtime не изменялся, sync-before-deploy протокол соблюдён
