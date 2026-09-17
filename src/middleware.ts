@@ -1,18 +1,30 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * СТАБИЛИЗАЦИЯ (этап 18 ТЗ): динамические API никогда не кэшируются.
+ * СТАБИЛИЗАЦИЯ (этап 18 ТЗ + правка ревью v2: единая cache-policy).
  *
- * Явный `Cache-Control: no-store` на ВСЕ ответы /api/*:
- *  — edge-шлюз платформы Previously кэшировал ответы (внешний /api/catalog
- *    отдавал устаревшие данные с URL /uploads/* после миграции на /api/media/*);
- *  — браузер/CDN не должны кэшировать админ-данные и каталог;
- *  — /api/media/* тоже no-store на уровне HTTP-заголовка: сами ФАЙЛЫ
- *    неизменяемы (уникальные имена), но список/наличие — живая логика.
+ * Противоречие ДО правки: /api/media/* отдавал immutable+1 год, а middleware
+ * матчил ВСЁ /api/* и перезаписывал no-store — код одновременно говорил
+ * «фото кэшировать год» и «весь /api не кэшировать вообще».
+ *
+ * ЕДИНАЯ ПОЛИТИКА:
+ *   /api/media/*  → public, max-age=31536000, immutable
+ *     (имена файлов уникальны и содержимое никогда не меняется; без этого
+ *      сервер перечитывал одни и те же JPEG с диска на каждый запрос)
+ *   остальные /api/* → no-store
+ *     (каталог/админ/остатки — живая логика; edge-шлюз платформы Previously
+ *      кэшировал ответы и отдавал устаревшие данные с URL /uploads/*)
+ *
+ * Значение дублируется в самих route-handler'ах (/api/media, /uploads-легаси):
+ * middleware гарантирует политику даже там, где ответ идёт мимо handler'а.
  */
 export function middleware(req: NextRequest) {
   const res = NextResponse.next();
-  res.headers.set("Cache-Control", "no-store");
+  if (req.nextUrl.pathname.startsWith("/api/media/")) {
+    res.headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    res.headers.set("Cache-Control", "no-store");
+  }
   return res;
 }
 
