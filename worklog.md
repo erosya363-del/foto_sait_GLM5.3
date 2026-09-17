@@ -929,3 +929,30 @@ Stage Summary:
 - Real iPhone: NOT TESTED — чек-лист приёмки п.29 в отчёте
 - Артефакты: tool-results/mobile-nav/ (6 PNG + mobile-nav-final.mp4), в git не входят
 - Data не тронута: download/runtime не изменялся, sync-before-deploy протокол соблюдён
+
+---
+Task ID: mobile-phase2
+Agent: Super Z (main)
+Task: ТЗ MOBILE PHASE 2 — три блока: (1) Photo Viewer Stability P0, (2) Mobile Liquid Glass Panel + Search P0/P1, (3) Horizontal Page Navigation + Swipe P1. После блоков — стоп, отчёт для независимого ревью.
+
+Work Log:
+- Правило 0: git зафиксирован (START_HEAD=bcc07cc = e58def8+worklog; origin/main=e58def8), свежий verify-clone создан (verify/foto_sait_verify, внутри песочницы вместо /tmp — ограничение среды)
+- 0.1: изучены все целевые файлы + исходники PhotoSwipe 5.4.4 из node_modules (поведение closeOnVerticalDrag/pinch/isZoomable/ScrollLock проверено ПО ИСХОДНИКУ, не по памяти)
+- BLOCK 1: B1-F1 гонка размеров слайдов (width:0 → незумибельный слайд) — пропорции ВСЕХ фото зондируются до pswp.init(); B1-F2 loading-тосты share/save («зависание»); B1-F3 «Скопировать изображение» удалено по ТЗ 1.6, строки sheet 48px; B1-F4 НАЙДЕНО: pswp НЕ лочит body scroll — добавлен явный lock (html.overflow + instant-восстановление позиции); русские title системных кнопок
+- react-hooks/refs + set-state-in-effect: ref-синхронизация переведена в эффекты, nat-сброс — «adjust state during render»
+- BLOCK 1 тест: scripts/test-photo-viewer-mobile.mjs (390/393/430, pointer/pinch-симуляция, scroll-lock, rapid ×10, видео) — PASS 49/0 ×2. СТОП №1 пройден (typecheck/lint/build/фото-E2E)
+- BLOCK 2: listener churn устранён (useCallback([]) + []-эффекты; проверено monkey-patch addEventListener — 0 перерегистраций за 6+ рендеров); единый путь закрытия поиска (SearchBar → portal:search-close, обход setSearchOpen+blur удалён); морф NAV↔SEARCH (панель: opacity/translateY/scale + delayed visibility — display:none ТОЛЬКО для клавиатуры; search-pop 260мс снизу; interruptible); прозрачность --pill-bg .30→.20/.34→.26; touch-action:none на shell
+- B2 perf: scripts/audit-scroll-perf.mjs (rAF-сэмплер + longtask, CPU-throttling ×6): авроры с blur(110px) — главный тормоз (23×50мс-кадров, maxGap 267мс, longTotal 1071мс → 1/50/138); blur удалён, зерно 4x→1.08x слоя, html.is-scrolling пауза анимаций (770мс → 138мс)
+- BLOCK 2 тест расширен (секции 8–11) — PASS 49/0. СТОП №2 пройден
+- BLOCK 3: VIEW_ORDER + направленные варианты (enter ±42%/exit ∓46%, opacity умеренная, popLayout); интерактивный edge-swipe: touchstart main + touchmove non-passive window, intent-детект (|dy|>|dx|×1.25 → браузеру), neighbor-оверлей (монтаж 1 setState), прямые transform-записи (0 рендеров/кадр), commit 25%/0.5px/ms, rubber-band краёв, WAAPI-handoff + instant-варианты, линза = общий progress (drivePill по p), data-no-tab-swipe (admin корень, upload дропзона), 3.10: searchClosedAtRef (pointerdown-мимо закрывает поиск раньше touchstart)
+- КРИТИЧЕСКИЙ баг, найденный E2E: cancel-ветка свайпа не чистила inline transform — WAAPI без fill откатывается к inline → контент зависал смещённым → layout-viewport разъезжался (495/470) → клики мимо. Фикс: onfinish → a.cancel() + сброс inline
+- BLOCK 3 тест: scripts/test-mobile-horizontal-nav.mjs (5 вьюпортов 320–430, CDP touch) — PASS 95/0
+- Регрессия: viewer 49/0, panel 49/0, test-s4/test-s5/audit-full/stabilize-viewport-audit — PASS
+- Отчёт docs/MOBILE_PHASE2_REPORT.md (START/FINAL HEAD, все фиксы с причинами, perf-таблицы до/после, 7.1–7.8, OPEN ISSUES, REAL IPHONE: NOT TESTED)
+- Коммиты пофайлово (13 + docs), push origin main → 62e9e12 (+a22861d docs); свежий clone: install/typecheck/lint/build PASS
+
+Stage Summary:
+- FINAL_HEAD=62e9e12 (origin/main), чистый clone-verify совпадает
+- Все 3 блока PASS; реальный iPhone НЕ тестировался (чек-лист в отчёте §7.8); открытые вопросы OI-1..4 в §7.7
+- Артефакты: tool-results/mobile-phase2/{viewer/,horizontal-navigation-final.mp4,scroll-perf.json}, tool-results/mobile-nav/
+- Данные не тронуты; sync-before-deploy протокол соблюдён; готово к ручному redeploy владельцу и независимому ревью ChatGPT
