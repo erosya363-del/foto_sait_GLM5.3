@@ -886,3 +886,24 @@ Stage Summary:
 - Все 8 пунктов ревью закрыты и проверены позитивными и негативными тестами
 - Полный bun run verify = статический + изолированные E2E + runtime-регресс + roundtrip — PASS
 - Внешний редеплой по-прежнему за владельцем: после него проверка v1.7.0·sha, /api/media, cache-заголовков, сохранности фото и загрузки (сейчас edge всё ещё отдаёт v1.4)
+
+---
+Task ID: v3-photo-loss
+Agent: main (Super Z)
+Task: Расследовать жалобу владельца: «загрузил 20 фото → правки → деплой → все фото исчезают; после каждой правки грузим фото заново». Найти причину и устранить.
+
+Work Log:
+- Вскрыт пайплайн деплоя (.zscripts/build.sh → start.sh → контейнер FC /app): артефакт содержал ТОЛЬКО легаси db/custom.db (записи), но НЕ файлы download/runtime/uploads
+- Диагноз подтверждён живым сайтом: /api/catalog → 13 позиций / 26 записей, /api/media/* → 404 (записи без файлов); заголовки X-Fc-* доказали, что динамику обслуживает контейнер FC, а не прокси в песочницу (уточнение §1 FIX_REPORT); локальный :3000 при этом здоров (200)
+- Загруженные владельцем 20 фото не найдены нигде (runtime, public/uploads, git-история, 4 сборочных тарball'а /tmp, download/backups) — они жили на диске контейнера/standalone и уничтожались редеплоем/пересборкой; вывод: не восстановить, требуется одна повторная загрузка
+- Переписан .zscripts/database-runtime-build.sh: БД — консистентный VACUUM INTO-снапшот runtime-зоны → /app/db/custom.db (+integrity_check, +prisma db push по копии, фолбэки с предупреждениями); фото — download/runtime/uploads → next-service-dist/download/runtime/uploads (ровно путь UPLOADS_ROOT на контейнере)
+- Создан GET /api/admin/export: манифест (счётчики БД + sha256 всех файлов) и ?part=db (снапшот БД через VACUUM INTO во временный файл)
+- Создан scripts/sync-from-live.sh (fail-closed: без BASE_URL отказ; бэкап pre-sync → манифест → БД+integrity+сверка счётчиков → файлы по /api/media с sha256 → атомарная замена) + scripts/test-export-sync.sh (5 интеграционных тестов на :3100)
+- Очищен E2E-мусор из runtime-БД (scripts/clean-test-junk.mjs): 10×ТестКат-*, 10×ТестМодель-*; бэкап pre-clean; варианты/фото/остатки не тронуты (20/26/32)
+- docs/FIX_REPORT.md: §17 (v3) — архитектура деплоя, F-013, решение, протокол sync-before-deploy, верификация
+- Верификация: verify:static PASS; verify:e2e PASS (60 комбинаций, 0 проблем; 3 известных P1-находки glass-токенов навигации — вне зоны v3); verify:runtime PASS (regression + restore-roundtrip 13/0); production runtime после всех тестов: 26 фото, 2 кат., 8 мод., integrity ok, 38+38 файлов
+- Выпечка протестирована в /tmp/bake-test: БД integrity ok + схема in sync + файлы 38+38 в целевом пути
+
+Stage Summary:
+- Причина потери фото при каждом деплое установлена и устранена: деплой теперь несёт данные (БД + фото) в артефакте; возврат данных с живого сайта — scripts/sync-from-live.sh ПЕРЕД каждым редеплоем
+- Протокол: sync-from-live → правки → verify → редеплой; потерянные 20 фото требуют одной повторной загрузки после редеплоя с v3
