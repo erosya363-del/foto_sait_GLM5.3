@@ -398,8 +398,9 @@ export function UploadView() {
           />
         </label>
 
-        {/* Дропзона */}
+        {/* Дропзона (PHASE2 ТЗ 3.6: зона с собственным drag — без tab-swipe) */}
         <div
+          data-no-tab-swipe=""
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
