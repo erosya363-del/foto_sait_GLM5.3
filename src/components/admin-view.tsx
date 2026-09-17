@@ -221,7 +221,7 @@ function DictManager({
   const entityLabel = TABS.find((t) => t.key === entity)?.label.toLowerCase() ?? "";
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" data-no-tab-swipe="">
       <div className="glass flex flex-col gap-2 rounded-2xl p-3 sm:flex-row sm:items-end">
         <input
           value={name}
@@ -335,7 +335,7 @@ function DictionariesSection() {
 
 export function AdminView() {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" data-no-tab-swipe="">
       <div className="rise flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-display text-xl font-bold sm:text-2xl">
