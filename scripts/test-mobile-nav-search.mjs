@@ -1,28 +1,28 @@
 /**
- * E2E ТЗ v4: мобильная нижняя Liquid Glass панель + режим поиска.
+ * E2E ТЗ v4 + PHASE2: мобильная нижняя Liquid Glass панель + режим поиска.
  *
- * Проверяет (п.26–28 ТЗ):
- *   §26  DOM-композиция панели: ровно одна nav.pill-nav / .pill-shell /
- *        .pill-bubble / .pill-ghost; НОЛЬ input внутри кнопок панели.
- *   §27  Быстрые переключения Каталог→Остатки→Загрузка→Админ→Каталог,
- *        10 циклов, паузы 70–100 мс: console.error=0, pageerror=0,
- *        requestfailed=0; активный item соответствует view; после покоя
- *        линза стоит ПОД активной вкладкой; полёт непрерывен (is-live
- *        виден сразу после клика — телепорта нет).
- *   §28  Поиск: тап «Поиск» → pill-nav display:none, search-pop виден и
- *        стоит у нижнего safe-area (БЕЗ резерва 64px/12mm). Headless-
- *        симуляция клавиатуры (kb-open + --kb-overlay:300px) → низ
- *        карточки ≈ 308px от низа вьюпорта (НЕ 417+). Дропдаун
- *        открывается ВВЕРХ. Закрытие → blur + панель возвращается.
+ * Проверяет (п.26–28 ТЗ + Block 2 PHASE2):
+ *   §26  DOM-композиция панели; НОЛЬ input внутри кнопок панели.
+ *   §27  Быстрые переключения ×10: ошибки=0, линза под активной вкладкой,
+ *        полёт непрерывен.
+ *   §28  Поиск: тап → МОРФ (не display:none в первом кадре), search-pop
+ *        у нижнего safe-area; headless-клавиатура → --kb-overlay; закрытие →
+ *        blur + панель возвращается.
+ *   PH2-1 Listener churn (ТЗ 2.13): portal:search-open/close регистрируются
+ *        РОВНО ОДИН раз на жизненном цикле, не на каждый рендер.
+ *   PH2-2 Gesture панели (ТЗ 2.4–2.6): линза следует за пальцем (preview),
+ *        раздел меняется ТОЛЬКО на release; тап сохранён; settle между вкладками.
+ *   PH2-3 Морф NAV↔SEARCH (ТЗ 2.8–2.10): панель гаснет транзишном
+ *        (visibility/opacity, НЕ display:none), search surface симметрично
+ *        приезжает; interruptible (rapid open→close).
+ *   PH2-4 is-scrolling (ТЗ 2.7): класс появляется при скролле и снимается.
+ *   PH2-5 Прозрачность (ТЗ 2.2): alpha --pill-bg ≤ 0.25.
  *
- * Геометрия линзы (п.29.2–4): линза ВНУТРИ панели (top/bottom ≥ 6px).
- *
- * Тест ТОЛЬКО ЧИТАЮЩИЙ (данные не мутирует), но запуск — fail-closed
- * через явный E2E_BASE (изоляция run-isolated.sh — production-сборка):
+ * Тест ТОЛЬКО ЧИТАЮЩИЙ, но запуск — fail-closed через явный E2E_BASE:
  *   bash scripts/run-isolated.sh bun scripts/test-mobile-nav-search.mjs
  *
- * Скриншоты: 01-catalog … 06-search-keyboard → $E2E_SHOTS
- *   (по умолчанию tool-results/mobile-nav/), плюс video mobile-nav-final.mp4.
+ * Скриншоты → $E2E_SHOTS (по умолч. tool-results/mobile-nav/),
+ * плюс видео mobile-nav-final.mp4.
  */
 import "./e2e-guard.mjs";
 import { chromium } from "playwright";
@@ -211,15 +211,20 @@ await page.waitForTimeout(450);
     const pop = document.querySelector(".search-pop");
     const input = pop?.querySelector("input[data-search-input]");
     const pr = pop?.getBoundingClientRect();
+    const ns = nav ? getComputedStyle(nav) : null;
     return {
       navDisplay: nav ? getComputedStyle(nav).display : "absent",
+      navVisibility: ns?.visibility ?? "absent",
+      navOpacity: ns?.opacity ?? "absent",
       popVisible: pop ? getComputedStyle(pop).visibility === "visible" : false,
       popBottomGap: pr ? window.innerHeight - pr.bottom : -1,
       hasInput: Boolean(input),
       focused: document.activeElement === input,
     };
   });
-  ok("pill-nav скрыт (display:none)", state.navDisplay === "none", state.navDisplay);
+  ok("панель скрыта морфом (НЕ display:none — ТЗ 2.8)",
+     state.navDisplay !== "none" && state.navVisibility === "hidden" && Number(state.navOpacity) < 0.05,
+     `display=${state.navDisplay} vis=${state.navVisibility} op=${state.navOpacity}`);
   ok("search-pop виден", state.popVisible);
   ok("поле на месте", state.hasInput);
   ok("кнопка НЕ автофокусирует поле (клавиатуру не открываем)", !state.focused);
@@ -292,17 +297,188 @@ console.log("── 7. Закрытие поиска: blur → клавиату�
     const nav = document.querySelector("nav.pill-nav");
     const pop = document.querySelector(".search-pop");
     const input = pop?.querySelector("input[data-search-input]");
+    const ns = nav ? getComputedStyle(nav) : null;
     return {
       navDisplay: nav ? getComputedStyle(nav).display : "absent",
+      navVisibility: ns?.visibility ?? "absent",
+      navOpacity: ns?.opacity ?? "absent",
       popVisible: pop ? getComputedStyle(pop).visibility === "visible" : false,
       kbOpen: document.documentElement.classList.contains("kb-open"),
       focused: document.activeElement === input && input != null,
     };
   });
-  ok("панель вернулась", state.navDisplay !== "none" && state.navDisplay !== "absent", state.navDisplay);
+  ok("панель вернулась (морф обратно)", state.navDisplay !== "none" && state.navDisplay !== "absent" && state.navVisibility === "visible" && Number(state.navOpacity) > 0.95, `vis=${state.navVisibility} op=${state.navOpacity}`);
   ok("карточка скрыта", !state.popVisible);
   ok("поле НЕ в фокусе (blur выполнен)", !state.focused);
   ok("kb-open снят после blur", !state.kbOpen);
+}
+
+/* ── PH2-хелперы: пошаговый pointer-жест по панели (down/move/up разделены,
+      чтобы тест мог проверять состояние В СЕРЕДИНЕ жеста) ── */
+const pillDown = (x, cy) =>
+  page.evaluate(({ x, cy }) => {
+    document.querySelector(".pill-shell").dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: x, clientY: cy, buttons: 1 })
+    );
+  }, { x, cy });
+const pillMove = (x, cy) =>
+  page.evaluate(({ x, cy }) => {
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: x, clientY: cy, buttons: 1 })
+    );
+  }, { x, cy }).then(() => page.waitForTimeout(26));
+const pillUp = (x, cy) =>
+  page.evaluate(({ x, cy }) => {
+    window.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: x, clientY: cy, buttons: 0 })
+    );
+  }, { x, cy });
+
+console.log("── 8. PH2-1: Listener churn (ТЗ 2.13) — 10 рендеров → ровно 1 регистрация ──");
+{
+  await page.evaluate(() => {
+    const w = window;
+    w.__srCounts = { open: 0, close: 0 };
+    if (!w.__origAddEL) {
+      w.__origAddEL = w.addEventListener.bind(w);
+      w.addEventListener = function (type, ...rest) {
+        if (type === "portal:search-open") w.__srCounts.open++;
+        if (type === "portal:search-close") w.__srCounts.close++;
+        return w.__origAddEL(type, ...rest);
+      };
+    }
+  });
+  for (const label of ["Остатки", "Загрузка", "Админ", "Каталог", "Остатки", "Каталог"]) {
+    await clickTabFast(label);
+    await page.waitForTimeout(90);
+  }
+  await page.waitForTimeout(250);
+  const c = await page.evaluate(() => window.__srCounts);
+  ok("portal:search-open: НОЛЬ перерегистраций за 6+ рендеров (churn устранён)", c.open === 0, `open=${c.open}`);
+  ok("portal:search-close: НОЛЬ перерегистраций", c.close === 0, `close=${c.close}`);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("portal:search-open")));
+  await page.waitForTimeout(400);
+  const popVisible = await page.evaluate(() => getComputedStyle(document.querySelector(".search-pop")).visibility === "visible");
+  ok("событие portal:search-open работает после рендеров", popVisible);
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("portal:search-close")));
+  await page.waitForTimeout(400);
+}
+
+console.log("── 9. PH2-2: Gesture панели — preview за пальцем, commit на release (ТЗ 2.4–2.6) ──");
+{
+  const box = await page.evaluate(() => {
+    const s = document.querySelector(".pill-shell").getBoundingClientRect();
+    const items = [...document.querySelectorAll(".pill-item")].map((el) => ({
+      label: el.textContent.trim(),
+      cx: el.getBoundingClientRect().left + el.getBoundingClientRect().width / 2,
+    }));
+    return { cy: s.top + s.height / 2, items };
+  });
+  const byLabel = (l) => box.items.find((i) => i.label === l);
+  const catalog = byLabel("Каталог");
+  const stock = byLabel("Остатки");
+  const upload = byLabel("Загрузка");
+  const admin = byLabel("Админ");
+
+  /* 9a. Drag Каталог → Остатки: линза следует, раздел НЕ меняется в полёте.
+     Три шага + пауза: пружина должна успеть отвести линзу от Каталога. */
+  await pillDown(catalog.cx, box.cy);
+  await pillMove(stock.cx, box.cy);
+  await pillMove(stock.cx + 8, box.cy);
+  await pillMove(stock.cx + 16, box.cy);
+  await page.waitForTimeout(150);
+  {
+    const mid = await page.evaluate(() => {
+      const b = document.querySelector(".pill-bubble").getBoundingClientRect();
+      const on = document.querySelector(".pill-item.is-on");
+      return { bCx: b.left + b.width / 2, on: on.textContent.trim() };
+    });
+    ok("preview: линза отошла от Каталога за пальцем", mid.bCx > catalog.cx + 25, `dcx=${(mid.bCx - catalog.cx).toFixed(0)}`);
+    ok("preview: раздел НЕ изменился в середине жеста", mid.on === "Каталог", mid.on);
+  }
+  /* 9b. Дотянул до Загрузки и отпустил → commit */
+  await pillMove(upload.cx, box.cy);
+  await pillUp(upload.cx, box.cy);
+  await page.waitForTimeout(550);
+  {
+    const g = await settleLens();
+    ok("commit на release: раздел = Загрузка", g.active.label === "Загрузка", g.active.label);
+    ok("линза под Загрузкой после commit", Math.abs(g.bubble.cx - upload.cx) < 6, `dx=${Math.abs(g.bubble.cx - upload.cx).toFixed(1)}`);
+  }
+  /* 9c. Отпустил НЕ дотянув до соседней вкладки (ближайшая — текущая) →
+         settle обратно, раздел не меняется */
+  await pillDown(upload.cx, box.cy);
+  await pillMove(upload.cx + 30, box.cy);
+  await pillUp(upload.cx + 30, box.cy);
+  await page.waitForTimeout(550);
+  {
+    const g = await settleLens();
+    ok("release не дотянув: раздел остался Загрузка", g.active.label === "Загрузка", g.active.label);
+    ok("линза вернулась к активной вкладке", Math.abs(g.bubble.cx - upload.cx) < 6, `dx=${Math.abs(g.bubble.cx - upload.cx).toFixed(1)}`);
+  }
+  /* 9d. pointercancel → возврат */
+  await pillDown(upload.cx, box.cy);
+  await pillMove(admin.cx, box.cy);
+  await page.evaluate(() => {
+    window.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: 0, clientY: 0, buttons: 1 }));
+  });
+  await page.waitForTimeout(550);
+  {
+    const g = await settleLens();
+    ok("pointercancel: раздел не изменился", g.active.label === "Загрузка", g.active.label);
+  }
+  /* 9e. Обычный тап после жестов жив (Playwright click = настоящий click) */
+  await clickTab("Каталог");
+  await page.waitForTimeout(650);
+  {
+    const g = await settleLens();
+    ok("тап после жестов работает (Каталог)", g.active.label === "Каталог", g.active.label);
+  }
+}
+
+console.log("── 10. PH2-3: Морф interruptible — open → мгновенно close (ТЗ 2.9) ──");
+{
+  await page.locator(".pill-search").click();
+  await page.waitForTimeout(120); // середина морфа NAV_TO_SEARCH
+  await page.locator(".search-pop-close").click(); // прерываем
+  await page.waitForTimeout(600);
+  const state = await page.evaluate(() => {
+    const nav = document.querySelector("nav.pill-nav");
+    const pop = document.querySelector(".search-pop");
+    return {
+      navVis: getComputedStyle(nav).visibility,
+      navOp: Number(getComputedStyle(nav).opacity),
+      navDisplay: getComputedStyle(nav).display,
+      popVis: getComputedStyle(pop).visibility,
+    };
+  });
+  ok("после прерывания панель полностью вернулась", state.navVis === "visible" && state.navOp > 0.95 && state.navDisplay !== "none", JSON.stringify(state));
+  ok("карточка скрыта после прерывания", state.popVis === "hidden", state.popVis);
+}
+
+console.log("── 11. PH2-4/5: is-scrolling + прозрачность (ТЗ 2.2/2.7) ──");
+{
+  /* Каталог-корень на 390×844 помещается в экран (canScroll=0) — скроллим
+     длинный список «Остатки». Доверенный wheel = реальный путь событий. */
+  await clickTab("Остатки");
+  await page.waitForTimeout(800);
+  await page.mouse.move(195, 400);
+  await page.mouse.wheel(0, 400);
+  await page.waitForFunction(() => document.documentElement.classList.contains("is-scrolling"), null, { timeout: 1500 }).catch(() => {});
+  const appeared = await page.evaluate(() => document.documentElement.classList.contains("is-scrolling"));
+  ok("is-scrolling появляется при скролле", appeared);
+  await page.waitForFunction(() => !document.documentElement.classList.contains("is-scrolling"), null, { timeout: 2500 }).catch(() => {});
+  const removed = await page.evaluate(() => !document.documentElement.classList.contains("is-scrolling"));
+  ok("is-scrolling снимается после остановки (240 мс)", removed);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+
+  const alpha = await page.evaluate(() => {
+    const bg = getComputedStyle(document.querySelector(".pill-shell")).backgroundColor;
+    const m = bg.match(/rgba?\(([^)]+)\)/);
+    const parts = m ? m[1].split(",").map((s) => parseFloat(s)) : [];
+    return parts.length === 4 ? parts[3] : 1;
+  });
+  ok("панель прозрачнее: alpha --pill-bg ≤ 0.25", alpha <= 0.251, `alpha=${alpha}`);
 }
 
 await page.close();
