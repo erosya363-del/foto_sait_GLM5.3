@@ -820,3 +820,47 @@ Stage Summary:
 - Ветка feat/ios-native-liquid-glass запушена (коммиты 1f0652a^..ec2574a: ios shell, bridge, web-мост, docs)
 - main не тронут; веб-версия (Safari/PWA) не изменена визуально
 - Сборка требует macOS/Xcode 26 — среда Z.ai (Linux) не позволяет; дана точная команда xcodebuild и единственный ручной шаг (Team)
+
+---
+Task ID: stabilize-1
+Agent: main (Super Z)
+Task: Техническая стабилизация (30 этапов ТЗ владельца): навсегда прекратить потерю/перезапись фото, отделить runtime-данные от кода, убрать публичный backup, strict build, единый verify, mobile-аудит, FIX_REPORT.
+
+Work Log (АУДИТ — до каких-либо изменений кода):
+- Точка входа: main @ c1e12c6, git чист, origin/main отстаёт на 5 коммитов (iOS-ветка влита в локальный main)
+- НАЙДЕНА ПЕРВОПРИЧИНА потери фото (3 механизма, все подтверждены экспериментально):
+  1) GIT-ЗАМОРОЗКА: db/custom.db И 76 файлов public/uploads/{optimized,thumbs} ЗАКОММИЧЕНЫ в git (сид-набор v2.7–v2.8). Платформа рематериализует рабочую зону из последнего коммита (деплой/пробуждение/откат песочницы) → runtime-состояние БД и uploads ЗАТИРАЕТСЯ замороженной git-версией («возвращается другой набор», «заменяются тестовыми»)
+  2) BUILD-ВЫПЕЧКА: standalone-сервер делает chdir в .next/standalone; фолбэк DATABASE_URL (file:<cwd>/db/custom.db) → БД ЖИВЁТ ВНУТРИ .next/standalone/db/. Эксперимент: сборка 11:37 сегодня запекла ВЕСЬ проект (src/, scripts/, db/, download/, .env) в .next/standalone; .next/standalone/db/custom.db (md5 0c29c4...) — каждый rebuild СТИРАЕТ эту БД вместе с загруженными после сборки фото
+  3) EDGE-404: доказано probe-файлами — edge-шлюз отдаёт статику ТОЛЬКО из снапшота деплоя: новый public/edge-probe.txt → внешне 404 (локально 200), новый /uploads/optimized/edge-probe.jpg → внешне 404, старый (git-tracked) bed-pola-1.jpg → внешне 200. НОВЫЕ фото внешне НЕВИДИМЫ до следующего деплоя, а следующий деплой затирает их git-версией (механизм 1)
+- /api/* проксируется edge LIVE в эту песочницу (внешний /api/catalog = данные этой песочницы) — сервер :3000 (next-server pid 2940) = прод-бэкенд
+- Прочее: package.json db:push содержит --accept-data-loss; typescript.ignoreBuildErrors=true; UI версия захардкожена «v1.4» (CHANGELOG=1.7.0, package=0.2.1); __portal/__pswp без прод-гейта; maximumScale:1+userScalable:false; /api/backup/[name]+public/sait_copy_2.tar.gz (git-tracked) = публичная раздача бэкапов; E2E (test-s5, audit-full H) мутируют прод БД напрямую через :3000; SW консервативный network-first — ОК; WAL режим БД подтверждён
+- План: RUNTIME_ROOT=<proj>/download/runtime (переживает откаты песочницы — подтверждено документацией проекта), DB/uploads вне git, раздача фото через /api/media/* (live-прокси), одноразовая миграция URL в БД, rollback частичной записи upload, шаблон пустой БД для чистых деплоев, backup/restore скрипты, regression-тест BEFORE==AFTER
+
+Stage Summary:
+- Первопричина доказана тремя независимыми экспериментами; прод-данные не тронуты, код не менялся
+- Реализация начинается: сначала миграция runtime → download/runtime, затем код
+
+---
+Task ID: stabilize-2
+Agent: main (Super Z)
+Task: Реализация стабилизации (30 этапов): защита runtime-данных, strict build, backup/restore, аудиты, FIX_REPORT.
+
+Work Log:
+- МИГРАЦИЯ: WAL checkpoint → db/custom.db + public/uploads (76 файлов, md5-сверка) → download/runtime/; .env переключён (бэкап .env.bak-runtime-migrate); исходные файлы на диске сохранены как страховка
+- КОД: src/lib/runtime.ts (единая точка путей; платформенный легаси DATABASE_URL игнорируется — найден через /proc/2940/environ), paths.ts/db.ts переписаны, bootstrap без seed/reset; /api/media/* (live-раздача) + /uploads/* легаси; middleware no-store для /api/*; upload+fabric-photo: rollback частичной записи, очистка пустого варианта
+- БД: 26 Photo + 35 Material URL → /api/media (идемпотентный скрипт, бэкап перед изменением); db/schema-template-empty.db (0 строк) вместо удалённого prisma/seed.ts (начинался с deleteMany() всех таблиц — вектор авто-сброса)
+- BACKUP: /api/backup/[name] удалён, sait_copy_2.tar.gz убран из web-root+git (копия в download/backups, md5 сверена); backup-runtime.sh (WAL+manifest+ротация) / restore-runtime.sh (temp→проверка→подмена с .bak)
+- GIT: db/custom.db + public/uploads/* + sait_copy_2.tar.gz сняты с трекинга; .gitignore дополнен
+- BUILD: ignoreBuildErrors удалён, tsc/lint/build = 0 ошибок; package.json: verify, db:push без --accept-data-loss, version 1.7.0; prune-standalone.sh (Turbopack выпекал весь workspace в standalone — экспериментально подтверждено и устранено)
+- ВЕРСИЯ: NEXT_PUBLIC_APP_VERSION = package.json+git SHA (был захардкожен «v1.4»); UI: «v1.7.0 · <sha>»
+- UI: hit-area темы/вида/карандаша через псевдоэлементы (визуал без изменений); maximumScale/userScalable удалены (input font-size max(16px,1em) уже есть); __portal/__pswp только dev
+- E2E: run-isolated.sh (:3100, копия runtime, уничтожается); test-s4 34/34, test-s5 полный — в изоляции; audit-full --quick в изоляции — 0 находок
+- REGRESSION (главный критерий ТЗ): загрузка 3 фото → 2×(build+restart) → строки БД идентичны, sha256 файлов совпадают, HTTP 200, фиксстура не тронута, standalone без runtime, production не тронут — 17/17 PASS
+- restore-roundtrip: backup → мутация → restore → md5/счётчики = бэкап — 10/10 PASS
+- АУДИТ ВЬЮПОРТОВ: 16 размеров × 4 раздела + поиск = 60 комбинаций — 0 проблем (overflow/перекрытия/тапы/консоль/сеть; прошлые «overlap в Остатках» = visibility:hidden ложные срабатывания)
+- Back/history: 4/4 сценария OK на живом сервере; SW network-first не тронут; listeners/timers в portal/photo-viewer/use-visual-viewport сбалансированы
+- 8 коммитов (39b830f..8d38ae6) + docs; внешний контур требует РЕДЕПЛОЯ пользователем (edge = снапшот: /api/media-роут и no-store появятся снаружи после деплоя)
+
+Stage Summary:
+- Критерий готовности ТЗ выполнен и доказан автотестом: build/restart/rebuild не трогают DB/uploads, фото остаются побайтово
+- Production :3000 переведён на runtime-зону; катастрофические векторы (git-заморозка, build-выпечка, edge-404) устранены
