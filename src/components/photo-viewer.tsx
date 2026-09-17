@@ -29,6 +29,9 @@ import { useReducedMotion } from "framer-motion";
    • pinch 1x–5x за пальцами, pan с границами, двойной тап 1x ⇄ 2.5x;
    • свайп ←/→ ТОЛЬКО при 1x; в зуме — pan, к соседнему — дотяг за край
      (allowPanToNext); pinch никогда не листает (P0.10);
+   • PHASE 2.1: pinch НЕ закрывает (pinchToClose:false) — pinch используется
+     ТОЛЬКО для зума; закрытие = вертикальный drag при 1x (closeOnVerticalDrag)
+     или кнопка × (работает из любого зума, ТЗ 1.4);
    • свайп вниз при 1x закрывает; Esc/×/Android Back (History-слой портала);
    • thumb (420px) мгновенно → optimized (≤1600px) подгружается; соседи ±1
      прелоадятся (P0.12/13); оригинал — только по требованию (меню ⋯);
@@ -191,7 +194,9 @@ export function PhotoViewer() {
         // P0.8: zoom-кнопка только на десктопе; на тач — жесты
         zoom: isDesktopPointer,
         wheelToZoom: true, // десктоп: колесо = зум (страница под ним не скроллится)
-        pinchToClose: true, // P0.10: pinch никогда не листает
+        // PHASE 2.1: pinch = ТОЛЬКО зум, НЕ закрытие (сведение пальцев при 1x
+        // больше не закрывает viewer). Close: вертикальный drag при 1x или ×.
+        pinchToClose: false,
         closeOnVerticalDrag: true, // свайп вниз при 1x закрывает; в зуме — pan
         allowPanToNext: true, // при 1x свайп листает; в зуме — pan с дотягом за край
         loop: true,
@@ -238,7 +243,7 @@ export function PhotoViewer() {
         }
       });
 
-      /* Пользователь закрыл pswp (крестик/Esc/свайп вниз/pinch) — синхронизируем
+      /* Пользователь закрыл pswp (крестик/Esc/свайп вниз при 1x) — синхронизируем
          приложение: dismissViewer() гасит слой истории (suppress+back). */
       pswp.on("close", () => {
         if (destroyed || closingByAppRef.current) return;
