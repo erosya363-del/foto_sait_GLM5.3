@@ -2,15 +2,24 @@
 
 import { useSyncExternalStore } from "react";
 
-/* ═══ Единый источник состояния клавиатуры/visualViewport (ТЗ P0.3/P0.4) ═══
+/* ═══ Единый источник состояния клавиатуры/visualViewport (ТЗ P0.3/P0.4 + v4 п.20) ═══
    ОДИН набор слушателей на всё приложение (singleton), ОДНО состояние:
    keyboardOpen + высота клавиатуры. Никаких transform-движений навигации
    на resize — навигация просто скрывается классом (display:none, без
    переходов — ноль кадров «панель в старой позиции»).
 
+   ГЛАВНОЕ (ТЗ v4 п.20): ВЫСОТА клавиатуры и OVERLAY-ПЕРЕКРЫТИЕ — разные
+   вещи; раньше одна переменная kb обслуживала обе роли и на Android
+   клавиатура учитывалась ДВАЖДЫ (огромная пустота под карточкой поиска):
+     • keyboardHeight — общая высота клавиатуры (логика/модалки, --kb-h);
+     • keyboardOverlayInset — фактическое перекрытие НИЗА layout viewport.
+   Позиционировать fixed search нужно ТОЛЬКО на overlay (--kb-overlay):
+   iOS overlay keyboard даёт overlayInset > 0; Android (resizes-content)
+   обычно 0, потому что layout viewport уже физически сжался.
+
    Два механизма детекта (платформы ведут себя по-разному):
    • iOS Safari/PWA: layout-viewport НЕ сжимается — клавиатура перекрывает
-     его снизу → kb = innerHeight − (vv.offsetTop + vv.height);
+     его снизу → overlayInset = innerHeight − (vv.offsetTop + vv.height);
    • Android Chrome (interactiveWidget: resizes-content): layout-viewport
      сжимается сам → вторая метрика: падение clientHeight ниже baseline
      (запомненной высоты без клавиатуры при той же ширине окна).
@@ -72,21 +81,50 @@ function isTextField() {
 function measure() {
   const vv = window.visualViewport;
   const docEl = document.documentElement;
-  let kb = 0;
-  if (vv) {
-    // iOS: перекрытие layout-viewport клавиатурой
-    kb = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
-  }
-  // Android resizes-content: layout-viewport сжат при фокусе в поле
+
+  /*
+   * Реальное перекрытие НИЗА layout viewport.
+   *
+   * iOS overlay keyboard:
+   * > 0
+   *
+   * Android resizes-content:
+   * обычно 0
+   */
+  const overlayInset = vv
+    ? Math.max(0, window.innerHeight - (vv.offsetTop + vv.height))
+    : 0;
+
+  let keyboardHeight = overlayInset;
+
+  /*
+   * Android:
+   * layout viewport физически уменьшился.
+   */
   if (isTextField() && baseH > 0 && Math.abs(window.innerWidth - baseW) < 2) {
-    kb = Math.max(kb, baseH - docEl.clientHeight);
+    keyboardHeight = Math.max(keyboardHeight, baseH - docEl.clientHeight);
   }
+
   // ГИСТЕРЕЗИС: открытие >140px, закрытие <80px — нет дребезга на пороге
   const wasOpen = state.keyboardOpen;
-  const open = wasOpen ? kb > 80 : kb > 140;
+  const open = wasOpen ? keyboardHeight > 80 : keyboardHeight > 140;
 
   docEl.classList.toggle("kb-open", open);
-  docEl.style.setProperty("--kb-h", open ? `${Math.round(kb)}px` : "0px");
+
+  /*
+   * Общая высота — для логики/модалок (--kb-h).
+   */
+  docEl.style.setProperty("--kb-h", open ? `${Math.round(keyboardHeight)}px` : "0px");
+
+  /*
+   * ВАЖНО (ТЗ v4 п.20):
+   * позиционировать fixed search надо ТОЛЬКО на фактическое overlay
+   * перекрытие (--kb-overlay).
+   *
+   * Иначе на Android, где viewport уже уменьшен, клавиатура учитывается
+   * дважды.
+   */
+  docEl.style.setProperty("--kb-overlay", open ? `${Math.round(overlayInset)}px` : "0px");
 
   // baseline помним только БЕЗ клавиатуры и при неизменной ширине (не поворот)
   if (!open && (baseW === 0 || Math.abs(window.innerWidth - baseW) < 2)) {
@@ -100,7 +138,7 @@ function measure() {
     offsetTop: Math.round(vv?.offsetTop ?? 0),
     scale: vv?.scale ?? 1,
     keyboardOpen: open,
-    keyboardHeight: open ? Math.round(kb) : 0,
+    keyboardHeight: open ? Math.round(keyboardHeight) : 0,
   });
 }
 
@@ -135,6 +173,7 @@ function uninstall() {
   document.removeEventListener("focusout", measure);
   document.documentElement.classList.remove("kb-open");
   document.documentElement.style.removeProperty("--kb-h");
+  document.documentElement.style.removeProperty("--kb-overlay");
 }
 
 function subscribe(cb: () => void) {
@@ -169,7 +208,8 @@ export function useKeyboardOpen(): boolean {
 }
 
 /** Примитивный селектор: высота клавиатуры (px) — для React-UI, которому
- *  нужна цифра; координаты обычно решает CSS-переменная --kb-h. */
+ *  нужна цифра; позиционирование fixed-элементов решает CSS-переменная
+ *  --kb-overlay (фактическое overlay-перекрытие, НЕ полная высота). */
 export function useKeyboardHeight(): number {
   return useSyncExternalStore(
     subscribe,

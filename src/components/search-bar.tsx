@@ -85,9 +85,7 @@ const PLACEHOLDER = "Ткань, модель, размер…";
 export function SearchBar() {
   const [value, setValue] = useState("");
   const [debounced, setDebounced] = useState("");
-  const focused = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
   /* ФИКС «ПОИСК НЕ РАБОТАЕТ»: раньше у ОБОИХ экземпляров SearchBar (свёрнутая
      панель шапки + подвесная карточка) поле было с одним и тем же id
      "global-search" — getElementById возвращал НЕВИДИМОЕ поле, фокус уходил
@@ -118,20 +116,12 @@ export function SearchBar() {
     staleTime: 30_000,
   });
 
-  // Клик мимо — закрыть дропдаун. ВАЖНО: тапы внутри подвесной карточки
-  // (.search-pop) и по круглой кнопке поиска на пилюле (.pill-search) НЕ
-  // считаются «мимо» — когда открыта карточка, именно она активная поверхность;
-  // у кнопки на пилюле свой toggle (иначе pointerdown закрыл бы карточку до click).
-  useEffect(() => {
-    if (!searchOpen) return;
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Element | null;
-      if (t?.closest?.(".search-pop") || t?.closest?.(".pill-search")) return;
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setSearchOpen(false);
-    };
-    window.addEventListener("pointerdown", onDown);
-    return () => window.removeEventListener("pointerdown", onDown);
-  }, [searchOpen, setSearchOpen]);
+  /* ТЗ v4 п.19: ГЛОБАЛЬНЫЙ outside-click листенер из SearchBar УДАЛЁН.
+     Режимом открытия/закрытия карточки управляет ТОЛЬКО Portal (его
+     pointerdown-обработчик закрывает поиск тапом мимо). SearchBar отвечает
+     только за: input, query, dropdown, Enter, Escape, результаты.
+     Два глобальных pointerdown-листенера конфликтовали (карточка закрывалась
+     до click / гасила чужие тапы). НЕ возвращать. */
 
   /* ТЗ v3.0 п.3/5: применение запроса НЕ выходит из режима поиска.
      Поле остаётся на экране и в фокусе — клавиатура не схлопывается,
@@ -155,7 +145,7 @@ export function SearchBar() {
   );
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div className="relative">
       {/* Поле: серое, полупрозрачное (80%), тонкая чёткая рамка — никаких
           анимированных/мигающих рамок (просьба пользователя) */}
       <div className="relative">
@@ -215,8 +205,9 @@ export function SearchBar() {
 
       {/* Дропдаун: полупрозрачный стеклянный (~80%) с размытым фоном,
           без внутренней анимации секций. Геометрия (.search-dd) в globals.css:
-          на мобиле карточка у низа — дропдаун открывается ВВЕРХ от поля,
-          при открытой клавиатуре (kb-open) и на десктопе — ВНИЗ. */}
+          на мобиле дропдаун открывается ВСЕГДА ВВЕРХ от поля (ТЗ v4 п.22 —
+          карточка стоит над клавиатурой, вниз результаты попали бы под неё);
+          на десктопе карточка у шапки — дропдаун вниз (media-блок). */}
       {hasDropdown && (
         <div className="search-dd rounded-2xl border border-border bg-[var(--glass-strong)] p-2.5 shadow-2xl shadow-black/25 backdrop-blur-[80px]">
           {!debounced && personal.length > 0 && (

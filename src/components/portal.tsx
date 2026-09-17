@@ -8,7 +8,7 @@ import {
   type View, type PortalSnapshot,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { playTick, playStep, vibrateSupported } from "@/lib/tick";
+import { playTick } from "@/lib/tick";
 import { useKeyboardOpen } from "@/lib/use-visual-viewport";
 import { initNativeIOSBridge } from "@/lib/native-bridge";
 import { ThemeSwitch } from "@/components/theme-switch";
@@ -61,30 +61,33 @@ function useHeaderTitle() {
 }
 
 /**
- * Шаг 2: тап по «Каталог».
+ * Тап по «Каталог».
  * Уже в каталоге (на любой глубине, включая поиск/ткани/открытый товар) →
  * мгновенный возврат наверх (сброс дриллдауна) + отклик: пульс капсулы +
- * tick-звук + вибрация (Android; iOS — звук и пульс, vibrate запрещён).
- * Из другого раздела — обычный переход, но с тем же tick-откликом, что и у
- * остальных пунктов пилюли (иначе тап «Каталог» — единственный без звука).
+ * tick-звук. Из другого раздела — обычный переход с тем же откликом.
+ * Хаптика — ЕДИНЫМ движком playTick (web-haptics: vibrate на Android,
+ * switch-эмуляция на iOS). Скрытые form-controls (.pill-haptic) в панели
+ * ЗАПРЕЩЕНЫ: интерактивный <input> внутри <button> — баг-машина двойных
+ * фокусов и зумов; НЕ возвращать (см. также tick.ts).
  */
-function goCatalog(btn?: HTMLElement | null, fromPill = false) {
+function goCatalog(btn?: HTMLElement | null) {
   const s = usePortal.getState();
-  /* iOS: системную хаптику уже сыграл нативный switch (.pill-haptic) под пальцем —
-     движок дублировал бы тик; на Android (и в сайдбаре) вибрируем как обычно. */
-  const hapticOn = fromPill ? vibrateSupported() : undefined;
+
   if (s.view === "catalog") {
     s.resetCatalog();
-    playTick("tap", { hapticOn });
+    playTick("tap");
+
     if (btn) {
       btn.classList.remove("nav-pulse");
       void btn.offsetWidth; // перезапуск анимации
       btn.classList.add("nav-pulse");
-      window.setTimeout(() => btn.classList.remove("nav-pulse"), 700);
+      window.setTimeout(() => {
+        btn.classList.remove("nav-pulse");
+      }, 520);
     }
   } else {
     s.setView("catalog");
-    playTick("tap", { hapticOn });
+    playTick("tap");
   }
 }
 
@@ -249,32 +252,45 @@ export function Portal() {
      native-tab-change, сайт сообщает о смене раздела через tabChanged. */
   useEffect(() => initNativeIOSBridge(), []);
 
-  /* ── Пилюля: ОДНО статичное стекло + ЖИДКАЯ капля (эффект с видео) ──
-     Glass-слой панели один (backdrop-filter на .pill-shell, не анимируется).
-     Активный пункт = капля .pill-bubble внутри .pill-goo — слоя с SVG-фильтром
-     metaball: капля движется spring'ом, «призрак» .pill-ghost отстаёт на своей
-     rAF-пружине, фильтр растягивает между ними «шею», она перетягивается —
-     капля ОТДЕЛЯЕТСЯ и СОБИРАЕТСЯ (как в референсе). Иконки стоят на месте.
-     ВАЖНО (P0): фильтр url() живёт на ОБЫЧНОМ слое над стеклом, а НЕ в
-     backdrop-filter — на Android/Chromium это не создаёт второго тела;
-     призрак анимируется rAF + transform, без setState в кадре. */
+  /* ── Пилюля: ОДНО статичное стекло + ЖИДКАЯ линза ПОД кнопками ──
+     Архитектура (ТЗ v4): GLASS SHELL → BACKGROUND/CAUSTICS → LIQUID LENS →
+     RIM → ICONS+LABELS. Активный пункт = линза .pill-bubble внутри .pill-goo
+     (SVG-goo-фильтр): линза движется ПЕРМАНЕНТНОЙ rAF-пружиной, «призрак»
+     .pill-ghost отстаёт на своей пружине — фильтр растягивает между ними
+     «шею», капля отделяется и собирается. Кнопки ВСЕГДА выше линзы (z-слои
+     в CSS). Контроллер живёт в ОДНОМ []-эффекте и ПЕРЕЖИВАЕТ смены вкладок:
+     быстрые Каталог→Остатки→Загрузка за 100 мс — это одно непрерывное
+     движение (меняется только target, rAF не пересоздаётся). */
   const shellRef = useRef<HTMLDivElement | null>(null);
   const gooRef = useRef<HTMLDivElement | null>(null);
   const ghostRef = useRef<HTMLSpanElement | null>(null);
   const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const itemRefs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
-  const prevDropX = useRef<number | null>(null);
+
+  /* Состояние пружин (refs, НЕ setState — ноль ререндеров в кадре):
+     x/velocity — основная линза; ghostX/ghostVelocity — отстающий призрак. */
   const dropAnim = useRef({
-    mx: 0,
-    mv: 0,
-    gx: 0,
-    gv: 0,
+    x: 0,
+    velocity: 0,
+
+    ghostX: 0,
+    ghostVelocity: 0,
+
     target: 0,
+
     raf: 0,
     last: 0,
-    live: false,
-    sim: 0,
+
+    initialized: false,
   });
+
+  /* Точки управления линзой для эффектов: drive — установить цель/ширину,
+     hide — погасить (открыт товар). Заполняются контроллером. */
+  const drivePillRef =
+    useRef<(x: number, width: number, animate?: boolean) => void>(() => {});
+
+  const hidePillRef = useRef<() => void>(() => {});
+
   const reducedMotion = useRef(false);
 
   /* prefers-reduced-motion: капля без хвоста-призрака (функция не страдает) */
@@ -288,138 +304,238 @@ export function Portal() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
-  /* Замер позиции активного пункта → капля. Читаем offsetLeft/offsetWidth
-     РАЗ за смену состояния (без reflow-петель), пишем только transform/width. */
+  /* ── ПОСТОЯННЫЙ SPRING CONTROLLER (ОДИН []-эффект на весь срок жизни) ──
+     Прежний эффект пересоздавал rAF на каждую смену вкладки и УБИВАЛ полёт
+     при быстрых переходах. Теперь пружины живут здесь, а эффект [view,
+     productId] ниже МЕНЯЕТ ТОЛЬКО ЦЕЛЬ (drivePillRef) — полёт не прерывается.
+     Никакого setState в кадре: только transform/width/opacity капли. */
   useEffect(() => {
     const shell = shellRef.current;
     const goo = gooRef.current;
     const bubble = bubbleRef.current;
     const ghost = ghostRef.current;
+
     if (!shell || !goo || !bubble || !ghost) return;
 
     const a = dropAnim.current;
 
-    /* Один rAF-цикл на обе капли (P0.7: только transform, без setState):
-       главная капля — жёсткая пружина + «тянучка» (растяжение по скорости,
-       объём сохраняется: scaleY = 1/scaleX);
-       призрак — мягкая пружина, отстаёт: goo-фильтр тянет между ними «шею»,
-       шея перетягивается — капля ОТДЕЛЯЕТСЯ и СОБИРАЕТСЯ (референс-видео). */
-    const step = (t: number) => {
-      a.raf = 0;
-      if (!a.live) return;
-      const dt = a.last ? Math.min((t - a.last) / 1000, 0.033) : 0.016;
-      a.last = t;
-      a.sim += dt;
-      const am = (a.target - a.mx) * 180 - a.mv * 21;
-      a.mv += am * dt;
-      a.mx += a.mv * dt;
-      const ag = (a.target - a.gx) * 110 - a.gv * 14.5;
-      a.gv += ag * dt;
-      a.gx += a.gv * dt;
-      const sx = 1 + Math.min(Math.abs(a.mv) * 0.0016, 0.34);
-      const sy = 1 / sx;
-      bubble.style.transform = `translateX(${a.mx.toFixed(2)}px) scaleX(${sx.toFixed(4)}) scaleY(${sy.toFixed(4)})`;
-      ghost.style.transform = `translate3d(${a.gx.toFixed(2)}px,0,0) scale(0.82)`;
-      /* Защитный лимит сим-времени: при троттлинге rAF (фоновая вкладка,
-         системная нагрузка) пружина обязана гарантированно финишировать */
-      const settled =
-        a.sim > 0.9 ||
-        (Math.abs(a.target - a.mx) < 0.4 &&
-          Math.abs(a.mv) < 8 &&
-          Math.abs(a.target - a.gx) < 0.4 &&
-          Math.abs(a.gv) < 8);
-      if (settled) {
-        a.mx = a.gx = a.target;
-        a.mv = a.gv = 0;
-        a.last = 0;
-        a.sim = 0;
-        a.live = false;
-        bubble.style.transform = `translateX(${a.mx}px)`;
-        ghost.style.transform = `translate3d(${a.gx}px,0,0) scale(0.82)`;
-        goo.classList.remove("is-live");
-        return;
-      }
-      a.raf = requestAnimationFrame(step);
-    };
-
-    const settle = (x: number) => {
+    const cancel = () => {
       if (a.raf) {
         cancelAnimationFrame(a.raf);
         a.raf = 0;
       }
-      a.live = false;
+    };
+
+    const render = () => {
+      const stretch = Math.min(
+        Math.abs(a.velocity) * 0.0009,
+        0.12
+      );
+
+      const scaleX = 1 + stretch;
+      const scaleY = 1 - stretch * 0.24;
+
+      bubble.style.transform =
+        `translate3d(${a.x.toFixed(2)}px,0,0) ` +
+        `scaleX(${scaleX.toFixed(4)}) ` +
+        `scaleY(${scaleY.toFixed(4)})`;
+
+      ghost.style.transform =
+        `translate3d(${a.ghostX.toFixed(2)}px,0,0) scale(0.88)`;
+    };
+
+    const settle = (x: number) => {
+      cancel();
+
+      a.x = x;
+      a.target = x;
+      a.velocity = 0;
+
+      a.ghostX = x;
+      a.ghostVelocity = 0;
+
       a.last = 0;
-      a.sim = 0;
-      a.mv = 0;
-      a.gv = 0;
-      a.mx = a.gx = a.target = x;
-      bubble.style.transform = `translateX(${x}px)`;
-      ghost.style.transform = `translate3d(${x}px,0,0) scale(0.82)`;
+
+      render();
+
       goo.classList.remove("is-live");
     };
 
-    const place = (withTail: boolean) => {
-      const activeKey: View | null = productId ? null : view;
-      const el = activeKey ? itemRefs.current[activeKey] : null;
-      if (!el) {
-        /* Открыт товар — капли нет; пружины останавливаем */
-        bubble.style.opacity = "0";
-        if (a.raf) {
-          cancelAnimationFrame(a.raf);
-          a.raf = 0;
-        }
-        a.live = false;
-        goo.classList.remove("is-live");
+    const step = (time: number) => {
+      a.raf = 0;
+
+      const dt = a.last
+        ? Math.min((time - a.last) / 1000, 0.032)
+        : 0.016;
+
+      a.last = time;
+
+      /*
+       * Main lens:
+       * более спокойная пружина.
+       * Не должна перескакивать цель.
+       */
+      const mainForce =
+        (a.target - a.x) * 150 -
+        a.velocity * 23;
+
+      a.velocity += mainForce * dt;
+      a.x += a.velocity * dt;
+
+      /*
+       * Ghost:
+       * немного медленнее основной линзы.
+       */
+      const ghostForce =
+        (a.target - a.ghostX) * 92 -
+        a.ghostVelocity * 17;
+
+      a.ghostVelocity += ghostForce * dt;
+      a.ghostX += a.ghostVelocity * dt;
+
+      render();
+
+      const settled =
+        Math.abs(a.target - a.x) < 0.25 &&
+        Math.abs(a.velocity) < 2 &&
+        Math.abs(a.target - a.ghostX) < 0.35 &&
+        Math.abs(a.ghostVelocity) < 2;
+
+      if (settled) {
+        settle(a.target);
         return;
       }
-      const x = el.offsetLeft;
-      const w = el.offsetWidth;
-      bubble.style.width = `${w}px`;
-      bubble.style.opacity = "1";
-      ghost.style.width = `${w}px`;
-      const from = prevDropX.current;
-      const jumped = from === null || Math.abs(from - x) < 1;
-      if (a.live) {
-        /* Полёт уже идёт (быстрая смена вкладки / поворот экрана /
-           догрузка шрифтов) — НЕ убиваем его: обновляем цель и ширины,
-           пружины сами доедут (без телепорта капли) */
-        a.target = x;
-      } else if (!withTail || jumped || reducedMotion.current) {
-        /* Первый рендер / reduced motion — капля сразу в цель */
-        settle(x);
-      } else {
-        /* Капля ОТРЫВАЕТСЯ: главная летит с текущей точки, призрак
-           стартует ТОЧНО от старой позиции и догоняет */
-        a.target = x;
-        a.live = true;
-        a.last = 0;
-        a.sim = 0;
-        a.gx = from;
-        a.gv = 0;
-        goo.classList.add("is-live");
-        ghost.style.transform = `translate3d(${a.gx}px,0,0) scale(0.82)`;
-        a.raf = requestAnimationFrame(step);
-      }
-      prevDropX.current = x;
+
+      a.raf = requestAnimationFrame(step);
     };
 
-    place(true);
-    const onResize = () => place(false);
-    const ro = new ResizeObserver(onResize);
-    ro.observe(shell);
-    window.addEventListener("resize", onResize);
-    let fontsRaf = 0;
-    document.fonts?.ready.then(() => {
-      fontsRaf = requestAnimationFrame(onResize);
+    drivePillRef.current = (
+      x: number,
+      width: number,
+      animate = true
+    ) => {
+      bubble.style.width = `${width}px`;
+      ghost.style.width = `${width}px`;
+
+      bubble.style.opacity = "1";
+
+      if (!a.initialized) {
+        a.initialized = true;
+        settle(x);
+        return;
+      }
+
+      if (
+        !animate ||
+        reducedMotion.current
+      ) {
+        settle(x);
+        return;
+      }
+
+      /*
+       * ВАЖНО:
+       *
+       * НЕ сбрасываем x/velocity,
+       * если линза уже летит.
+       *
+       * Просто меняем target.
+       *
+       * Поэтому:
+       *
+       * Каталог → Остатки → Загрузка
+       *
+       * за 100 мс превращается в ОДНО непрерывное движение.
+       */
+      a.target = x;
+
+      goo.classList.add("is-live");
+
+      if (!a.raf) {
+        a.last = 0;
+        a.raf = requestAnimationFrame(step);
+      }
+    };
+
+    hidePillRef.current = () => {
+      cancel();
+
+      bubble.style.opacity = "0";
+      goo.classList.remove("is-live");
+
+      a.velocity = 0;
+      a.ghostVelocity = 0;
+      a.last = 0;
+    };
+
+    const syncPosition = (animate = false) => {
+      const state = usePortal.getState();
+
+      if (state.productId) {
+        hidePillRef.current();
+        return;
+      }
+
+      const item = itemRefs.current[state.view];
+
+      if (!item) return;
+
+      drivePillRef.current(
+        item.offsetLeft,
+        item.offsetWidth,
+        animate
+      );
+    };
+
+    /*
+     * Начальная позиция.
+     */
+    syncPosition(false);
+
+    /*
+     * Resize НЕ должен создавать полёт.
+     */
+    const ro = new ResizeObserver(() => {
+      syncPosition(false);
     });
+
+    ro.observe(shell);
+
+    const onResize = () => syncPosition(false);
+
+    window.addEventListener("resize", onResize);
+
+    document.fonts?.ready.then(() => {
+      requestAnimationFrame(() => {
+        syncPosition(false);
+      });
+    });
+
     return () => {
-      cancelAnimationFrame(fontsRaf);
-      if (a.raf) cancelAnimationFrame(a.raf);
-      a.raf = 0;
-      a.live = false;
+      cancel();
       ro.disconnect();
       window.removeEventListener("resize", onResize);
     };
+  }, []);
+
+  /* ── ЦЕЛЬ ЛИНЗЫ: отдельный эффект, меняет ТОЛЬКО target/ширину ──
+     Здесь НЕТ cancelAnimationFrame/reset пружин: при быстрой смене вкладок
+     текущий полёт продолжается к новой цели (одно непрерывное движение). */
+  useEffect(() => {
+    if (productId) {
+      hidePillRef.current();
+      return;
+    }
+
+    const item = itemRefs.current[view];
+
+    if (!item) return;
+
+    drivePillRef.current(
+      item.offsetLeft,
+      item.offsetWidth,
+      true
+    );
   }, [view, productId]);
 
   /* Чёлка iPhone (аудит v2.6): meta theme-color всегда в цвет АКТУАЛЬНОЙ темы
@@ -439,9 +555,10 @@ export function Portal() {
 
   /* ── Шапка/пилюля: реакция на скролл и касание ────────────────────── */
   const [scrolled, setScrolled] = useState(false);
-  const [pillTouched, setPillTouched] = useState(false);
-  /* Подвесной поиск (шаг 3): открыт из круглой кнопки на пилюле */
-  const [searchFabOpen, setSearchFabOpen] = useState(false);
+  /* Режим поиска — ЕДИНСТВЕННЫЙ state: usePortal.searchOpen.
+     Дублирующего searchFabOpen больше НЕТ: два источника истины давали
+     гонки («клавиатура есть — поиска нет»). popRef — карточка подвесного
+     поиска (нужен closeSearchPop, чтобы сначала снять фокус поля). */
   const popRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     usePortal.getState().restore();
@@ -471,21 +588,19 @@ export function Portal() {
     };
   }, []);
 
-  // Касание: пилюля становится активной до тапа в другое место
-  useEffect(() => {
-    const onDown = (e: PointerEvent) => {
-      const hit = (e.target as Element | null)?.closest?.(".pill-shell");
-      setPillTouched(Boolean(hit));
-    };
-    document.addEventListener("pointerdown", onDown, { passive: true });
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, []);
+  /* Панель — ОДНОГО материала постоянно: скролл и касание НЕ меняют её
+     плотность/прозрачность (pill-dim/pill-active удалены из архитектуры;
+     НЕ возвращать — см. globals.css, блок MOBILE NAV). */
 
-  /* ── Поиск (шаг 3): круглый элемент на пилюле + подвесная карточка над ней ──
-   Панель поиска сверху УДАЛЕНА на всех экранах → в DOM теперь ровно ОДИН
-   input[data-search-input] (внутри .search-pop) — дубли полей невозможны.
-   Открытие: класс is-open СИНХРОННО в жесте тапа + focus() — iOS открывает
-   клавиатуру. Закрытие: крестик, свайп вниз, листание, Escape, тап мимо. */
+  /* ── Поиск: подвесная карточка на месте панели ──
+   В DOM ровно ОДИН input[data-search-input] (внутри .search-pop) — дубли
+   полей невозможны. Открытие: setSearchOpen(true) — React state — ЕДИНСТВЕННЫЙ
+   источник DOM-состояния (класс is-open приходит из рендера; никаких
+   classList.add вручную). На мобильном кнопка поиска НЕ фокусирует поле
+   (клавиатуру открывает тап пользователя по полю); программный фокус —
+   только «/» на десктопе. Закрытие: крестик, свайп вниз, Escape, тап мимо —
+   ВСЕГДА через closeSearchPop: сначала blur (клавиатура iOS закрывается),
+   потом state. */
   const focusVisibleSearchInput = () => {
     const host = document.querySelector<Element>(".search-pop");
     const input = host?.querySelector<HTMLInputElement>("input[data-search-input]");
@@ -512,32 +627,69 @@ export function Portal() {
     return Boolean(input);
   };
   const closeSearchPop = () => {
-    document.querySelector(".search-pop")?.classList.remove("is-open");
-    setSearchFabOpen(false);
-    usePortal.getState().setSearchOpen(false);
+    const input =
+      popRef.current
+        ?.querySelector<HTMLInputElement>(
+          "input[data-search-input]"
+        );
+
+    /*
+     * КРИТИЧНО:
+     * сначала blur → клавиатура закрывается,
+     * потом state — карточку прячет рендер.
+     * Никаких classList.remove вручную:
+     * React state = единственный источник DOM.
+     */
+    input?.blur();
+
+    usePortal
+      .getState()
+      .setSearchOpen(false);
   };
-  /* П.9 ТЗ: тап по кнопке поиска НЕ ставит фокус — клавиатура не вскакивает,
+  /* Тап по кнопке поиска НЕ ставит фокус — клавиатура не вскакивает,
      viewport не прыгает. Пользователь сам тапает по полю → нативный focus →
      клавиатура. Фокус остаётся ТОЛЬКО у программного открытия по «/» (десктоп). */
-  const openSearch = (focusInput = false) => {
-    const s = usePortal.getState();
-    playTick(); // звук + хаптика (движок)
-    if (s.productId) dismissProduct();
-    if (s.view !== "catalog" && s.view !== "stock") s.setView("catalog");
-    /* ТЕХНИКА «ПРЕДСМОНТИРОВАННАЯ КАРТОЧКА» (flushSync запрещён — он рвал
-       AnimatePresence): карточка в DOM всегда, скрыта visibility:hidden.
-       Открытие: класс is-open СИНХРОННО — видна в этом же кадре. */
-    document.querySelector(".search-pop")?.classList.add("is-open");
-    setSearchFabOpen(true);
-    if (focusInput && !focusVisibleSearchInput()) {
-      // страховка для программного открытия («/») при редких гонках
-      window.setTimeout(focusVisibleSearchInput, 120);
+  const openSearch = (
+    focusInput = false
+  ) => {
+    const state =
+      usePortal.getState();
+
+    playTick("tap");
+
+    if (state.productId) {
+      dismissProduct();
+    }
+
+    if (
+      state.view !== "catalog" &&
+      state.view !== "stock"
+    ) {
+      state.setView("catalog");
+    }
+
+    state.setSearchOpen(true);
+
+    /*
+     * Только desktop «/» требует
+     * программного focus.
+     *
+     * На мобильном кнопка поиска
+     * НЕ должна сама открывать keyboard.
+     */
+    if (focusInput) {
+      requestAnimationFrame(() => {
+        focusVisibleSearchInput();
+      });
     }
   };
-  /* Тап по круглому элементу поиска на пилюле: открыть/закрыть (toggle) */
+  /* Тап по кнопке поиска на пилюле: открыть/закрыть (toggle) */
   const toggleSearch = () => {
-    if (searchFabOpen) closeSearchPop();
-    else openSearch();
+    if (searchOpen) {
+      closeSearchPop();
+    } else {
+      openSearch(false);
+    }
   };
 
   useEffect(() => {
@@ -547,23 +699,46 @@ export function Portal() {
   });
 
   // Тап мимо подвесного поиска — закрыть (кроме самой карточки и кнопки на пилюле:
-  // у кнопки свой toggle — иначе pointerdown закрыл бы карточку ДО click)
+  // у кнопки свой toggle — иначе pointerdown закрыл бы карточку ДО click).
+  // Это ЕДИНСТВЕННЫЙ outside-обработчик режима — в Portal. Дублирующий
+  // листенер из SearchBar удалён: два глобальных pointerdown конфликтовали.
   useEffect(() => {
-    if (!searchFabOpen) return;
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Element | null;
-      if (t?.closest?.(".search-pop") || t?.closest?.(".pill-search")) return;
+    if (!searchOpen) return;
+
+    const onDown = (
+      event: PointerEvent
+    ) => {
+      const target =
+        event.target as Element | null;
+
+      if (
+        target?.closest?.(".search-pop") ||
+        target?.closest?.(".pill-search")
+      ) {
+        return;
+      }
+
       closeSearchPop();
     };
-    window.addEventListener("pointerdown", onDown);
-    return () => window.removeEventListener("pointerdown", onDown);
-  }, [searchFabOpen]);
+
+    window.addEventListener(
+      "pointerdown",
+      onDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        "pointerdown",
+        onDown
+      );
+    };
+  }, [searchOpen]);
 
   /* СВАЙП ВНИЗ закрывает карточку (шаг 3): палец тянет карточку вниз
      (визуальный след), отпускание при >70px — закрытие. Свайп внутри
      скроллящегося дропдауна результатов закрытию не мешает. */
   useEffect(() => {
-    if (!searchFabOpen) return;
+    if (!searchOpen) return;
     const pop = popRef.current;
     if (!pop) return;
     let startY = 0;
@@ -602,7 +777,7 @@ export function Portal() {
       pop.removeEventListener("touchend", te);
       pop.removeEventListener("touchcancel", te);
     };
-  }, [searchFabOpen]);
+  }, [searchOpen]);
 
   /* ТЗ v3.0 п.3/5: применение запроса (Enter/чип/ткань) БОЛЬШЕ НЕ закрывает
      карточку поиска — поле остаётся на экране, пользователь может продолжить
@@ -692,13 +867,14 @@ export function Portal() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const s = usePortal.getState();
-      // Верхние слои (просмотрщик, drawer фильтров, дропдаун поиска) закрывают себя сами
-      if (s.viewerOpen || s.filtersOpen || s.searchOpen) return;
+      // Верхние слои (просмотрщик, drawer фильтров) закрывают себя сами;
+      // поле поиска в фокусе тоже — SearchBar гасит Escape stopPropagation'ом
+      if (s.viewerOpen || s.filtersOpen) return;
       // ГОНКА (v3.1): pswp гасит слой СИНХРОННО в этом же событии — к моменту
       // bubble-фазы viewerOpen уже false, и без этой проверки портал сделал бы
       // ВТОРОЙ back (закрыл и товар). Пока корень pswp в DOM — Esc не наш.
       if (document.querySelector(".pswp")) return;
-      if (searchFabOpen) {
+      if (searchOpen) {
         e.preventDefault();
         closeSearchPop();
         return;
@@ -710,7 +886,7 @@ export function Portal() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [searchFabOpen]);
+  }, [searchOpen]);
 
   return (
     <div className="relative min-h-dvh">
@@ -855,117 +1031,166 @@ export function Portal() {
         </div>
       </main>
 
-      {/* SVG-фильтры эффекта (одни на приложение):
-          #pill-goo — metaball-слияние: капля отделяется/собирается при смене
-          вкладки (blur + alpha-контраст + atop — классический gooey-рецепт);
-          #pill-uneven — статичное «неровное стекло» панели (turbulence +
-          displacement по градиентам caustic-слоя). Фильтры НЕ в backdrop —
+      {/* SVG-фильтр эффекта (один на приложение):
+          #pill-goo — metaball-слияние: линза отделяется/собирается при смене
+          вкладки (blur + alpha-контраст + atop — классический gooey-рецепт).
+          #pill-uneven (feTurbulence + feDisplacementMap) УДАЛЁН: панель не
+          должна собирать ЧЕТЫРЕ стеклянных механизма одновременно
+          (backdrop + displacement + goo + градиенты). Фильтр НЕ в backdrop —
           расслоения стекла на Android нет (урок P0.2). */}
-      <svg aria-hidden="true" focusable="false" width="0" height="0" className="pill-svg-defs">
+      <svg
+        aria-hidden="true"
+        focusable="false"
+        width="0"
+        height="0"
+        className="pill-svg-defs"
+      >
         <defs>
-          <filter id="pill-goo" x="-10%" y="-30%" width="120%" height="160%" colorInterpolationFilters="sRGB">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+          <filter
+            id="pill-goo"
+            x="-8%"
+            y="-18%"
+            width="116%"
+            height="136%"
+            colorInterpolationFilters="sRGB"
+          >
+            <feGaussianBlur
+              in="SourceGraphic"
+              stdDeviation="4.5"
+              result="blur"
+            />
+
             <feColorMatrix
               in="blur"
               type="matrix"
-              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -12"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -8"
               result="goo"
             />
-            <feComposite in="SourceGraphic" in2="goo" operator="atop" />
-          </filter>
-          <filter id="pill-uneven" x="-15%" y="-30%" width="130%" height="160%" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.011 0.028" numOctaves="2" seed="7" result="noise" />
-            <feDisplacementMap
+
+            <feComposite
               in="SourceGraphic"
-              in2="noise"
-              scale="16"
-              xChannelSelector="R"
-              yChannelSelector="G"
+              in2="goo"
+              operator="atop"
             />
           </filter>
         </defs>
       </svg>
 
-      {/* Нижняя навигация — плавающая «пилюля» с жидкой каплей. ЕДИНЫЙ
-          стеклянный объект (P0.2): backdrop-filter на самой капсуле.
-          .pill-goo (метaball-капля) лежит НАД стеклом и НЕ обрезается —
-          капля выпуклая, выходит за границы пилюли, как в референсе.
-          Search Mode (P1.13) и клавиатура (P0.3) → панель скрыта
-          (display:none, без анимаций — P1.14). Хаптика .pill-haptic сохранена. */}
+      {/* Нижняя навигация — плавающая «пилюля» Liquid Glass. ОДИН shell:
+          GLASS SHELL → CAUSTICS → LIQUID LENS (goo, ПОД кнопками) → RIM →
+          ICONS+LABELS. Линза живёт ВНУТРИ панели (6px от кромки, не выпирает),
+          кнопки ВСЕГДА выше неё. Search Mode (searchOpen) и клавиатура
+          (html.kb-open) → панель скрыта display:none, без анимаций.
+          Скрытых form-controls (.pill-haptic) в панели НЕТ и НЕ возвращать. */}
       <nav
-        className={cn("pill-nav lg:hidden", (searchFabOpen || keyboardOpen) && "pill-hidden")}
+        className={cn(
+          "pill-nav lg:hidden",
+          (searchOpen || keyboardOpen) && "pill-hidden"
+        )}
         aria-label="Нижняя навигация"
       >
         <div className="pill-wrap">
-          {/* Жидкая капля: призрак (отстающая капля) + основная капля.
-              pointer-events:none — тапы проходят к кнопкам пилюли */}
-          <div ref={gooRef} className="pill-goo" aria-hidden="true">
-            <span ref={ghostRef} className="pill-ghost" />
-            <span ref={bubbleRef} className="pill-bubble" aria-hidden="true" />
-          </div>
           <div
             ref={shellRef}
-            className={cn(
-              "pill-shell",
-              scrolled && !pillTouched && "pill-dim",
-              pillTouched && "pill-active",
-            )}
+            className="pill-shell"
           >
-            {/* «Неровное стекло»: статичные цветные каустики, искажённые
-                #pill-uneven (преломление + цветовая неравномерность стекла) */}
-            <span className="pill-caustic" aria-hidden="true" />
-            {/* Хроматическая кромка: статичное оптическое кольцо */}
-            <span className="pill-rim" aria-hidden="true" />
-          {NAV.map(({ key, short, Icon }) => {
-            const on = view === key && !productId;
-            return (
+            {/* Фоновая оптика: статичные каустики (без SVG displacement) */}
+            <span
+              className="pill-caustic"
+              aria-hidden="true"
+            />
+
+            {/* Жидкая линза ПОД кнопками: призрак + основная капля.
+                pointer-events:none — тапы проходят к кнопкам пилюли */}
+            <div
+              ref={gooRef}
+              className="pill-goo"
+              aria-hidden="true"
+            >
+              <span
+                ref={ghostRef}
+                className="pill-ghost"
+              />
+
+              <span
+                ref={bubbleRef}
+                className="pill-bubble"
+              />
+            </div>
+
+            {/* Кромка стекла */}
+            <span
+              className="pill-rim"
+              aria-hidden="true"
+            />
+
+            {/* ВСЕ кнопки находятся ВЫШЕ линзы */}
+            <div className="pill-controls">
+              {NAV.map(({ key, short, Icon }) => {
+                const on =
+                  view === key &&
+                  !productId;
+
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    ref={(element) => {
+                      itemRefs.current[key] = element;
+                    }}
+                    className={cn(
+                      "pill-item",
+                      on && "is-on"
+                    )}
+                    aria-current={
+                      on ? "page" : undefined
+                    }
+                    onClick={(event) => {
+                      if (key === "catalog") {
+                        goCatalog(event.currentTarget);
+                        return;
+                      }
+
+                      usePortal
+                        .getState()
+                        .setView(key);
+
+                      playTick("tap");
+                    }}
+                  >
+                    <Icon
+                      size={21}
+                      strokeWidth={2.05}
+                    />
+
+                    <span className="pill-label">
+                      {short}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {/* Поиск — РЯД ПИЛЮЛИ, без разделителя и без отдельного круга */}
               <button
-                key={key}
                 type="button"
-                onClick={(e) => {
-                  if (key === "catalog") goCatalog(e.currentTarget, true);
-                  else {
-                    usePortal.getState().setView(key);
-                    // iOS: хаптику сыграл .pill-haptic; Android — вибрируем
-                    playTick("tap", { hapticOn: vibrateSupported() });
-                  }
-                }}
-                ref={(el) => {
-                  itemRefs.current[key] = el;
-                }}
-                className={cn("pill-item", on && "is-on")}
-                aria-current={on ? "page" : undefined}
+                className="pill-search"
+                aria-label="Поиск"
+                aria-expanded={searchOpen}
+                onClick={toggleSearch}
               >
-                {/* Нативный switch под пальцем (Safari 17.4+): прямой тап = системная
-                    хаптика на iOS ЛЮБОЙ версии, включая 26.5+, где программные тики
-                    запрещены Apple. Невидим (opacity 0 + clip-path), appearance НЕ
-                    трогаем — без нативного вида iOS не играет хаптику. Атрибут
-                    switch передаётся spread'ом: его ещё нет в React-типах. */}
-                <input type="checkbox" {...{ switch: "" }} className="pill-haptic" aria-hidden="true" tabIndex={-1} />
-                <Icon size={22} strokeWidth={2.1} />
-                <span className="pill-label">{short}</span>
+                <Search
+                  size={21}
+                  strokeWidth={2.05}
+                />
               </button>
-            );
-          })}
-          {/* Шаг 3 (аудит v2.6): поиск — РЯД ПИЛЮЛИ, без разделителя и без
-              отдельного круга: тот же размер, что табы */}
-          <button
-            type="button"
-            className={cn("pill-search", searchFabOpen && "is-on")}
-            aria-label="Поиск"
-            aria-expanded={searchFabOpen}
-            onClick={toggleSearch}
-          >
-            <input type="checkbox" {...{ switch: "" }} className="pill-haptic" aria-hidden="true" tabIndex={-1} />
-            <Search size={22} strokeWidth={2.1} />
-          </button>
-          </div>{/* /.pill-shell */}
-        </div>{/* /.pill-wrap */}
+            </div>
+          </div>
+        </div>
       </nav>
 
-      {/* Применённый поиск — плавающий чип над панелью (шаг 3):
+      {/* Применённый поиск — плавающий чип над панелью:
           видно активный фильтр + сброс одним тапом */}
-      {searchQuery && !searchFabOpen && (
+      {searchQuery && !searchOpen && (
         <div className="search-chip" role="status">
           <Search size={13} strokeWidth={2.4} className="shrink-0 text-[color:var(--brand)]" />
           <span className="min-w-0 truncate text-[12.5px] font-semibold text-foreground">
@@ -984,12 +1209,19 @@ export function Portal() {
         </div>
       )}
 
-      {/* Подвесной поиск (шаг 3) — стеклянная карточка НАД панелью (отступ 12мм):
-          ПРЕДСМОНТИРОВАНА (скрыта visibility:hidden), открывается из круглого
-          элемента пилюли или по «/» синхронным классом is-open + фокусом в жесте
-          (клавиатура iOS). Закрытие: крестик справа, свайп вниз, листание.
-          При открытой клавиатуре карточка поднимается над ней (--kb-h). */}
-      <div ref={popRef} className={cn("search-pop", searchFabOpen && "is-open")}>
+      {/* Подвесной поиск — стеклянная карточка НА МЕСТЕ панели (панель скрыта):
+          ПРЕДСМОНТИРОВАНА (скрыта visibility:hidden), видимость управляется
+          ТОЛЬКО React-состоянием searchOpen (класс is-open из рендера).
+          Закрытие: крестик справа, свайп вниз, Escape, тап мимо.
+          При открытой клавиатуре карточка поднимается на --kb-overlay
+          (реальное перекрытие visualViewport — см. use-visual-viewport). */}
+      <div
+        ref={popRef}
+        className={cn(
+          "search-pop",
+          searchOpen && "is-open"
+        )}
+      >
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <SearchBar />
