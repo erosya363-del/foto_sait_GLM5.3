@@ -802,3 +802,21 @@ Stage Summary:
 - Коммит 0e30c86 запушен: next.config.ts (turbopack.root: process.cwd()), src/lib/db.ts (фолбэк DATABASE_URL), восстановлен upload-роут
 - Причина сбоя деплоя: Turbopack workspace-root mis-inference -> нет standalone/server.js; вторично: отсутствие DATABASE_URL на платформе
 - Ждём редеплой платформы на 0e30c86, затем проверить https://j1jr777qg2d0-d.space-z.ai
+
+---
+Task ID: ios-native-shell-1
+Agent: main (Super Z)
+Task: Нативная iOS-оболочка (UIKit + UITabBarController + WKWebView) вокруг существующего сайта: нижняя навигация = системный Liquid Glass таб-бар iOS 26, сайт не переписывать.
+
+Work Log:
+- Аудит: SPA на zustand (View = catalog|stock|upload|admin, URL-роутов НЕТ), пилюля = nav.pill-nav в portal.tsx, splash = boot-splash (skovo-booted), PWA manifest+sw.js, upload = input[type=file] → /api/upload, back = History API, safe-area через --sab/env()
+- Веб: новый src/lib/native-bridge.ts (native-tab-change → zustand; tabChanged → native; no-op без флага __ASKONA_NATIVE_IOS__); portal.tsx +1 useEffect; globals.css — html.native-ios-shell: .pill-nav display:none + переориентация search-pop/search-chip/fab-top на --sab
+- iOS (ios/AskonaApp): AppDelegate/SceneDelegate; RootTabBarController — системный UITabBarController, 4 вкладки (Каталог/Загрузка/Админ/Остатки; square.grid.2x2 / square.and.arrow.up / gearshape / shippingbox), tabBarMinimizeBehavior=.off, tintColor=AccentColor; ОДИН общий WKWebView full-bleed под стеклом (0 reload'ов), additionalSafeAreaInsets синхронизирует высоту панели в env(safe-area-inset-bottom); клавиатура — setTabBarHidden по keyboardWillShow/Hide; NativeBridge — WKScriptMessageHandler (tabChanged/haptic/bridgeReady) с whitelist origin/main-frame, WeakScriptMessageHandler (без retain cycle); WebNavigationDelegate — внешние → Safari, javascript:/чужие схемы cancel
+- AppConfiguration: baseURL=https://j1jr777qg2d0-d.space-z.ai, allowedHosts, вкладки
+- Xcode-проект objectVersion 77 (PBXFileSystemSynchronizedRootGroup), Info.plist (UILaunchScreen, минимальные NSCamera/NSPhotoLibrary, NSAllowsLocalNetworking), Assets (AppIcon 1024 из logo-askona.png через sharp, AccentColor #0d9488/#2dd4bf)
+- Верификация scripts/verify-ios-shell.py: pbxproj структура/ссылки OK, Info.plist XML OK, Assets OK, 8 Swift-файлов (баланс, без private API) OK
+
+Stage Summary:
+- Ветка feat/ios-native-liquid-glass запушена (коммиты 1f0652a^..ec2574a: ios shell, bridge, web-мост, docs)
+- main не тронут; веб-версия (Safari/PWA) не изменена визуально
+- Сборка требует macOS/Xcode 26 — среда Z.ai (Linux) не позволяет; дана точная команда xcodebuild и единственный ручной шаг (Team)
