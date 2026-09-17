@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck, X } from "lucide-react";
 import {
@@ -27,6 +27,39 @@ const NAV: Array<{ key: View; label: string; short: string; Icon: typeof Boxes }
   { key: "upload", label: "Загрузка", short: "Загрузка", Icon: UploadCloud },
   { key: "admin", label: "Админ", short: "Админ", Icon: ShieldCheck },
 ];
+
+/* PHASE2 ТЗ 3.1: горизонтальная структура разделов — индекс определяет
+   направление перехода (newIndex > oldIndex → forward и т.д.) */
+const VIEW_ORDER: View[] = ["catalog", "stock", "upload", "admin"];
+
+const VIEW_COMPONENTS: Record<View, ComponentType> = {
+  catalog: CatalogView,
+  stock: StockView,
+  upload: UploadView,
+  admin: AdminView,
+};
+
+/* PHASE2 ТЗ 3.1/3.2: направленные горизонтальные переходы. Анимируются
+   ТОЛЬКО transform: translate3d и умеренная opacity — никаких blur/height
+   на всей странице. custom.dir задаёт сторону входа/выхода; custom.enterX
+   (px) — вход с позиции, где палец оставил соседний раздел (handoff после
+   интерактивного свайпа); custom.instant — нулевая длительность для кадра
+   handoff (контент уже визуально на месте). */
+const EASE_OUT: [number, number, number, number] = [0.22, 0.61, 0.36, 1];
+
+const pageVariants = {
+  enter: (c: { dir?: number; enterX?: number; instant?: boolean } | undefined) => {
+    if (c?.instant) return { x: 0, opacity: 1, transition: { duration: 0 } };
+    if (c?.enterX !== undefined)
+      return { x: c.enterX, opacity: 1, transition: { duration: 0.2, ease: EASE_OUT } };
+    return { x: `${(c?.dir ?? 1) * 42}%`, opacity: 0.6, transition: { duration: 0.24, ease: EASE_OUT } };
+  },
+  center: { x: 0, opacity: 1, transition: { duration: 0.24, ease: EASE_OUT } },
+  exit: (c: { dir?: number; instant?: boolean } | undefined) => {
+    if (c?.instant) return { x: 0, opacity: 0, transition: { duration: 0 } };
+    return { x: `${-(c?.dir ?? 1) * 46}%`, opacity: 0, transition: { duration: 0.2, ease: "easeIn" as const } };
+  },
+};
 
 /* «Жидкий» глитч-рябь (feTurbulence + feDisplacementMap) — УДАЛЕНА вместе с линзой (п.5 ТЗ:
    панель должна быть максимально стабильной) */
@@ -560,6 +593,10 @@ export function Portal() {
      гонки («клавиатура есть — поиска нет»). popRef — карточка подвесного
      поиска (нужен closeSearchPop, чтобы сначала снять фокус поля). */
   const popRef = useRef<HTMLDivElement | null>(null);
+  /* PHASE2 3.10: момент последнего автоматического закрытия поиска (тап мимо).
+     Касание, которое ЭТО закрытие вызвало, не должно продолжиться свайпом
+     раздела: pointerdown вне поиска срабатывает РАНЬШЕ touchstart жеста. */
+  const searchClosedAtRef = useRef(0);
   useEffect(() => {
     usePortal.getState().restore();
     window.history.replaceState(snapshot(), "");
@@ -671,6 +708,267 @@ export function Portal() {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       shell.removeEventListener("click", stopDragClick, { capture: true });
+    };
+  }, []);
+
+  /* ── PHASE2 B3: горизонтальная навигация по вкладкам ──
+   Направление переходов — по индексам VIEW_ORDER (3.1). Интерактивный
+   edge-swipe (3.3–3.7): раздел следует за пальцем, соседний монтируется
+   рядом; НОЛЬ React-рендеров на кадр (3.12) — только прямые transform-записи
+   и WAAPI-анимации handoff; линза панели получает общий progress (3.9). */
+  const mainRef = useRef<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const neighborRef = useRef<HTMLDivElement | null>(null);
+  const dirRef = useRef<1 | -1>(1);
+  const instantRef = useRef(false);
+  const busyRef = useRef(false);
+  const [swipe, setSwipe] = useState<{ dir: 1 | -1; target: View; top: number } | null>(null);
+  type SwipeGesture = {
+    dir: 1 | -1;
+    target: View;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastT: number;
+    vx: number;
+    dx: number;
+    w: number;
+    active: boolean;
+    edge: boolean;
+  };
+  const swipeRef = useRef<SwipeGesture | null>(null);
+
+  /* Направление ТАП-перехода — вычисляется В РЕНДЕРЕ (ref-корректировка,
+     разрешённый паттерн), чтобы enter-вариант нового кадра знал сторону. */
+  const prevViewRef = useRef(view);
+  if (prevViewRef.current !== view) {
+    const a = VIEW_ORDER.indexOf(prevViewRef.current);
+    const b = VIEW_ORDER.indexOf(view);
+    if (a >= 0 && b >= 0) dirRef.current = b > a ? 1 : -1;
+    prevViewRef.current = view;
+  }
+  /* custom.instant/enterX живут один кадр handoff — снимаем после коммита */
+  useEffect(() => {
+    instantRef.current = false;
+  }, [view, productId]);
+
+  /* ── PHASE2 B3: интерактивный edge-swipe разделов (ТЗ 3.3–3.10) ──
+   Один touch-поток на весь срок жизни []-эффекта; в кадре — только
+   transform-записи (3.12). Вертикальный интент (3.5) отпускает жест
+   браузеру ДО активации; после активации touchmove preventDefault —
+   вертикальный скролл не вклинивается. Коммит: |dx|>25% ширины ИЛИ
+   velocity>0.5 px/ms (3.4). Края — rubber-band без коммита (3.7). */
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+
+    const detach = () => {
+      window.removeEventListener("touchmove", onTm);
+      window.removeEventListener("touchend", onTe);
+      window.removeEventListener("touchcancel", onTc);
+    };
+
+    const gatesClosed = () => {
+      const st = usePortal.getState();
+      return st.viewerOpen || st.searchOpen || st.filtersOpen || Boolean(st.productId);
+    };
+
+    const isExcluded = (target: Element | null): boolean => {
+      if (!target) return true;
+      if (
+        target.closest(
+          'input, textarea, select, [contenteditable], [data-no-tab-swipe], .pswp, [role="dialog"], [role="alertdialog"], .search-pop, .pill-nav, .viewer-sheet-backdrop, .search-chip'
+        )
+      )
+        return true;
+      /* Горизонтальный скроллер на пути жеста — он владеет осью X (3.6) */
+      let el: Element | null = target;
+      while (el && el !== main) {
+        if (el.scrollWidth > el.clientWidth + 4) {
+          const ox = getComputedStyle(el).overflowX;
+          if (ox === "auto" || ox === "scroll") return true;
+        }
+        el = el.parentElement;
+      }
+      return false;
+    };
+
+    const applyProgress = (dx: number) => {
+      const g = swipeRef.current;
+      if (!g || !contentRef.current) return;
+      contentRef.current.style.transform = `translate3d(${dx.toFixed(1)}px,0,0)`;
+      const nb = neighborRef.current;
+      if (nb) nb.style.transform = `translate3d(${(g.dir * g.w + dx).toFixed(1)}px,0,0)`;
+      /* 3.9: линза панели = общий navigation progress между якорями вкладок */
+      const from = itemRefs.current[usePortal.getState().view];
+      const to = itemRefs.current[g.target];
+      if (from && to) {
+        const p = Math.min(1, Math.abs(dx) / g.w);
+        const x = from.offsetLeft + (to.offsetLeft - from.offsetLeft) * p;
+        const width = from.offsetWidth + (to.offsetWidth - from.offsetWidth) * p;
+        drivePillRef.current(x, width, true);
+      }
+    };
+
+    const onTs = (e: TouchEvent) => {
+      if (busyRef.current || swipeRef.current) return;
+      if (e.touches.length !== 1) return;
+      /* 3.10: поиск/товар/фильтры/просмотрщик открыты — свайпа нет.
+         Касание, которое только что закрыло поиск тапом мимо, тоже
+         не продолжается свайпом (pointerdown сработал раньше touchstart). */
+      const stNow = usePortal.getState();
+      if (stNow.viewerOpen || stNow.searchOpen || stNow.filtersOpen || Boolean(stNow.productId)) return;
+      if (performance.now() - searchClosedAtRef.current < 600) return;
+      if (isExcluded(e.target as Element | null)) return;
+      const t0 = e.touches[0];
+      swipeRef.current = {
+        dir: 1,
+        target: usePortal.getState().view,
+        startX: t0.clientX,
+        startY: t0.clientY,
+        lastX: t0.clientX,
+        lastT: performance.now(),
+        vx: 0,
+        dx: 0,
+        w: window.innerWidth,
+        active: false,
+        edge: false,
+      };
+      window.addEventListener("touchmove", onTm, { passive: false });
+      window.addEventListener("touchend", onTe);
+      window.addEventListener("touchcancel", onTc);
+    };
+
+    const onTm = (e: TouchEvent) => {
+      const g = swipeRef.current;
+      if (!g || e.touches.length !== 1) return;
+      const x = e.touches[0].clientX;
+      const y = e.touches[0].clientY;
+      const now = performance.now();
+
+      if (!g.active) {
+        const dx0 = x - g.startX;
+        const dy0 = y - g.startY;
+        /* 3.5 intent: вертикаль сильнее горизонтали → НЕ наш жест */
+        if (Math.abs(dy0) > 8 && Math.abs(dy0) > Math.abs(dx0) * 1.25) {
+          detach();
+          swipeRef.current = null;
+          return;
+        }
+        if (Math.abs(dx0) < 12 || Math.abs(dx0) <= Math.abs(dy0) * 1.25) return;
+        /* 3.10: re-check на момент активации — тап мимо мог ЗАКРЫТЬ поиск
+           (pointerdown outside срабатывает раньше touchstart), но жест,
+           начавшийся в поиске, всё равно не должен переключать раздел. */
+        if (gatesClosed()) {
+          detach();
+          swipeRef.current = null;
+          return;
+        }
+        /* АКТИВАЦИЯ: фиксируем направление и соседний раздел */
+        const st = usePortal.getState();
+        const idx = VIEW_ORDER.indexOf(st.view);
+        g.dir = dx0 < 0 ? 1 : -1;
+        const targetIdx = idx + g.dir;
+        g.edge = targetIdx < 0 || targetIdx >= VIEW_ORDER.length;
+        if (!g.edge) {
+          g.target = VIEW_ORDER[targetIdx];
+          const header = document.querySelector("header");
+          setSwipe({
+            dir: g.dir,
+            target: g.target,
+            top: header ? header.getBoundingClientRect().bottom : 0,
+          });
+        }
+        g.active = true;
+      }
+
+      /* Горизонталь захвачена — не пускаем вертикальный скролл (3.5) */
+      e.preventDefault();
+
+      const dxRaw = x - g.startX;
+      /* 3.7: крайние вкладки — лёгкий rubber-band без коммита */
+      const dx = g.edge ? dxRaw * 0.35 : dxRaw;
+      const dt = Math.max(1, now - g.lastT);
+      g.vx = (x - g.lastX) / dt;
+      g.lastX = x;
+      g.lastT = now;
+      g.dx = dx;
+      applyProgress(dx);
+    };
+
+    const finish = (committed: boolean) => {
+      const g = swipeRef.current;
+      detach();
+      swipeRef.current = null;
+      if (!g || !g.active) return;
+      const c = contentRef.current;
+      const nb = neighborRef.current;
+      const EASE = "cubic-bezier(0.22, 0.61, 0.36, 1)";
+
+      const doCommit =
+        committed && !g.edge && nb !== null &&
+        (Math.abs(g.dx) > g.w * 0.25 || (Math.abs(g.vx) > 0.5 && Math.abs(g.dx) > 60));
+
+      if (!doCommit) {
+        /* Отмена: пружина обратно (контент → 0, сосед → за экран).
+           КРИТИЧНО: WAAPI без fill по завершении ОТКАТЫВАЕТСЯ к inline-style —
+           поэтому в onfinish сбрасываем inline transform в финальное значение
+           (иначе раздел зависал смещённым и мобильный viewport разъезжался). */
+        busyRef.current = true;
+        const anims: Animation[] = [];
+        if (c) {
+          const a = c.animate([{ transform: c.style.transform || "translate3d(0,0,0)" }, { transform: "translate3d(0px,0,0)" }], { duration: 190, easing: EASE });
+          a.onfinish = () => {
+            a.cancel();
+            if (contentRef.current) contentRef.current.style.transform = "";
+            setSwipe(null);
+            busyRef.current = false;
+          };
+          a.oncancel = a.onfinish;
+          anims.push(a);
+        }
+        if (nb) {
+          nb.animate([{ transform: nb.style.transform || `translate3d(${g.dir * g.w}px,0,0)` }, { transform: `translate3d(${g.dir * g.w}px,0,0)` }], { duration: 190, easing: EASE });
+        }
+        const item = itemRefs.current[usePortal.getState().view];
+        if (item) drivePillRef.current(item.offsetLeft, item.offsetWidth, true);
+        if (!anims.length) {
+          setSwipe(null);
+          busyRef.current = false;
+        }
+        return;
+      }
+
+      /* КОММИТ: handoff — контент уезжает за экран, сосед встаёт на 0,
+         затем мгновенная смена view (3.8: через официальный setView). */
+      busyRef.current = true;
+      instantRef.current = true;
+      const done = () => {
+        if (contentRef.current) contentRef.current.style.transform = "";
+        /* ОДИН batched-рендер: overlay снят, старый view мгновенно ушёл
+           (exit.instant), новый встал на 0 (enter.instant) — без кадра-разрыва */
+        usePortal.getState().setView(g.target);
+        setSwipe(null);
+        playTick("tap");
+        busyRef.current = false;
+      };
+      if (c) {
+        const a = c.animate([{ transform: c.style.transform || "translate3d(0,0,0)" }, { transform: `translate3d(${-g.dir * g.w}px,0,0)` }], { duration: 170, easing: EASE });
+        a.onfinish = done;
+        a.oncancel = done;
+      } else done();
+      if (nb) nb.animate([{ transform: nb.style.transform || `translate3d(${g.dir * g.w}px,0,0)` }, { transform: "translate3d(0px,0,0)" }], { duration: 170, easing: EASE });
+    };
+
+    const onTe = (e: TouchEvent) => {
+      if (e.touches.length === 0) finish(true);
+    };
+    const onTc = () => finish(false);
+
+    main.addEventListener("touchstart", onTs, { passive: true });
+    return () => {
+      main.removeEventListener("touchstart", onTs);
+      detach();
     };
   }, []);
 
@@ -845,6 +1143,7 @@ export function Portal() {
       }
 
       closeSearchPop();
+      searchClosedAtRef.current = performance.now();
     };
 
     window.addEventListener(
@@ -1123,39 +1422,61 @@ export function Portal() {
         </header>
       </div>
 
-      {/* Контент */}
-      <main className="relative z-10 pb-[calc(104px+var(--sab))] lg:ml-[248px] lg:pb-10">
-        <div className="mx-auto w-full max-w-[1240px] px-4 pt-4 sm:px-6 lg:pt-6">
-          <AnimatePresence mode="wait">
+      {/* Контент. PHASE2 ТЗ 3.1: направленные горизонтальные переходы —
+          custom.dir из VIEW_ORDER; popLayout — одновременный вход/выход;
+          вертикальные opacity+y УБРАНЫ для переключения вкладок (3.1). */}
+      <main ref={mainRef} className="relative z-10 overflow-x-clip pb-[calc(104px+var(--sab))] lg:ml-[248px] lg:pb-10">
+        <div
+          ref={contentRef}
+          data-tab-swipe-content=""
+          className="mx-auto w-full max-w-[1240px] px-4 pt-4 sm:px-6 lg:pt-6"
+        >
+          <AnimatePresence
+            mode="popLayout"
+            initial={false}
+            custom={{ dir: dirRef.current, instant: instantRef.current }}
+          >
             <motion.div
               key={productId ? `product-${productId}` : view}
-              /* ФИКС «ПОДЁРГИВАНИЯ» ВКЛАДОК: из анимации УБРАН filter: blur(4px).
-                 Блюр всей страницы поверх backdrop-filter-стёкол (Загрузка —
-                 гигантская стеклянная панель, Остатки/Админ — стеклянные карточки)
-                 заставлял GPU перерисовывать страницу целиком КАЖДЫЙ кадр →
-                 тяжёлые вкладки дёргались (Каталог — лёгкий, был плавным).
-                 Остались только композиторные opacity+y — то же «погружение».
-                 Выход ускорен 0.22→0.13s: меньше пустой паузы mode="wait". */
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, transition: { duration: 0.13, ease: "easeIn" } }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
+              custom={{ dir: dirRef.current, instant: instantRef.current }}
+              variants={pageVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
             >
               {productId ? (
                 <ProductView />
-              ) : view === "stock" ? (
-                <StockView />
-              ) : view === "catalog" ? (
-                <CatalogView />
-              ) : view === "upload" ? (
-                <UploadView />
               ) : (
-                <AdminView />
+                (() => {
+                  const Current = VIEW_COMPONENTS[view];
+                  return <Current />;
+                })()
               )}
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
+
+      {/* PHASE2 ТЗ 3.3: neighbor-раздел рядом с текущим во время свайпа.
+          Монтируется ОДИН раз на активации жеста (один рендер), движется
+          transform-записями (ноль рендеров на кадр), снимается атомарно
+          с коммитом/отменой. pointer-events:none — превью не кликабельно. */}
+      {swipe && (
+        <div
+          ref={neighborRef}
+          data-tab-swipe-neighbor=""
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-30 overflow-hidden lg:hidden"
+          style={{ top: swipe.top }}
+        >
+          <div className="mx-auto w-full max-w-[1240px] px-4 pt-4 sm:px-6 lg:pt-6">
+            {(() => {
+              const Neighbor = VIEW_COMPONENTS[swipe.target];
+              return <Neighbor />;
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* SVG-фильтр эффекта (один на приложение):
           #pill-goo — metaball-слияние: линза отделяется/собирается при смене
