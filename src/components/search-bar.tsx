@@ -164,9 +164,14 @@ export function SearchBar() {
             if (e.key === "Enter") {
               commit(value.trim() || null);
             } else if (e.key === "Escape" && searchOpen) {
+              /* PHASE2 ТЗ 2.12: ЕДИНЫЙ путь закрытия — SearchBar больше НЕ
+                 делает setSearchOpen(false)+blur() сам (обходной путь).
+                 Все способы закрытия идут через closeSearchPop портала:
+                 blur → морф SEARCH_TO_NAV → state → settle панели.
+                 stopPropagation остаётся: Escape не должен дойти до
+                 window-обработчика портала в том же событии. */
               e.stopPropagation();
-              setSearchOpen(false);
-              inputRef.current?.blur();
+              window.dispatchEvent(new CustomEvent("portal:search-close"));
             }
           }}
           placeholder={PLACEHOLDER}
@@ -270,14 +275,12 @@ export function SearchBar() {
                     type="button"
                     onClick={() => {
                       applySearch(null);
-                      setSearchOpen(false);
-                      /* ТЗ v3.0: выбран конкретный результат — режим поиска выполнен
-                         свою задачу, карточка закрывается (иначе она висела бы над
-                         открытой карточкой товара) */
+                      /* PHASE2 ТЗ 2.12: закрытие режима — ТОЛЬКО через единый
+                         closeSearchPop портала (событие portal:search-close);
+                         прямой setSearchOpen(false) отсюда УДАЛЁН. */
                       window.dispatchEvent(new CustomEvent("portal:search-close"));
                       usePortal.getState().openProduct(v.id, "catalog");
                       setValue("");
-                      inputRef.current?.blur();
                     }}
                     className="group overflow-hidden rounded-xl border border-border bg-card text-left transition-all hover:border-[color:var(--brand)] active:scale-[0.97]"
                   >
