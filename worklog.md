@@ -864,3 +864,25 @@ Work Log:
 Stage Summary:
 - Критерий готовности ТЗ выполнен и доказан автотестом: build/restart/rebuild не трогают DB/uploads, фото остаются побайтово
 - Production :3000 переведён на runtime-зону; катастрофические векторы (git-заморозка, build-выпечка, edge-404) устранены
+
+---
+Task ID: stabilize-v2
+Agent: main (Super Z)
+Task: Stabilization v2 — 8 правок по второму ревью владельца до редеплоя (fail-closed E2E, полный verify, restore fail-closed + stop-server, атомарный backup, запрет legacy-фолбэка, db-push wrapper, cache-policy, FIX_REPORT v2).
+
+Work Log:
+- P1 fail-closed: scripts/e2e-guard.mjs (без E2E_BASE или явный :3000 → REFUSE, exit 1) подключён к test-s4/s5/s6, audit-full; test-s5 требует и E2E_RUNTIME; негатив-тесты: 3×exit 1
+- backup-runtime.sh переписан: VACUUM INTO staging (консистентный снапшот при параллельных записях) → uploads 2 прохода (rsync --delete) → manifest ПО STAGING → tar из staging; integrity_check снапшота до упаковки; баг «DB_ABS=$STAGING» найден логом, исправлен на $STAGE_ROOT
+- restore-runtime.sh переписан: EXIT 1 при любом расхождении manifest (все 8 счётчиков, md5 БД, md5 всех файлов, файлы вне manifest, отсутствие manifest); порядок stop server (поиск по /proc/<pid>/environ + порты из ss) → verify → swap → start (restart.sh + health check); негатив: испорченный файл/подделка счётчика/удалённый файл → 3×EXIT 1
+- test-restore-roundtrip.sh: сравнения семантически корректны (uploads побайтово; БД = счётчики+integrity+manifest: VACUUM INTO законно меняет байты БД) → 13/13 PASS
+- runtime.ts: legacy-фолбэк db/custom.db удалён; production без runtime-БД → THROW с инструкцией; пустая схема только при RUNTIME_ROOT (изоляция) или RUNTIME_BOOTSTRAP_EMPTY=1; тесты fail-loudly из корня проекта (тест из /tmp некорректен — PROJECT_ROOT от cwd; учтено)
+- scripts/db-push.sh: db:push/db:migrate только к runtime-БД (путь из runtime.ts), БД нет → EXIT 1, --accept-data-loss запрещён; реальный push → «already in sync»
+- middleware.ts: /api/media/* → immutable 1 год, остальной /api/* → no-store; проверено curl на живом :3000 после restart
+- package.json: verify:static/e2e/runtime + полный verify; прогнаны все: static PASS, e2e PASS (s4 34/34, s5, audit 0 находок, viewport 60 комбинаций 0 проблем), runtime PASS (regression 17/17, roundtrip 13/13)
+- FIX_REPORT.md: арифметика 16→15 вьюпортов (§7/§9/§15), §16 Stabilization v2 (правки+проверки), P2 тег-кейс добавлен в §12; удалён устаревший manifest.txt из корня production runtime (артефакт старого формата)
+- GIT: 7 коммитов пофайлово (45ff4f8..0f6e764), дифф-аудит перед push (15 файлов, без runtime/DB/фото/архивов/.env), push fc39027..0f6e764 → origin/main; прод-данные не тронуты (кроме удаления сгенерированного stale manifest.txt)
+
+Stage Summary:
+- Все 8 пунктов ревью закрыты и проверены позитивными и негативными тестами
+- Полный bun run verify = статический + изолированные E2E + runtime-регресс + roundtrip — PASS
+- Внешний редеплой по-прежнему за владельцем: после него проверка v1.7.0·sha, /api/media, cache-заголовков, сохранности фото и загрузки (сейчас edge всё ещё отдаёт v1.4)
