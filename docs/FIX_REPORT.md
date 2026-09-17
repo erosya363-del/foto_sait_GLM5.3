@@ -170,8 +170,8 @@
 | test-s4 (товары/справочники/дизайн) | мутировал прод | в изоляции | 34/34 PASS |
 | audit-full --quick (сплэш/разделы/tap-target/offline/upload) | на проде | в изоляции | 0 находок |
 | audit-back (Back/history, 4 сценария) | — | на живом :3000 | 4/4 PASS |
-| Viewport-аудит (16 размеров × 4 раздела + поиск) | НЕ СУЩЕСТВОВАЛО | 60 комбинаций | 0 проблем |
-| restore-roundtrip (backup→мутация→restore→сверка) | НЕ СУЩЕСТВОВАЛО | 10/10 PASS | PASS |
+| Viewport-аудит (15 размеров × 4 раздела + поиск) | НЕ СУЩЕСТВОВАЛО | 60 комбинаций | 0 проблем |
+| restore-roundtrip (backup→мутация→restore→сверка) | НЕ СУЩЕСТВОВАЛО | 13/13 PASS (v2: + fail-closed сверка manifest) | PASS |
 | Консоль/сеть (console.error, pageerror, 4xx/5xx, requestfailed) | — | во всех 60 комбинациях | 0 неожиданных |
 
 ---
@@ -202,7 +202,7 @@
 тапы — в аудит добавлен фильтр display/visibility/opacity/pointer-events);
 (б) тап-проверка нажимала кнопку режима, который и так активен по умолчанию
 (`stockMode: "compact"` в store) — `aria-pressed` законно не менялся. Реальные
-тапы «Карточки ⇄ Компактный вид» работают на всех 16 размерах; блокирующих
+тапы «Карточки ⇄ Компактный вид» работают на всех 15 размерах; блокирующих
 перекрытий не найдено.
 
 ---
@@ -278,6 +278,7 @@ Force-push не использовался; история не переписы
 | P1 | Авторизация отсутствует (каталог/загрузка/админка публичны) | **Сознательно** — решение владельца (этап 9 ТЗ) | Отдельный этап после завершения сайта |
 | P2 | `sait_copy_2.tar.gz` остаётся в старых коммитах GitHub (история) | Force-push запрещён | Если критично — Git History Rewrite отдельным решением |
 | P2 | Гонка параллельных загрузок в один вариант (findFirst→create без unique-индекса) может создать дубликат варианта | Требуется миграция схемы (unique index) — не делалась без необходимости менять данные | Добавить частичный unique-индекс в спокойной сессии |
+| P2 | В upload новые `tagIds` существующего варианта применяются ДО сохранения фото — если упадут все фото, теги останутся изменёнными | Порядок операций в транзакции upload (не связан с потерей фото) | Перенести привязку тегов после успешного сохранения всех фото (одна транзакция) |
 | P3 | Рефакторинг `portal.tsx` (2.5k строк) / `globals.css` на модули не выполнялся | Этапы 19–20: приоритет — стабильность; риск regression при механическом разрезе | Отдельный этап с покомпонентным переносом и прогоном полных E2E после каждого шага |
 | P3 | CSS dead code не удалялся | Простые grep-проходы не доказывают неиспользование (динамика/Framer/Radix); правило ТЗ «не удалять без доказательства» | Аудит покрытием (Chrome DevTools coverage) на всех разделах, затем точечное удаление |
 | P3 | SW A→B тест «версия A → деплой → reload → получили B» вживую не выполнялся | Требует двух реальных деплоев | Выполнить при текущем редеплое (SW network-first по коду корректен: кэш только offline-fallback навигаций) |
@@ -336,11 +337,11 @@ restore → счётчики БД `26|20|12` и md5 всех файлов = со
 | Защита БД от авто-сброса/seed | **PASS** (seed удалён, db:push без data-loss, db:reset удалён) |
 | Загрузка: откат частичной записи | **PASS** (реализовано; изолированные E2E зелёные) |
 | Публичный backup удалён | **PASS** |
-| Приватный backup/restore | **PASS** (roundtrip 10/10) |
+| Приватный backup/restore | **PASS** (roundtrip 13/13; v2: атомарный backup + fail-closed restore, см. §16) |
 | Strict TypeScript build | **PASS** (tsc/lint/build = 0) |
 | Единая команда verify | **PASS** (`bun run verify`) |
 | E2E-изоляция | **PASS** (run-isolated; test-s4 34/34, test-s5 — все чеки) |
-| Мобильный аудит (16 вьюпортов, 4 раздела, поиск) | **PASS** (0 проблем) |
+| Мобильный аудит (15 вьюпортов, 4 раздела, поиск) | **PASS** (0 проблем) |
 | Overlap «Остатков» (этап 13) | **PASS — подтверждённых багов нет** (артефакты аудита) |
 | Touch targets (этап 14) | **PASS WITH WARNING** — основные исправлены (44px); точечный «Компактный вид» 36px остался визуальным размером при расширенном hit-area |
 | Accessibility zoom (этап 15) | **PASS** (живой iPhone-тест остаётся за владельцем) |
@@ -356,3 +357,71 @@ build → restart → новый frontend работает, SQLite не трон
 на месте побайтово, optimized/thumbs на месте, каталог показывает те же
 данные — подтверждено автоматическим regression-тестом (17/17) и описано
 выше.
+
+---
+
+## 16. Stabilization v2 — правки по второму ревью (этот этап)
+
+Второе ревью подтвердило архитектуру (runtime-зона, /api/media, rollback
+upload, снятие db/uploads с Git-трекинга, 8 тематических коммитов), но нашло
+7 проблем до редеплоя. Все исправлены и проверены.
+
+### 16.1 Исправленные проблемы
+
+| № | Проблема из ревью | Исправление | Проверка |
+|---|---|---|---|
+| 1 | `verify` содержал только typecheck+lint+build | `verify:static` / `verify:e2e` / `verify:runtime` / полный `verify` (static → e2e → runtime); в e2e: s4 + s5 + audit-full --quick + viewport-аудит, всё в изоляции; в runtime: regression сохранности + restore-roundtrip | Прогон всех трёх шагов: PASS (см. 16.3) |
+| 2 (P1) | Мутирующие E2E имели фолбэк `E2E_BASE \|\| localhost:3000` и `E2E_RUNTIME \|\| production-runtime` — прямой запуск мутировал прод | `scripts/e2e-guard.mjs` (fail-closed): без `E2E_BASE` или с явным `:3000` → `REFUSE TO RUN`, exit 1; подключён к test-s4/s5/s6, audit-full; test-s5 дополнительно требует `E2E_RUNTIME` | Прямой запуск test-s4/test-s5 → exit 1; с `E2E_BASE=:3000` → exit 1; через run-isolated → PASS |
+| 3 | restore только печатал счётчики («сравните сами»), не проверял md5 и не падал при расхождении | restore fail-closed: EXIT 1 при любом из — счётчик manifest ≠ факт (все 8 счётчиков), md5 БД ≠ `db_md5`, файл из manifest отсутствует, md5 файла ≠ manifest, файл есть вне manifest (вскрытый архив); без manifest.txt → EXIT 1; подмена runtime выполняется ТОЛЬКО после полного соответствия | Негатив: испорченный файл → EXIT 1; поддельный счётчик → EXIT 1; удалённый файл → EXIT 1. Позитив: --check → EXIT 0 |
+| 4 | restore подменял runtime при работающем сервере (SQLite продолжал писать в старый inode) | Порядок: **stop server → verify → swap → start → health check**. Серверы целевой зоны ищутся по `/proc/<pid>/environ` (эффективный `RUNTIME_ROOT`; процесс без переменной = production-зона), порты — из `ss`; ожидание фактического выхода процессов; после swap перезапуск `restart.sh` с health check; не смогли остановить → отмена restore | Roundtrip: сервер :3200 останавливается до restore; production :3000 не матчится и не трогается |
+| 5 | Backup не атомарен (checkpoint → счётчики → tar живого runtime: запись между шагами портит согласованность) | Схема staging-снапшота: `VACUUM INTO` staging-БД (консистентная копия в read-транзакции, переживает параллельные записи) → uploads в staging двумя проходами → manifest считается **ПО STAGING** → tar из staging → архив байт-в-байт = manifest; integrity_check снапшота до упаковки | backup + `--check` на копии: EXIT 0, полное соответствие manifest |
+| 6 | `ensureRuntime()` фолбэком брал `db/custom.db` — при пропаже runtime приложение молча возвращало СТАРЫЙ набор фото | Legacy-фолбэк удалён: production без runtime-БД → **THROW** с инструкцией (restore-скрипт, список бэкапов); пустая схема — только при явном `RUNTIME_ROOT` (изолированная среда) или `RUNTIME_BOOTSTRAP_EMPTY=1` (заведомо чистая установка) | Тест без RUNTIME_ROOT/флага → exit 1 c ошибкой; с флагом на пустом окружении → БД из шаблона; production runtime существует → работа без изменений |
+| 7 | `db:push` брал DATABASE_URL из окружения — платформа экспортирует легаси URL на старую БД | Wrapper `scripts/db-push.sh` (package.json `db:push`/`db:migrate`): путь БД берёт из `src/lib/runtime.ts`; БД не существует → EXIT 1 без изменений; `--accept-data-loss` запрещён с подсказкой безопасного процесса | С легаси `DATABASE_URL` в env цель = runtime-БД; `--accept-data-loss` → EXIT 1; реальный push → «already in sync» |
+| 8 | `/api/media` отдавал immutable+1год, а middleware ставил no-store на ВЕСЬ /api — противоречие | Middleware: `/api/media/*` → `public, max-age=31536000, immutable`, остальные `/api/*` → `no-store` (значение дублируется в route-handler'ах) | Живой сервер: `/api/media/optimized/…` → immutable; `/api/catalog` → no-store |
+
+Мелкие правки того же ревью:
+- В отчёте арифметическая ошибка: вьюпортов **15** (7 мобильных + 2 планшета +
+  4 десктопа + 2 ландшафта), не 16; 15 × 4 раздела = 60 комбинаций — исправлено
+  в §7/§9/§15.
+- P2-кейс тегов в upload (новые `tagIds` применяются до сохранения фото — при
+  падении всех фото теги остаются изменёнными) — **не исправлен**, зафиксирован
+  в §12 как отдельный следующий шаг (не связан с потерей фото).
+- Гонка `findFirst → create` параллельных загрузок — остаётся в §12 (как и было).
+- Удалён устаревший `manifest.txt` из корня production runtime (артефакт старого
+  формата backup-скрипта; новые бэкапы пишут manifest только внутрь архива).
+
+### 16.2 Изменённые файлы v2
+
+| Файл | Изменение |
+|---|---|
+| `scripts/e2e-guard.mjs` | **НОВЫЙ** — fail-closed guard для мутирующих E2E |
+| `scripts/test-s4.mjs`, `scripts/test-s5.mjs`, `scripts/test-s6.mjs`, `scripts/audit-full.mjs` | guard-импорт, убраны production-фолбэки |
+| `scripts/backup-runtime.sh` | атомарный staging-снапшот (VACUUM INTO + 2 прохода + manifest по staging) |
+| `scripts/restore-runtime.sh` | fail-closed сверка manifest/hash + stop→verify→swap→start |
+| `scripts/test-restore-roundtrip.sh` | семантически корректные сравнения (uploads побайтово, БД через manifest+integrity), 13 чеков |
+| `scripts/db-push.sh` | **НОВЫЙ** — wrapper db:push/db:migrate на runtime-БД |
+| `src/lib/runtime.ts` | удалён legacy-фолбэк; fail-loudly; `RUNTIME_BOOTSTRAP_EMPTY` |
+| `src/lib/db.ts` | комментарий/семантика bootstrap |
+| `src/middleware.ts` | единая cache-policy (`/api/media/*` immutable) |
+| `package.json` | `verify:static/e2e/runtime` + полный `verify`; `db:push`/`db:migrate` через wrapper |
+| `docs/FIX_REPORT.md` | 15 вьюпортов, результаты v2, этот раздел |
+
+### 16.3 Верификация v2 (полный `bun run verify`)
+
+| Шаг | Состав | Результат |
+|---|---|---|
+| `verify:static` | typecheck + lint + build | **PASS** (0 ошибок) |
+| `verify:e2e` | test-s4 (34/34) + test-s5 (все чеки) + audit-full --quick (0 находок) + viewport-аудит (60 комбинаций, 0 проблем) — всё в изоляции :3100 | **PASS** |
+| `verify:runtime` | regression сохранности (17/17: 2 цикла build+restart, sha256 файлов) + restore-roundtrip (13/13) | **PASS** |
+| Негативные тесты | guard: 3×REFUSE; restore: испорченный файл/подделка manifest/удалённый файл → 3×EXIT 1; `--accept-data-loss` → EXIT 1; fail-loudly bootstrap → EXIT 1 | **PASS** |
+| Живой сервер | перезапуск :3000, `/api/media` immutable, `/api/catalog` no-store, catalog 200 | **PASS** |
+
+### 16.4 Статус готовности к редеплою
+
+- Локальная цепочка сохранности (build/restart/rebuild) — **PASS**.
+- **Реальный platform redeploy — NOT TESTED** (edge = снапшот последнего
+  коммита; деплой запускается владельцем). Ожидаемое снаружи после деплоя:
+  новый фронт с версией «v1.7.0 · \<sha\>», роут `/api/media/*`, cache-заголовки
+  из §16.1.8, сохранность существующих фото, работающая загрузка нового фото.
+- Известные ограничения остаются из §12 (авторизация — сознательно не
+  реализована; P2/P3 — отдельные следующие шаги).
