@@ -973,3 +973,23 @@ Stage Summary:
 - Phase 2.1 реализована полностью, 3 правки в 3 файлах, вся семантика preview/commit сохранена (тесты зелёные без правок тестов).
 - Морф построян на константной геометрии кнопки поиска (45px/33px от правого края) — не зависит от ширины телефона.
 - Далее: ручной redeploy владельцем → 3 видео (viewer pinch/pan/close; палец по панели; панель→поиск→панель) → сравнение с ТЗ → полная переделка Админки.
+
+---
+Task ID: 42 (sync: pull Liquid Glass v5 с GitHub + восстановление runtime-данных)
+Agent: main (Super Z)
+Task: «обнови с гит данные код исправлен» — pull пользовательских правок (Liquid Glass v5 iOS 26) + восстановление runtime-зоны после платформенного отката рабочего каталога.
+
+Work Log:
+- На GitHub 4 новых коммита поверх 4261656: a70e451/0587a02/ceec7b9/7e5e202 (Liquid Glass v5: blur 40px, sat 2.0, --glass-blur в search-bar; globals.css переписан компактно 2278→850 строк, КЛЮЧЕВЫЕ блоки сохранены, Phase 2.1 horizontal morph .pill-morph-out scale(0.42,0.85) ВЫЖИЛ).
+- Обнаружен платформенный откат рабочего каталога: main указывал на снапшот-коммит b8c9067 (эпоха v5.1, parent 3f566e3), worktree перепутан; runtime-зона download/runtime ПУСТАЯ (БД + все фото стёрты платформой вместе с откатом — вне Git).
+- Страховка: ветка backup/snapshot-b8c9067 + stash "workspace-rollback-snapshot-before-sync" (все данные отката recoverable).
+- git reset --hard origin/main → локальный код = пользовательский 7e5e202.
+- Build падал fail-closed («Runtime-БД отсутствует») — это РАБОТАЕТ как задумано (v2: production без данных падает громко).
+- Восстановление: scripts/sync-from-live.sh https://j1jr777qg2d0-d.space-z.ai --yes → 26 живых фото, optimized=38, thumbs=38, ВСЕ sha256 сверены, integrity_check ok. Потерь данных НЕТ.
+- Удалён несвязанный шаблонный мусор examples/ (socket.io-примеры платформы, ломали tsc).
+- verify:static ПОЛНОСТЬЮ PASS (tsc + lint + build).
+
+Stage Summary:
+- Локально = origin/main = 7e5e202; runtime-зона восстановлена с живого сайта (26 фото).
+- Готово к редеплою: sync-from-live → правки → verify → redeploy — протокол соблюдён, данные уедут в артефакт.
+- Урок: платформенный откат/снапшот СТИРАЕТ download/runtime — после любого подозрения на откат сразу sync-from-live ДО работы.
