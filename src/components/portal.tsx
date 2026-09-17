@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { playTick, playStep, vibrateSupported } from "@/lib/tick";
 import { useKeyboardOpen } from "@/lib/use-visual-viewport";
+import { initNativeIOSBridge } from "@/lib/native-bridge";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { BootSplash } from "@/components/boot-splash";
 import { SearchBar } from "@/components/search-bar";
@@ -241,6 +242,12 @@ export function Portal() {
   const title = useHeaderTitle();
   useWowEffects();
   const keyboardOpen = useKeyboardOpen(); // подписка держит singleton живым; панель прячет класс .pill-hidden + html.kb-open
+
+  /* ── Нативная iOS-оболочка (AskonaApp): мост «системный таб-бар ↔ SPA» ──
+     В Safari/PWA/Android — no-op (флаг __ASKONA_NATIVE_IOS__ не выставлен).
+     В нативной оболочке: таб-бар iOS переключает разделы через
+     native-tab-change, сайт сообщает о смене раздела через tabChanged. */
+  useEffect(() => initNativeIOSBridge(), []);
 
   /* ── Пилюля: ОДНО статичное стекло + ЖИДКАЯ капля (эффект с видео) ──
      Glass-слой панели один (backdrop-filter на .pill-shell, не анимируется).

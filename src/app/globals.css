@@ -2009,3 +2009,30 @@ a img,
     padding-bottom: 11px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NATIVE iOS SHELL (AskonaApp: UIKit + UITabBar + WKWebView)
+   Класс html.native-ios-shell ставит нативная оболочка скриптом
+   atDocumentStart. Нижняя навигация в этом режиме — СИСТЕМНЫЙ UITabBar
+   (Liquid Glass считает и рисует сама iOS), веб-пилюля отключена.
+   --sab внутри оболочки включает высоту нативной панели
+   (additionalSafeAreaInsets в RootTabBarController) — двойного inset нет.
+   В Safari/PWA/Android класс не появляется — этот блок мёртвый код.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Веб-пилюля целиком OFF (нативный таб-бар включён) */
+html.native-ios-shell .pill-nav {
+  display: none !important;
+}
+
+/* Плавающие элементы, стоявшие НАД пилюлей: прижимаем к нативной панели
+   (высота пилюли 64px из формул убрана — теперь их держит --sab) */
+html.native-ios-shell .search-pop {
+  bottom: calc(max(10px, var(--sab)) + 12mm + var(--kb-h, 0px));
+}
+html.native-ios-shell .search-chip {
+  bottom: calc(max(10px, var(--sab)) + 8px);
+}
+html.native-ios-shell .fab-top {
+  bottom: calc(max(10px, var(--sab)) + 10px);
+}
