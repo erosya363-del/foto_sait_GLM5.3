@@ -956,3 +956,20 @@ Stage Summary:
 - Все 3 блока PASS; реальный iPhone НЕ тестировался (чек-лист в отчёте §7.8); открытые вопросы OI-1..4 в §7.7
 - Артефакты: tool-results/mobile-phase2/{viewer/,horizontal-navigation-final.mp4,scroll-perf.json}, tool-results/mobile-nav/
 - Данные не тронуты; sync-before-deploy протокол соблюдён; готово к ручному redeploy владельцу и независимому ревью ChatGPT
+
+---
+Task ID: 41 (Mobile Phase 2.1 — Real Gesture Correction, 3 правки)
+Agent: main (Super Z)
+Task: «Photo Viewer: pinchToClose=false (pinch только зум, close = vertical drag при 1x или X); Liquid Panel: preview линзы следует за реальным fingerX непрерывно, nearestItem ТОЛЬКО на pointerup; Search morph: горизонтальный/shared transition — панель перетекает в поиск, не исчезает вниз. Затем redeploy + видео на реальном iPhone.»
+
+Work Log:
+- EDIT 1 (src/components/photo-viewer.tsx): pinchToClose:false (было true) — pinch = ТОЛЬКО зум; закрытие = closeOnVerticalDrag при 1x (оставлен) или × из любого зума (ТЗ 1.4). Обновлён док-блок. Тест test-photo-viewer-mobile: pinch-out зум / вертикальный drag в зуме не закрывает / × из зума / swipe при 1x закрывает — PASS 49/49.
+- EDIT 2 (src/components/portal.tsx, B2-эффект): onMove в dragging больше НЕ вызывает nearestItem — цель пружины = реальный clientX (линза центрируется под пальцем: x = clientX − shellLeft − w/2, кламп в [0, shellW−w]); ширина линзы = снимок offsetWidth активной вкладки ОДИН раз при входе в drag (без layout-чтений на кадр, без дребезга ширины). nearestItem — ТОЛЬКО в finish() на pointerup (commit/settleBack как было).
+- EDIT 3 (src/app/globals.css): морф NAV↔SEARCH переделан в ГОРИЗОНТАЛЬНЫЙ shared: .pill-morph-out = scale(0.42,0.85) + origin calc(100%−45px) 50% (центр кнопки поиска — константа на любом телефоне: 14 nav-pad + 5 controls-pad + 25) — панель сжимается-втекает В КНОПКУ, не вниз; transform-origin вынесен в базу .pill-nav (иначе интерполяция при снятии класса даёт скачок). .search-pop closed = «капля» в той же точке: scale(0.14,0.86) + origin calc(100%−33px) + border-radius 999px → is-open растягивается влево в карточку (radius 999→22 в transition, добавлен в оба списка). Тайминги синхронизированы 260 мс / cubic-bezier(0.22,0.61,0.36,1) оба слоя (панель 220/240 разнобой убран). Десктоп ≥1024px: origin 50% 50% + radius 22px — горизонтальный морф не протекает.
+- VERIFICATION: tsc 0; verify:static PASS; E2E изолированно: test-photo-viewer-mobile 49/49, test-mobile-horizontal-nav 95/95 (линза под вкладкой после commit — совместимо с continuous-follow), test-mobile-nav-search 49/49 (секция 9: preview за пальцем / раздел не меняется в середине / commit на release / release не дотянув / pointercancel; секция 10 interrupt PASS).
+- Коммиты пофайлово: 0062991 viewer → 2301448 panel → 68480d4 nav-search; push origin main.
+
+Stage Summary:
+- Phase 2.1 реализована полностью, 3 правки в 3 файлах, вся семантика preview/commit сохранена (тесты зелёные без правок тестов).
+- Морф построян на константной геометрии кнопки поиска (45px/33px от правого края) — не зависит от ширины телефона.
+- Далее: ручной redeploy владельцем → 3 видео (viewer pinch/pan/close; палец по панели; панель→поиск→панель) → сравнение с ТЗ → полная переделка Админки.
