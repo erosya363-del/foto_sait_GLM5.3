@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck, X } from "lucide-react";
 import {
@@ -8,7 +8,7 @@ import {
   type View, type PortalSnapshot,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { playTick } from "@/lib/tick";
+import { playTick, playStep } from "@/lib/tick";
 import { useKeyboardOpen } from "@/lib/use-visual-viewport";
 import { initNativeIOSBridge } from "@/lib/native-bridge";
 import { ThemeSwitch } from "@/components/theme-switch";
@@ -565,6 +565,115 @@ export function Portal() {
     window.history.replaceState(snapshot(), "");
   }, []);
 
+  /* ── PHASE2 B2: gesture на панели — «живая линза» следует за пальцем ──
+     ТЗ 2.4/2.5/2.6: VISUAL PREVIEW (линза едет за пальцем на пружине)
+     отделён от COMMITTED VIEW (раздел меняется ТОЛЬКО на pointerup).
+     Тап (|dx| ≤ 8px) не перехватывается — обычный click кнопки.
+     При drag click соседних кнопок гасится capture-листенером на фазе
+     захвата (React-делегат корня срабатывает позже — на bubble). */
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    type Hit = { key: View; el: HTMLButtonElement; dist: number };
+    let phase: "idle" | "tracking" | "dragging" = "idle";
+    let startX = 0;
+    let pointerId = -1;
+
+    const nearestItem = (clientX: number): Hit | null => {
+      let best: Hit | null = null;
+      for (const [key, el] of Object.entries(itemRefs.current) as Array<[View, HTMLButtonElement | null]>) {
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const d = Math.abs(clientX - (r.left + r.width / 2));
+        if (!best || d < best.dist) best = { key, el, dist: d };
+      }
+      return best;
+    };
+
+    const stopDragClick = (e: MouseEvent) => {
+      if (phase !== "dragging") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+
+    const settleBack = () => {
+      const s = usePortal.getState();
+      const item = itemRefs.current[s.view];
+      if (item && !s.productId) {
+        drivePillRef.current(item.offsetLeft, item.offsetWidth, true);
+      }
+    };
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (usePortal.getState().productId) return; /* товар открыт — линза скрыта */
+      phase = "tracking";
+      startX = e.clientX;
+      pointerId = e.pointerId;
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (phase === "idle" || e.pointerId !== pointerId) return;
+      const dx = e.clientX - startX;
+      if (phase === "tracking" && Math.abs(dx) > 8) {
+        phase = "dragging";
+        shell.addEventListener("click", stopDragClick, { capture: true });
+      }
+      if (phase !== "dragging") return;
+      const hit = nearestItem(e.clientX);
+      if (hit) {
+        drivePillRef.current(hit.el.offsetLeft, hit.el.offsetWidth, true);
+      }
+    };
+
+    const finish = (clientX: number) => {
+      const wasDragging = phase === "dragging";
+      phase = "idle";
+      if (!wasDragging) return;
+      const hit = nearestItem(clientX);
+      const s = usePortal.getState();
+      if (hit && hit.key !== s.view && !s.productId) {
+        /* COMMIT: только на отпускании (ТЗ 2.5). Эффект [view] довезёт линзу. */
+        usePortal.getState().setView(hit.key);
+        playTick("tap");
+        window.setTimeout(() => {
+          shell.removeEventListener("click", stopDragClick, { capture: true });
+        }, 0);
+        return;
+      }
+      /* Отпустил между вкладками / на текущей — линза плавно settle к ближайшей */
+      settleBack();
+      window.setTimeout(() => {
+        shell.removeEventListener("click", stopDragClick, { capture: true });
+      }, 0);
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (phase === "idle" || e.pointerId !== pointerId) return;
+      finish(e.clientX);
+    };
+    const onCancel = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId && pointerId !== -1) return;
+      const wasDragging = phase === "dragging";
+      phase = "idle";
+      if (wasDragging) settleBack();
+      shell.removeEventListener("click", stopDragClick, { capture: true });
+    };
+
+    shell.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    window.addEventListener("pointercancel", onCancel, { passive: true });
+    return () => {
+      shell.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      shell.removeEventListener("click", stopDragClick, { capture: true });
+    };
+  }, []);
+
   /* ── КОРЕНЬ КРИТИЧЕСКОГО БАГА v3.0 («клавиатура есть, а поиска нет») ──
      Раньше листание >30px закрывало подвесной поиск. Но когда открывалась
      клавиатура, СТРАНИЦА СКАКЛА САМА: iOS подкручивает документ, чтобы
@@ -575,14 +684,25 @@ export function Portal() {
      управляет только сворачиванием шапки. */
   useEffect(() => {
     let raf = 0;
+    let calmTimer = 0;
     const onScroll = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => setScrolled(window.scrollY > 6));
+      /* PHASE2 ТЗ 2.7: на время скролла замирают дорогие фоновые анимации
+         (зерно/авроры) — html.is-scrolling ставит animation-play-state:paused,
+         снимается через 240 мс после последнего события скролла */
+      document.documentElement.classList.add("is-scrolling");
+      window.clearTimeout(calmTimer);
+      calmTimer = window.setTimeout(() => {
+        document.documentElement.classList.remove("is-scrolling");
+      }, 240);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(calmTimer);
+      document.documentElement.classList.remove("is-scrolling");
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
@@ -600,7 +720,12 @@ export function Portal() {
    (клавиатуру открывает тап пользователя по полю); программный фокус —
    только «/» на десктопе. Закрытие: крестик, свайп вниз, Escape, тап мимо —
    ВСЕГДА через closeSearchPop: сначала blur (клавиатура iOS закрывается),
-   потом state. */
+   потом state.
+
+   PHASE2 ТЗ 2.13: closeSearchPop/openSearch — useCallback([]) (стабильные
+   идентичности), листенеры portal:search-open/close — []-жизненный цикл.
+   Раньше эти эффекты БЕЗ массива зависимостей пересоздавали листенеры
+   на КАЖДЫЙ рендер портала (listener churn — п.2.13 ТЗ). */
   const focusVisibleSearchInput = () => {
     const host = document.querySelector<Element>(".search-pop");
     const input = host?.querySelector<HTMLInputElement>("input[data-search-input]");
@@ -626,7 +751,7 @@ export function Portal() {
     }
     return Boolean(input);
   };
-  const closeSearchPop = () => {
+  const closeSearchPop = useCallback(() => {
     const input =
       popRef.current
         ?.querySelector<HTMLInputElement>(
@@ -645,11 +770,11 @@ export function Portal() {
     usePortal
       .getState()
       .setSearchOpen(false);
-  };
+  }, []);
   /* Тап по кнопке поиска НЕ ставит фокус — клавиатура не вскакивает,
      viewport не прыгает. Пользователь сам тапает по полю → нативный focus →
      клавиатура. Фокус остаётся ТОЛЬКО у программного открытия по «/» (десктоп). */
-  const openSearch = (
+  const openSearch = useCallback((
     focusInput = false
   ) => {
     const state =
@@ -682,7 +807,7 @@ export function Portal() {
         focusVisibleSearchInput();
       });
     }
-  };
+  }, []);
   /* Тап по кнопке поиска на пилюле: открыть/закрыть (toggle) */
   const toggleSearch = () => {
     if (searchOpen) {
@@ -692,11 +817,12 @@ export function Portal() {
     }
   };
 
+  /* PHASE2 ТЗ 2.13: ОДИН стабильный листенер на весь жизненный цикл */
   useEffect(() => {
     const open = () => openSearch(true); /* «/» — сразу к вводу (десктоп) */
     window.addEventListener("portal:search-open", open);
     return () => window.removeEventListener("portal:search-open", open);
-  });
+  }, [openSearch]);
 
   // Тап мимо подвесного поиска — закрыть (кроме самой карточки и кнопки на пилюле:
   // у кнопки свой toggle — иначе pointerdown закрыл бы карточку ДО click).
@@ -788,7 +914,7 @@ export function Portal() {
     const close = () => closeSearchPop();
     window.addEventListener("portal:search-close", close);
     return () => window.removeEventListener("portal:search-close", close);
-  });
+  }, [closeSearchPop]);
 
   // ── History API: каждый новый слой/раздел — отдельная запись ─────
   // ФИКС F-001: в deps включены ВСЕ слои (cat*/searchQuery) — раньше запись
@@ -1085,7 +1211,12 @@ export function Portal() {
       <nav
         className={cn(
           "pill-nav lg:hidden",
-          (searchOpen || keyboardOpen) && "pill-hidden"
+          /* PHASE2 ТЗ 2.8–2.10: клавиатура — мгновенный display:none (без
+             переходов, как и было); ПОИСК — морф-переход единого стекла:
+             панель уходит вниз/сжимается, search surface приезжает снизу.
+             CSS-транзишны симметричны и прерываемы в обе стороны. */
+          keyboardOpen && "pill-hidden",
+          searchOpen && "pill-morph-out"
         )}
         aria-label="Нижняя навигация"
       >
