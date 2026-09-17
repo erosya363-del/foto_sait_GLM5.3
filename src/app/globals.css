@@ -110,7 +110,7 @@
   /* Стекло плавающей пилюли: обычное / при скролле (прозрачнее) / при касании (плотнее).
      АУДИТ v2.6 («панель не прозрачная»): альфа ощутимо снижена — фон просвечивает;
      плотность и преломление даёт Liquid Glass (displacement), не молочная заливка */
-  --pill-bg: rgba(50, 48, 44, 0.30);
+  --pill-bg: rgba(50, 48, 44, 0.20);
   /* pill-bg-dim / pill-bg-active УДАЛЕНЫ (ТЗ v4 п.13): панель — ОДИН материал,
      скролл и касание НЕ меняют её плотность. НЕ возвращать. */
   /* Линза активного пункта / чип темы — нейтральное светлое стекло */
@@ -207,7 +207,7 @@
   --grid-line: rgba(82, 74, 60, 0.05);
   /* Капсула: белое стекло на тёплом фоне; при скролле прозрачнее, при касании плотнее.
      АУДИТ v2.6: прозрачнее (альфа снижена) */
-  --pill-bg: rgba(255, 255, 255, 0.34);
+  --pill-bg: rgba(255, 255, 255, 0.26);
   /* pill-bg-dim / pill-bg-active УДАЛЕНЫ (ТЗ v4 п.13): панель — ОДИН материал */
   --lens-bg: rgba(255, 255, 255, 0.8);
   --lens-border: rgba(255, 255, 255, 0.95);
@@ -342,7 +342,11 @@ body {
 .aurora {
   position: absolute;
   border-radius: 50%;
-  filter: blur(110px);
+  /* PHASE2 ТЗ 2.7 (профилирование): filter: blur(110px) УДАЛЁН.
+     Радиальные градиенты и так сходят в прозрачность к 62% радиуса —
+     блюр края ничего не добавлял визуально, но заставлял композитор
+     держать и перекрашивать три огромных фильтр-слоя. Замена — чистый
+     градиент без фильтра: тот же вид, ноль фильтр-растеризаций. */
   will-change: transform, opacity;
 }
 .aurora-a {
@@ -899,6 +903,35 @@ html.kb-open .pill-nav {
   display: none;
 }
 
+/* ── PHASE2 ТЗ 2.8–2.10: NAV↔SEARCH — морф ЕДИНОГО glass-материала ──
+   Раньше searchOpen = display:none в ПЕРВЫЙ кадр (резкий обрыв).
+   Теперь: панель уходит вниз/сжимается и гаснет (240 мс), search surface
+   симметрично приезжает снизу и расширяется. visibility с задержкой —
+   элемент не ловит тапы сразу после начала fade. CSS-транзишны обратимы:
+   rapid toggle просто меняет класс — анимация реверсирует (interruptible). */
+.pill-nav {
+  transition:
+    opacity 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.pill-nav.pill-morph-out {
+  opacity: 0;
+
+  transform:
+    translateY(18px)
+    scale(0.9);
+
+  visibility: hidden;
+
+  pointer-events: none;
+
+  transition:
+    opacity 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear 240ms;
+}
+
 .pill-shell {
   position: relative;
 
@@ -936,8 +969,12 @@ html.kb-open .pill-nav {
   /*
    * Никакой animation/transition geometry.
    * Shell всегда стоит на одном месте.
+   *
+   * PHASE2 ТЗ 2.4: touch-action:none — pointer-жест линзы получает
+   * ПОЛНЫЙ поток событий (браузер не перехватывает панорамирование,
+   * pointercancel не срывается со скролла — панель не скроллит страницу).
    */
-  touch-action: manipulation;
+  touch-action: none;
 
   user-select: none;
   -webkit-user-select: none;
@@ -1347,16 +1384,19 @@ header.glass {
 
   pointer-events: none;
 
+  /* PHASE2: старт чуть ниже и мельче — surface «поднимается» из-под кромки
+     панели и расширяется до места (симметрично морфу панели) */
   transform:
-    translateY(8px)
-    scale(.985);
+    translateY(16px)
+    scale(0.96);
 
   /* КРИТИЧНО (ТЗ v4): НЕ транзионить bottom — положение обязано ехать
-     синхронно с visualViewport, а не догонять клавиатуру CSS-переходом */
+     синхронно с visualViewport, а не догонять клавиатуру CSS-переходом.
+     PHASE2 ТЗ 2.10: тайминг поднят с 180 до 240 мс (окно морфа 240–300 мс). */
   transition:
-    opacity 180ms cubic-bezier(.22,.61,.36,1),
-    transform 180ms cubic-bezier(.22,.61,.36,1),
-    visibility 0s linear 180ms;
+    opacity 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 240ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 240ms;
 }
 
 /* Liquid Glass v4: глянец + преломление по краям на подвесной карточке поиска
@@ -1393,8 +1433,8 @@ header.glass {
     scale(1);
 
   transition:
-    opacity 180ms cubic-bezier(.22,.61,.36,1),
-    transform 180ms cubic-bezier(.22,.61,.36,1);
+    opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 /*
@@ -1871,12 +1911,21 @@ a img,
 }
 .fx-grain {
   position: fixed;
-  inset: -50%;
+  /* PHASE2 ТЗ 2.7: было inset:-50% (слой в 4× вьюпорта — сотни МБ GPU-памяти
+     на мобильных). Оверскан ужат до 8% — ровно столько нужно анимации ±3%. */
+  inset: -8%;
   z-index: 21;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   opacity: 0.05;
   animation: grain-shift 8s steps(8) infinite;
+}
+/* PHASE2 ТЗ 2.7: во время скролла дорогие фоновые анимации замирают
+   (html.is-scrolling вешает portal.tsx, снимает через 240 мс после стопа).
+   Зерно/аврора статичны — пауза глазу не видна, композитор разгружен. */
+html.is-scrolling .fx-grain,
+html.is-scrolling .aurora {
+  animation-play-state: paused;
 }
 .light .fx-grain {
   opacity: 0.035;
