@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Copy,
   Download,
   ExternalLink,
   Info,
@@ -76,15 +75,45 @@ export function PhotoViewer() {
   const pswpRef = useRef<PhotoSwipeInstance | null>(null);
   const closingByAppRef = useRef(false);
   const sheetRef = useRef(false);
-  sheetRef.current = sheet;
-
   const photosRef = useRef<ViewerPhoto[]>(photos);
-  photosRef.current = photos;
 
-  /* Синхронизация натуральных размеров для инфо-строки sheet'а */
+  /* PHASE2: синхронизация ref'ов в ЭФФЕКТЕ (react-hooks/refs: запись в ref
+     во время рендера запрещена). Ref'ы читаются только в обработчиках/
+     колбэках — commit-фаза эффекта им полностью достаточна. */
   useEffect(() => {
+    sheetRef.current = sheet;
+    photosRef.current = photos;
+  }, [sheet, photos]);
+
+  /* Синхронизация натуральных размеров для инфо-строки sheet'а.
+     PHASE2: сброс — «adjust state during render» (react-hooks/set-state-in-effect
+     запрещает setState в эффекте; guarded-паттерн в рендере — документированная
+     альтернатива: сбрасываем при смене фото/открытия, ровно один лишний рендер). */
+  const natKey = `${open}-${index}`;
+  const [natKeyPrev, setNatKeyPrev] = useState(natKey);
+  if (natKeyPrev !== natKey) {
+    setNatKeyPrev(natKey);
     setNat(null);
-  }, [index, open]);
+  }
+
+  /* ── PHASE2 B1-F4: ЯВНЫЙ body scroll lock на всё время viewer'а ──
+     АУДИТ: PhotoSwipe 5.4.4 НЕ лочит страницу (нет overflow:hidden на
+     html/body — только touch-action:none на своей поверхности). Программный
+     скролл/якоря/скролл-чейнинг в момент жеста двигали страницу ПОД
+     просмотрщиком — вклад в «дёргания» и «странные положения».
+     Лочим html.overflow, при снятии возвращаем позицию МГНОВЕННО
+     (behavior:"instant" — html scroll-behavior:smooth иначе анимировал бы). */
+  useEffect(() => {
+    if (!open) return;
+    const html = document.documentElement;
+    const y = window.scrollY;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prev;
+      window.scrollTo({ top: y, behavior: "instant" });
+    };
+  }, [open]);
 
   /* ── Единственный lifecycle-эффект: open → инстанс pswp, close → destroy ──
      Никаких повторных слушателей на каждое открытие: все подписки живут
@@ -132,22 +161,22 @@ export function PhotoViewer() {
     }));
 
     (async () => {
-      // первый слайд: пропорции до init (из кэша — быстро)
-      const first = await probeDims(photos[index]?.thumbUrl || photos[index]?.url);
+      /* PHASE2 B1-F1 «изображение в странном положении»: пропорции ВСЕХ слайдов
+         ДОЛЖНЫ быть известны ДО pswp.init(). Раньше не-первые слайды жили с
+         width:0 до завершения фонового зонда: быстрый свайп на соседний кадр
+         получал слайд без пропорций — Slide.isZoomable() = false (pinch молча
+         отключён, ZoomLevel.fit = 1 от нулевого размера) и нулевой layout.
+         Thumbs (640px) уже в кэше браузера из сетки — параллельный зонд
+         занимает первые миллисекунды; окно гонки закрыто полностью. */
+      const dims = await Promise.all(
+        photos.map((p) => probeDims(p.thumbUrl || p.url))
+      );
       if (destroyed) return;
-      if (first && dataSource[index]) {
-        dataSource[index].width = first.w;
-        dataSource[index].height = first.h;
-      }
-      // остальные — в фоне; при переходе слайд получит готовые пропорции
-      photos.forEach((p, i) => {
-        if (i === index) return;
-        probeDims(p.thumbUrl || p.url).then((d) => {
-          if (d && dataSource[i] && !dataSource[i].width) {
-            dataSource[i].width = d.w;
-            dataSource[i].height = d.h;
-          }
-        });
+      dims.forEach((d, i) => {
+        if (d && dataSource[i]) {
+          dataSource[i].width = d.w;
+          dataSource[i].height = d.h;
+        }
       });
 
       const isDesktopPointer =
@@ -171,6 +200,12 @@ export function PhotoViewer() {
         secondaryZoomLevel: DOUBLE_TAP_ZOOM, // double tap 1x → 2.5x
         maxZoomLevel: DEFAULT_MAX, // P0.9: configured maximum (5x)
         padding: { top: 16, bottom: 16, left: 12, right: 12 },
+        // PHASE2 B1: русские подписи системных кнопок (a11y); «×» работает
+        // при ЛЮБОМ зуме — нативный close() сразу, без reset-zoom (ТЗ 1.4)
+        closeTitle: "Закрыть",
+        zoomTitle: "Приблизить",
+        arrowPrevTitle: "Предыдущее фото",
+        arrowNextTitle: "Следующее фото",
         // History НЕ трогаем — слоями History управляет портал (store/popstate)
       });
 
@@ -295,10 +330,15 @@ export function PhotoViewer() {
     }
   };
 
+  /* PHASE2 B1-F2 «зависание после действий»: раньше fetch полного фото шёл
+     МОЛЧА (секунды на мобильной сети) — sheet закрывался и ничего не
+     происходило. Теперь у долгих операций есть честный loading-тост.
+     Viewer не закрывается, зум не сбрасывается — fetch вне рендера. */
   const sharePhoto = useCallback(async () => {
     const p = photosRef.current[index];
     if (!p) return;
     const name = fileNameOf(p.url);
+    const progress = toast.loading("Готовим фото…", { description: name });
     try {
       const blob = await fetch(p.url).then((r) => {
         if (!r.ok) throw new Error("fetch failed");
@@ -309,15 +349,19 @@ export function PhotoViewer() {
       /* P1.1: iOS — системный Share Sheet с самим ФАЙЛОМ; text/url не
          подмешиваем (payload файл-only — максимум совместимости) */
       if (nav.canShare?.({ files: [file] })) {
+        toast.dismiss(progress);
         await nav.share({ files: [file] });
         return;
       }
       if (navigator.share) {
+        toast.dismiss(progress);
         await navigator.share({ title: "Фото со склада Askona", url: abs(p.url) });
         return;
       }
+      toast.dismiss(progress);
       setSheet(true); // P1.2: Web Share недоступен — fallback-меню
     } catch (e) {
+      toast.dismiss(progress);
       if (isShareAbort(e)) return; // пользователь сам закрыл системный шит
       setSheet(true);
     }
@@ -328,6 +372,7 @@ export function PhotoViewer() {
     if (!p) return;
     setSheet(false);
     const name = fileNameOf(p.url);
+    const progress = toast.loading("Скачиваем…", { description: name });
     try {
       const blob = await fetch(p.url).then((r) => {
         if (!r.ok) throw new Error("fetch failed");
@@ -341,9 +386,10 @@ export function PhotoViewer() {
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(href), 4000);
-      toast.success("Скачивание началось", { description: name });
+      toast.success("Скачивание началось", { description: name, id: progress });
     } catch {
       /* сеть недоступна для blob — открываем файл в новой вкладке */
+      toast.dismiss(progress);
       window.open(p.url, "_blank", "noopener");
     }
   }, [index]);
@@ -360,27 +406,10 @@ export function PhotoViewer() {
     }
   }, [index]);
 
-  const canCopyImage = typeof window !== "undefined" && "ClipboardItem" in window;
-
-  const copyImage = useCallback(async () => {
-    const p = photosRef.current[index];
-    if (!p) return;
-    setSheet(false);
-    try {
-      const blob = await fetch(p.url).then((r) => r.blob());
-      const bmp = await createImageBitmap(blob);
-      const cv = document.createElement("canvas");
-      cv.width = bmp.width;
-      cv.height = bmp.height;
-      cv.getContext("2d")?.drawImage(bmp, 0, 0);
-      const png = await new Promise<Blob | null>((res) => cv.toBlob(res, "image/png"));
-      if (!png) throw new Error("png failed");
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
-      toast.success("Изображение скопировано в буфер");
-    } catch {
-      toast.error("Браузер не поддерживает копирование изображений");
-    }
-  }, [index]);
+  /* PHASE2 B1-F3: «Скопировать изображение» УДАЛЕНО из sheet по ТЗ 1.6
+     («не перегружать»): на iOS Safari ClipboardItem+PNG стабильно ненадёжен,
+     а ссылка/Share покрывают сценарий «переслать фото». Удаление задокументировано
+     в docs/MOBILE_PHASE2_REPORT.md (REMOVED LEGACY). */
 
   const openOriginal = useCallback(() => {
     const p = photosRef.current[index];
@@ -433,12 +462,6 @@ export function PhotoViewer() {
               <Link2 size={17} strokeWidth={2.2} />
               Скопировать ссылку
             </button>
-            {canCopyImage && (
-              <button type="button" className="viewer-sheet-row" onClick={copyImage}>
-                <Copy size={17} strokeWidth={2.2} />
-                Скопировать изображение
-              </button>
-            )}
             <button type="button" className="viewer-sheet-row" onClick={openOriginal}>
               <ExternalLink size={17} strokeWidth={2.2} />
               Открыть оригинал
