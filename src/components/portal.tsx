@@ -607,7 +607,11 @@ export function Portal() {
      отделён от COMMITTED VIEW (раздел меняется ТОЛЬКО на pointerup).
      Тап (|dx| ≤ 8px) не перехватывается — обычный click кнопки.
      При drag click соседних кнопок гасится capture-листенером на фазе
-     захвата (React-делегат корня срабатывает позже — на bubble). */
+     захвата (React-делегат корня срабатывает позже — на bubble).
+     PHASE 2.1: PREVIEW следует за РЕАЛЬНЫМ fingerX НЕПРЕРЫВНО (линза
+     центрируется под пальцем, без квантования по вкладкам); nearestItem
+     вызывается ТОЛЬКО на pointerup для commit. Ширина линзы на время
+     жеста зафиксирована (без дребезга ширины между вкладками). */
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
@@ -616,6 +620,11 @@ export function Portal() {
     let phase: "idle" | "tracking" | "dragging" = "idle";
     let startX = 0;
     let pointerId = -1;
+    /* Снимок жеста: ширина линзы (ширина активной вкладки) и левая кромка
+       shell в viewport-координатах — считываются ОДИН раз при входе в drag,
+       не на каждый pointermove (никаких layout-чтений в цикле жеста). */
+    let dragW = 56;
+    let dragLeft = 0;
 
     const nearestItem = (clientX: number): Hit | null => {
       let best: Hit | null = null;
@@ -655,13 +664,19 @@ export function Portal() {
       const dx = e.clientX - startX;
       if (phase === "tracking" && Math.abs(dx) > 8) {
         phase = "dragging";
+        dragW = itemRefs.current[usePortal.getState().view]?.offsetWidth || 56;
+        dragLeft = shell.getBoundingClientRect().left;
         shell.addEventListener("click", stopDragClick, { capture: true });
       }
       if (phase !== "dragging") return;
-      const hit = nearestItem(e.clientX);
-      if (hit) {
-        drivePillRef.current(hit.el.offsetLeft, hit.el.offsetWidth, true);
-      }
+      /* PHASE 2.1: НЕПРЕРЫВНЫЙ preview — цель пружины = РЕАЛЬНЫЙ палец
+         (линза центрируется под clientX), НЕ ближайшая вкладка. nearestItem
+         НЕ вызывается здесь вовсе — только в finish() на pointerup. */
+      const x = Math.min(
+        Math.max(e.clientX - dragLeft - dragW / 2, 0),
+        Math.max(0, shell.clientWidth - dragW)
+      );
+      drivePillRef.current(x, dragW, true);
     };
 
     const finish = (clientX: number) => {
