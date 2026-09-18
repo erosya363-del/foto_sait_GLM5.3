@@ -17,6 +17,13 @@
  *        приезжает; interruptible (rapid open→close).
  *   PH2-4 is-scrolling (ТЗ 2.7): класс появляется при скролле и снимается.
  *   PH2-5 Прозрачность (ТЗ 2.2): alpha --pill-bg ≤ 0.30 (v5: 0.28 — патч владельца iOS 26).
+ *   P23-A..J Dynamic Lens (PHASE 2.3 §15): REST геометрия; PRESS выше панели
+ *        (bounding rect!); content-press; single drag; BRIDGE Каталог/Остатки
+ *        и Остатки/Загрузка (одна масса накрывает оба центра); release commit;
+ *        release не дотянув; pointercancel; rapid ×10 без залипших классов.
+ *   P23-Н HAPTICS (§16): стаб navigator.vibrate — press → событие; drag через
+ *        границы → ограниченное число step (не пропорционально pointermove);
+ *        commit → событие.
  *
  * Тест ТОЛЬКО ЧИТАЮЩИЙ, но запуск — fail-closed через явный E2E_BASE:
  *   bash scripts/run-isolated.sh bun scripts/test-mobile-nav-search.mjs
@@ -57,6 +64,34 @@ const context = await browser.newContext({
   deviceScaleFactor: 2,
   recordVideo: { dir: join(SHOTS, "video-raw"), size: { width: 390, height: 844 } },
 });
+
+/* PHASE 2.3 §16: счётчик хаптики — navigator.vibrate стабится ДО скриптов
+   приложения (init). Считаем КАЖДЫЙ вызов: press/step/commit идут через
+   web-haptics → navigator.vibrate в Chromium. */
+await context.addInitScript(() => {
+  const w = window;
+  w.__haptics = { calls: [] };
+  try {
+    const push = (p) => {
+      w.__haptics.calls.push(Array.isArray(p) ? p.join(",") : String(p));
+      return true;
+    };
+    const proto = Navigator.prototype;
+    const orig = proto.vibrate;
+    if (typeof orig === "function") {
+      Object.defineProperty(proto, "vibrate", {
+        value: function (p) {
+          push(p);
+          try { return orig.call(this, p); } catch { return true; }
+        },
+        configurable: true,
+      });
+    } else {
+      Object.defineProperty(proto, "vibrate", { value: push, configurable: true });
+    }
+  } catch {}
+});
+
 const page = await context.newPage();
 
 const consoleErrors = [];
@@ -473,7 +508,8 @@ console.log("── 11. PH2-4/5: is-scrolling + прозрачность (ТЗ 2
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
 
   const alpha = await page.evaluate(() => {
-    const bg = getComputedStyle(document.querySelector(".pill-shell")).backgroundColor;
+    /* PHASE 2.3: реальное стекло переехало в .pill-surface (§1.4/E) */
+    const bg = getComputedStyle(document.querySelector(".pill-surface")).backgroundColor;
     const m = bg.match(/rgba?\(([^)]+)\)/);
     const parts = m ? m[1].split(",").map((s) => parseFloat(s)) : [];
     return parts.length === 4 ? parts[3] : 1;
@@ -481,6 +517,228 @@ console.log("── 11. PH2-4/5: is-scrolling + прозрачность (ТЗ 2
   /* Liquid Glass v5 (патч владельца): dark --pill-bg = rgba(50,48,44,0.28) —
      чуть плотнее, чем ТЗ 2.2 (0.25) — осознанное решение v5, НЕ регресс. */
   ok("панель прозрачнее: alpha --pill-bg ≤ 0.30 (v5: 0.28)", alpha <= 0.301, `alpha=${alpha}`);
+}
+
+/* ── PHASE 2.3: хелперы dynamic lens ── */
+const pillPanel = () =>
+  page.evaluate(() => {
+    const shell = document.querySelector(".pill-shell");
+    const items = [...document.querySelectorAll(".pill-item")].map((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        label: el.textContent.trim(),
+        left: r.left,
+        right: r.right,
+        cx: r.left + r.width / 2,
+        width: r.width,
+        covered: el.classList.contains("is-lens-covered"),
+        contentScale: (() => {
+          const c = el.querySelector(".pill-item-content");
+          if (!c) return 1;
+          const t = new DOMMatrixReadOnly(getComputedStyle(c).transform === "none" ? "" : getComputedStyle(c).transform);
+          return t.a;
+        })(),
+      };
+    });
+    return { cy: shell.getBoundingClientRect().top + shell.getBoundingClientRect().height / 2, items };
+  });
+
+const lensState = () =>
+  page.evaluate(() => {
+    const shell = document.querySelector(".pill-shell");
+    const bubble = document.querySelector(".pill-bubble");
+    const on = document.querySelector(".pill-item.is-on");
+    const s = shell.getBoundingClientRect();
+    const b = bubble.getBoundingClientRect();
+    return {
+      shellH: s.height,
+      shellTop: s.top,
+      shellBottom: s.bottom,
+      bTop: b.top,
+      bBottom: b.bottom,
+      bLeft: b.left,
+      bRight: b.right,
+      bCx: b.left + b.width / 2,
+      bW: b.width,
+      bH: b.height,
+      onLabel: on?.textContent?.trim() ?? null,
+      onCx: on ? on.getBoundingClientRect().left + on.getBoundingClientRect().width / 2 : 0,
+      coveredCount: document.querySelectorAll(".pill-item.is-lens-covered").length,
+      pressVar: bubble.style.getPropertyValue("--lens-press") || "0",
+    };
+  });
+
+const resetHaptics = () => page.evaluate(() => { window.__haptics.calls.length = 0; });
+const hapticCount = () => page.evaluate(() => window.__haptics.calls.length);
+
+console.log("── 12. P23-A/B/C: REST геометрия, PRESS выше панели, content-press (§15) ──");
+{
+  await clickTab("Каталог");
+  await page.waitForTimeout(700);
+  let g = await settleLens();
+  ok("A. REST: линза внутри панели (h ≤ 64px)", g.bubble.opacity && g.bubble.width > 0 && g.bubble.top >= g.shell.top - 0.6 && g.bubble.bottom <= g.shell.bottom + 0.6, `h=${(g.bubble.bottom - g.bubble.top).toFixed(1)}`);
+
+  const panel = await pillPanel();
+  const catalog = panel.items.find((i) => i.label === "Каталог");
+  const stock = panel.items.find((i) => i.label === "Остатки");
+  const upload = panel.items.find((i) => i.label === "Загрузка");
+  const admin = panel.items.find((i) => i.label === "Админ");
+
+  /* B: pointerdown → линза СТАНОВИТСЯ ВЫШЕ панели (пружине press нужно ~0.4 c) */
+  await resetHaptics();
+  await pillDown(catalog.cx, panel.cy);
+  await page.waitForTimeout(500);
+  let ls = await lensState();
+  ok("B. PRESS: линза выше панели (bH > shellH)", ls.bH > ls.shellH, `bH=${ls.bH.toFixed(1)} shellH=${ls.shellH}`);
+  ok("B. PRESS: вспухание симметрично (выше и ниже)", ls.bTop < ls.shellTop - 1 && ls.bBottom > ls.shellBottom + 1, `top Δ=${(ls.shellTop - ls.bTop).toFixed(1)} bottom Δ=${(ls.bBottom - ls.shellBottom).toFixed(1)}`);
+  ok("B. PRESS: --lens-press активирован", parseFloat(ls.pressVar) > 0.5, ls.pressVar);
+
+  /* C: content накрытого пункта сжат */
+  const covered = panel.items; // пере-снимок ниже
+  const p2 = await pillPanel();
+  const cat2 = p2.items.find((i) => i.label === "Каталог");
+  ok("C. CONTENT PRESS: Каталог накрыт (is-lens-covered)", cat2.covered, `covered=${p2.items.filter((i) => i.covered).map((i) => i.label).join(",")}`);
+  ok("C. CONTENT PRESS: scale < 0.96", cat2.contentScale > 0.5 && cat2.contentScale < 0.96, `scale=${cat2.contentScale.toFixed(3)}`);
+  ok("C. is-on НЕ изменён при press", ls.onLabel === "Каталог", ls.onLabel);
+
+  /* отпускание: геометрия собирается обратно */
+  await pillUp(catalog.cx, panel.cy);
+  await page.waitForTimeout(650);
+  g = await settleLens();
+  ok("B. Release: высота вернулась в панель", g.bubble.top >= g.shell.top - 0.6 && g.bubble.bottom <= g.shell.bottom + 0.6);
+  const p3 = await pillPanel();
+  ok("C. Release: covered-классов нет", p3.items.every((i) => !i.covered));
+  ok("B. PRESS haptic: ≥ 1 вызов vibration", (await hapticCount()) >= 1, `calls=${await hapticCount()}`);
+}
+
+console.log("── 13. P23-D/E: single drag за пальцем + TWO-TAB BRIDGE (§15 D/E) ──");
+{
+  const panel = await pillPanel();
+  const catalog = panel.items.find((i) => i.label === "Каталог");
+  const stock = panel.items.find((i) => i.label === "Остатки");
+  const upload = panel.items.find((i) => i.label === "Загрузка");
+  const admin = panel.items.find((i) => i.label === "Админ");
+
+  /* D: одиночный drag в пределах одной вкладки — линза следует за пальцем */
+  await pillDown(catalog.cx, panel.cy);
+  await pillMove(catalog.cx + 25, panel.cy);
+  await page.waitForTimeout(220);
+  let ls = await lensState();
+  ok("D. SINGLE DRAG: линза ушла за пальцем", ls.bCx > catalog.cx + 12, `dcx=${(ls.bCx - catalog.cx).toFixed(1)}`);
+  ok("D. раздел НЕ меняется в полёте", ls.onLabel === "Каталог", ls.onLabel);
+
+  /* E: мост Каталог↔Остатки — ОДНА линза накрывает ОБА центра */
+  const midCS = (catalog.cx + stock.cx) / 2;
+  await pillMove(midCS, panel.cy);
+  await page.waitForTimeout(260);
+  ls = await lensState();
+  ok("E. BRIDGE: ширина > таб × 1.4", ls.bW > catalog.width * 1.4, `bW=${ls.bW.toFixed(0)} vs ${catalog.width.toFixed(0)}`);
+  ok("E. BRIDGE: накрыты ОБА центра (Каталог и Остатки)", ls.bLeft < catalog.cx && ls.bRight > stock.cx, `[${ls.bLeft.toFixed(0)}..${ls.bRight.toFixed(0)}] vs ${catalog.cx.toFixed(0)}/${stock.cx.toFixed(0)}`);
+  ok("E. BRIDGE: оба пункта is-lens-covered", (await pillPanel()).items.filter((i) => i.covered).map((i) => i.label).join("+") === "Каталог+Остатки");
+  ok("E. BRIDGE: is-on всё ещё Каталог (commit только на release)", ls.onLabel === "Каталог", ls.onLabel);
+  ok("E. BRIDGE: линза одна (не две)", ls.bW > 0 && (await page.evaluate(() => document.querySelectorAll(".pill-bubble").length)) === 1);
+
+  /* release на Остатках → commit (G частично) */
+  await pillUp(stock.cx, panel.cy);
+  await page.waitForTimeout(700);
+  const g2 = await settleLens();
+  ok("E→G. release на Остатках: commit = Остатки", g2.active.label === "Остатки", g2.active.label);
+  ok("G. высота вернулась в панель", g2.bubble.top >= g2.shell.top - 0.6 && g2.bubble.bottom <= g2.shell.bottom + 0.6);
+  ok("G. covered-классов нет после commit", (await pillPanel()).items.every((i) => !i.covered));
+
+  /* F: второй мост Остатки↔Загрузка */
+  await pillDown(stock.cx, panel.cy);
+  const midSU = (stock.cx + upload.cx) / 2;
+  await pillMove(midSU, panel.cy);
+  await page.waitForTimeout(260);
+  ls = await lensState();
+  ok("F. BRIDGE-2: ширина > таб × 1.4", ls.bW > stock.width * 1.4, `bW=${ls.bW.toFixed(0)}`);
+  ok("F. BRIDGE-2: накрыты ОБА центра (Остатки и Загрузка)", ls.bLeft < stock.cx && ls.bRight > upload.cx, `[${ls.bLeft.toFixed(0)}..${ls.bRight.toFixed(0)}]`);
+
+  /* H: release НЕ дотянув (до Загрузки далеко) → возврат к Остаткам */
+  await pillUp(stock.cx + 12, panel.cy);
+  await page.waitForTimeout(700);
+  const g3 = await settleLens();
+  ok("H. release не дотянув: раздел Остатки", g3.active.label === "Остатки", g3.active.label);
+  ok("H. геометрия нормальная", g3.bubble.top >= g3.shell.top - 0.6 && g3.bubble.bottom <= g3.shell.bottom + 0.6 && Math.abs(g3.bubble.cx - stock.cx) < 6, `dx=${Math.abs(g3.bubble.cx - stock.cx).toFixed(1)}`);
+
+  /* I: pointercancel — полный возврат */
+  await pillDown(stock.cx, panel.cy);
+  await pillMove(admin.cx, panel.cy);
+  await page.evaluate(() => {
+    window.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: 0, clientY: 0, buttons: 1 }));
+  });
+  await page.waitForTimeout(650);
+  const g4 = await settleLens();
+  ok("I. pointercancel: раздел не изменился", g4.active.label === "Остатки", g4.active.label);
+  ok("I. pointercancel: без залипших covered", (await pillPanel()).items.every((i) => !i.covered));
+  ok("I. pointercancel: линза под активной", Math.abs(g4.bubble.cx - g4.active.cx) < 6, `dx=${Math.abs(g4.bubble.cx - g4.active.cx).toFixed(1)}`);
+
+  /* возврат в Каталог для следующих секций */
+  await clickTab("Каталог");
+  await page.waitForTimeout(600);
+}
+
+console.log("── 14. P23-J: rapid press→drag→release ×10 — без залипших состояний ──");
+{
+  const panel = await pillPanel();
+  const byLabel = (l) => panel.items.find((i) => i.label === l);
+  const route = ["Остатки", "Каталог", "Загрузка", "Остатки", "Каталог", "Админ", "Каталог", "Остатки", "Загрузка", "Каталог"];
+  for (let i = 0; i < route.length; i++) {
+    const from = byLabel(i % 2 === 0 ? "Каталог" : route[i - 1] ?? "Каталог");
+    const to = byLabel(route[i]);
+    await pillDown(from.cx, panel.cy);
+    await pillMove((from.cx + to.cx) / 2, panel.cy);
+    await pillUp(to.cx, panel.cy);
+    await page.waitForTimeout(90);
+  }
+  await page.waitForTimeout(800);
+  const g = await settleLens();
+  const p = await pillPanel();
+  ok("J. rapid ×10: активный = Каталог", g.active.label === "Каталог", g.active.label);
+  ok("J. rapid ×10: линза под активной", Math.abs(g.bubble.cx - g.active.cx) < 5, `dx=${Math.abs(g.bubble.cx - g.active.cx).toFixed(1)}`);
+  ok("J. rapid ×10: НЕТ залипших covered-классов", p.items.every((i) => !i.covered));
+  ok("J. rapid ×10: геометрия в панели", g.bubble.top >= g.shell.top - 0.6 && g.bubble.bottom <= g.shell.bottom + 0.6);
+  ok("J. консоль: 0 ошибок", consoleErrors.length === 0, JSON.stringify(consoleErrors.slice(0, 3)));
+  ok("J. pageerror: 0", pageErrors.length === 0, JSON.stringify(pageErrors.slice(0, 3)));
+}
+
+console.log("── 15. P23-H: HAPTICS — press/step/commit маршрут (§16) ──");
+{
+  const panel = await pillPanel();
+  const catalog = panel.items.find((i) => i.label === "Каталог");
+  const stock = panel.items.find((i) => i.label === "Остатки");
+  const upload = panel.items.find((i) => i.label === "Загрузка");
+  const admin = panel.items.find((i) => i.label === "Админ");
+
+  /* тап по вкладке: press (down) + click-отклик схлопываются троттлом —
+     должен остаться ОДИН вызов vibration (±1 на границе троттла) */
+  await resetHaptics();
+  await clickTab("Остатки");
+  await page.waitForTimeout(500);
+  const tapCalls = await hapticCount();
+  ok("H. tap: ровно один отклик (не дубли)", tapCalls >= 1 && tapCalls <= 2, `calls=${tapCalls}`);
+
+  /* drag через 3 границы (Остатки→Загрузка→Админ): press + ≤3 step + commit;
+     НЕ пропорционально числу pointermove (их ~12) */
+  await resetHaptics();
+  await pillDown(stock.cx, panel.cy);
+  for (let i = 1; i <= 12; i++) {
+    const x = stock.cx + ((admin.cx - stock.cx) * i) / 12;
+    await pillMove(x, panel.cy);
+  }
+  await pillUp(admin.cx, panel.cy);
+  await page.waitForTimeout(500);
+  const dragCalls = await hapticCount();
+  ok("H. drag ×12 move: события связаны с границами (≤ 7), не с move", dragCalls >= 2 && dragCalls <= 7, `calls=${dragCalls}`);
+  ok("H. commit на admin", (await lensState()).onLabel === "Админ");
+
+  if (tapCalls === 0 && dragCalls === 0) {
+    console.log("  ⚠ headless: web-haptics не дошёл до navigator.vibrate — маршрут проверен код-ревью, REAL DEVICE отдельно");
+  }
+
+  await clickTab("Каталог");
+  await page.waitForTimeout(500);
 }
 
 await page.close();

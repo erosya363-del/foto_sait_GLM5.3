@@ -37,7 +37,7 @@ const VARIANTS = [
   { name: "old-grain", css: ".fx-grain{inset:-50%!important}" },
   { name: "no-pause", css: "html.is-scrolling .fx-grain,html.is-scrolling .aurora{animation-play-state:running!important}" },
   { name: "no-grain", css: ".fx-grain{display:none!important}" },
-  { name: "no-pill-bf", css: ".pill-shell{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}" },
+  { name: "no-pill-bf", css: ".pill-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}" },
   { name: "no-goo", css: ".pill-goo{filter:none!important}" },
   { name: "no-vignette", css: ".fx-vignette{display:none!important}" },
 ];

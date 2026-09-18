@@ -69,16 +69,25 @@ const shellInfo = await page.evaluate(() => {
   const cs = getComputedStyle(shell);
   const after = getComputedStyle(shell, "::after");
   const bubble = document.querySelector(".pill-bubble");
+  /* PHASE 2.3 §1.4/E: реальное стекло (backdrop-filter) — в .pill-surface;
+     .pill-shell — геометрический контейнер без клипа линзы */
+  const surface = document.querySelector(".pill-surface");
+  const scs = surface ? getComputedStyle(surface) : null;
+  const surfaceOverflow = scs ? scs.overflow : "absent";
+  const shellOverflow = cs.overflow;
   return {
-    bf: cs.backdropFilter || cs.webkitBackdropFilter,
+    bf: scs ? scs.backdropFilter || scs.webkitBackdropFilter : "absent",
     afterContent: after.content,
     bubbleExists: Boolean(bubble),
     bubbleTransition: bubble ? getComputedStyle(bubble).transitionProperty : null,
     lensLeftovers:
       document.querySelectorAll(".nav-lens, #nav-liquid, .is-liquid").length,
+    surfaceOverflow,
+    shellOverflow,
+    surfaceCount: document.querySelectorAll(".pill-surface").length,
   };
 });
-ok("backdrop-filter БЕЗ url(#svg) — один CSS-слой (P0.2)", shellInfo.bf.includes("blur(") && !shellInfo.bf.includes("url("), shellInfo.bf);
+ok("backdrop-filter БЕЗ url(#svg) — один CSS-слой (P0.2, PHASE 2.3: в .pill-surface)", shellInfo.bf.includes("blur(") && !shellInfo.bf.includes("url("), shellInfo.bf);
 ok("sheen-анимация ::after удалена (content: none)", shellInfo.afterContent === "none", shellInfo.afterContent);
 ok("bubble — один общий элемент", shellInfo.bubbleExists);
 ok("старых линз/SVG-слоёв нет", shellInfo.lensLeftovers === 0);
@@ -88,6 +97,9 @@ ok("капля не анимирует layout-свойства (rAF пишет �
 ok("goo-слой несёт metaball-фильтр (эффект с видео)",
   await page.evaluate(() => /url\(.?#pill-goo/.test(getComputedStyle(document.querySelector(".pill-goo")).filter || "")),
   "filter: url(#pill-goo)");
+ok("PHASE 2.3: клип стекла в .pill-surface (overflow hidden), shell открыт",
+  shellInfo.surfaceCount === 1 && shellInfo.surfaceOverflow === "hidden" && shellInfo.shellOverflow === "visible",
+  `surface=${shellInfo.surfaceOverflow} shell=${shellInfo.shellOverflow}`);
 
 console.log("\n— 2. Панель: одна координата при смене вкладок (P0.1) —");
 const pillY = () => page.locator(".pill-shell").evaluate((el) => Math.round(el.getBoundingClientRect().top));
