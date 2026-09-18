@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-18T01:38:05.306Z",
+  "startedAt": "2026-09-18T14:18:47.612Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -36,18 +36,6 @@
         "overlapped": [],
         "invisible": [],
         "btnCount": 54
-      },
-      "upload": {
-        "overflowX": 0,
-        "brokenImgs": [],
-        "small": [
-          "Как в системе (28×28)",
-          "Светлая (28×28)",
-          "Тёмная (28×28)"
-        ],
-        "overlapped": [],
-        "invisible": [],
-        "btnCount": 25
       },
       "admin": {
         "overflowX": 0,
@@ -170,7 +158,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu6ahw0j0001q5mperq7lvxp\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu71o6020001q5vhltlymd1n\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
@@ -191,22 +179,6 @@
           "winH": 760
         },
         "stock": {
-          "navZ": "40",
-          "navPos": "fixed",
-          "navDisplay": "block",
-          "shellH": 64,
-          "shellW": 362,
-          "radius": "999px",
-          "bg": "rgba(0, 0, 0, 0)",
-          "blur": "none",
-          "border": "rgba(255, 248, 238, 0.11)",
-          "shadow": "none",
-          "cls": "pill-shell",
-          "bottomInset": "10px",
-          "mainPadB": "104px",
-          "winH": 760
-        },
-        "upload": {
           "navZ": "40",
           "navPos": "fixed",
           "navDisplay": "block",

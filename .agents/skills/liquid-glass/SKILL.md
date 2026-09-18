@@ -1,13 +1,15 @@
 ---
 name: liquid-glass
-description: Проектный стандарт Liquid Glass v5 + Dynamic Press Lens (PHASE 2.3) фото-каталога Askona — нижняя панель-пилюля, поиск, просмотрщик. Использовать при любой правке стекла: токены (--glass-blur/--glass-saturation/--pill-bg), слои панели (pill-shell/pill-surface), физика линзы (press/bridge-пружины), морфы NAV↔SEARCH, хаптика, стеклянные кнопки, safe-area. Запрещает hardcoded blur в JSX и вторые линзы.
+description: Проектный стандарт Liquid Glass v5 + Dynamic Press Lens (PHASE 2.3/2.4) фото-каталога Askona — нижняя панель-пилюля, поиск, просмотрщик, upload sheet, glass toasts. Использовать при любой правке стекла: токены (--glass-blur/--glass-saturation/--pill-bg), слои панели (pill-shell/pill-surface), физика линзы (direct tracking/press/bridge-пружины), морфы NAV↔SEARCH, хаптика, стеклянные кнопки, safe-area, тосты. Запрещает hardcoded blur в JSX, вторые линзы и solid-заливки уведомлений.
 ---
 
 # Liquid Glass v5 + Dynamic Press Lens (проект Askona)
 
 Единый стеклянный язык интерфейса: нижняя панель-пилюля, подвесной поиск,
-чипы, кнопки viewer'а. Референс — iOS 26 Liquid Glass.
+чипы, кнопки viewer'а, upload sheet, тосты. Референс — iOS 26 Liquid Glass.
 PHASE 2.3 добавил физику «живой линзы» (press/bridge) и хаптический маршрут.
+PHASE 2.4 — direct tracking при drag, чистое тёмное стекло, upload как
+glass sheet (НЕ раздел), glass toasts над пилюлей.
 
 ## Токены (только они, никаких новых констант)
 
@@ -21,7 +23,8 @@ PHASE 2.3 добавил физику «живой линзы» (press/bridge) �
 | `--glass-shadow` | внешняя тень стекла |
 | `--lens-press` / `--lens-bridge` | 0..1, пишет rAF-контроллер линзы (спекуляр/давление) |
 | `--sab` / `--sat` | safe-area bottom/top (env(), читается один раз) |
-| `--z-nav 40 / --z-fab 45 / --z-pop 50 / --z-photo-viewer 10000 / --z-photo-viewer-ui 100000` | слои |
+| `--z-nav 40 / --z-pop 50 / --z-sheet 60 / --z-photo-viewer 10000 / --z-photo-viewer-ui 100000` | слои |
+| `--sheet-bg` / `--sheet-footer-bg` | материал upload sheet/dialog (v5-стекло) |
 
 ### Задокументированные исключения blur (§8 аудита PHASE 2.3)
 
@@ -80,12 +83,44 @@ JSX: `upload-view` (скрим 2px/sm — затемнение, НЕ стекл�
    ничего «залипшего» (никакого teleport, рывков ширины, второй линзы).
    Горизонтальный PAGE-SWIPE гоняет линзу в НЕ-pressed геометрии (press=0).
 9. **Хаптика панели — только через playTick/playStep (web-haptics).**
-   Маршрут: pointerdown → `playTick("press")` (мягкий, 16 мс, одновременно
-   с визуальным вспуханием); пересечение центра вкладки в drag → `playStep()`
-   ровно один раз на границу; release с реальной сменой раздела →
-   `playTick("tap")`. Троттл 60 мс в tick.ts схлопывает press+click обычного
-   тапа. `.pill-haptic` и скрытые form-controls в панели ЗАПРЕЩЕНЫ
-   (см. шапку tick.ts). Не писать «iPhone haptic PASS» без реального аппарата.
+   Маршрут: pointerdown → `playTick("press")` (18 мс @ intensity 0.9 — PHASE 2.4:
+   16 мс не ощущался, «вибрация пропала»; одновременно с визуальным вспуханием);
+   пересечение центра вкладки в drag → `playStep()` ровно один раз на границу;
+   release с реальной сменой раздела → `playTick("tap")` (22 мс @ 1.0).
+   Троттл 60 мс в tick.ts схлопывает press+click обычного тапа в ОДИН
+   ощутимый тик. `.pill-haptic` и скрытые form-controls в панели ЗАПРЕЩЕНЫ
+   (см. шапку tick.ts). Stealth-switch web-haptics НЕ display:none (1×1px,
+   opacity .01 — styleStealthSwitch в tick.ts; workaround, реальный iPhone
+   не подтверждён). Не писать «iPhone haptic PASS» без реального аппарата.
+10. **DIRECT TRACKING при drag (PHASE 2.4).** Во время активного drag по
+    панели позиция/ширина линзы идут экспоненциальным сглаживанием
+    (τ≈33 мс x, τ≈38 мс width) — линза «привязана» к пальцу; velocity
+    считается по фактическому смещению кадра (тянучка без разрыва).
+    Пружины (k=150/170/220) подключаются ТОЛЬКО на release/settle/тап-полёт:
+    упругая физика — на settle, не тормозящий хвост во время жеста.
+    `a.dragging` — единственный переключатель режима (dragModePillRef).
+11. **ТЁМНОЕ СТЕКЛО БЕЗ ДЕШЁВЫХ БЛИКОВ (PHASE 2.4).** `.pill-bubble` dark:
+    заливка 0.03–0.20 белого, crisp top-edge 0.32, rim 1px 0.12, ВНЕШНЕЙ
+    box-shadow НЕТ (нечему создавать ореол на фото); `::after` спекуляр —
+    rest 0.30 / press 0.60 / bridge 0.72; sheen поверхности 0.90→0.55,
+    каустики 0.34→0.22, rim 0.5→0.38. REST после release = компактная
+    СТЕКЛЯННАЯ линза (не «selected-pill fill»). Не возвращать яркие
+    v5-альфы (0.55 top / ring 0.30) — «дешёвый glow» на тёмном/фото.
+12. **UPLOAD — SHEET, НЕ РАЗДЕЛ (PHASE 2.4).** view:"upload" невалиден;
+    «Загрузка» в панели/сайдбаре/нативном табе = action → `store.uploadOpen`
+    → `UploadSheet` (mobile bottom sheet / desktop dialog). Логика движка
+    загрузки НЕПРИКОСНОВЕННА (валидация/превью/последовательность/partial
+    success/failed remain/beforeunload//api/upload). VIEW_ORDER без upload;
+    легаси view:"upload" мигрирует в catalog (restore/popstate). doClose
+    ОБЯЗАТЕЛЬНО сбрасывает черновик (компонент смонтирован всегда —
+    без reset reopen показывал прошлый шаг). Клавиатура: sheet стоит на
+    `bottom: var(--kb-overlay)`, НИКАКИХ трансформов всего окна.
+13. **TOASTS — СТЕКЛО НАД ПИЛЮЛЕЙ (PHASE 2.4).** richColors ЗАПРЕЩЕНЫ
+    (никаких solid-заливок); два Toaster (`.toaster-m` bottom-center
+    <1024px, `.toaster-d` top-center ≥1024px, лишний скрыт CSS); mobile
+    offset `calc(max(10px,var(--sab)) + 76px + var(--kb-overlay))`;
+    статус — только цвет иконки + hairline-кольцо границы. Движок — sonner,
+    материал — globals.css (секция GLASS TOASTS).
 
 ## Слои панели (снизу вверх)
 
@@ -101,17 +136,22 @@ overflow: hidden — единственный клип стекла, внутр�
 
 ## Карта файлов
 
-- `src/app/globals.css` — все токены и стекло (секции PILL NAV, search-pop, pswp);
-  `.pill-surface` — реальное стекло; `.light .pill-bubble` — кромка/глубина
-  светлой линзы; `.pill-bubble::after` — press-спекуляр через `--lens-press`.
+- `src/app/globals.css` — все токены и стекло (секции PILL NAV, GLASS TOASTS,
+  search-pop, pswp); `.pill-surface` — реальное стекло; `.light .pill-bubble` —
+  кромка/глубина светлой линзы; `.pill-bubble::after` — press-спекуляр через
+  `--lens-press`.
 - `src/components/portal.tsx` — контроллер пружин (ОДИН rAF: render/step/
-  settle/drive/press/bridge), gesture панели (geo-снимок, anchor, two-phase,
-  covered), `cancelPanelGestureRef` (отмена жеста при открытии поиска).
-- `src/lib/tick.ts` — playTick("tap"|"step"|"press") + haptic-троттл 60 мс.
+  settle/drive/press/bridge/dragMode), gesture панели (geo-снимок, anchor,
+  two-phase, covered), swipe-коммит с fill:"forwards" + useLayoutEffect-очистка
+  (без «повторного появления»), `cancelPanelGestureRef`.
+- `src/lib/tick.ts` — playTick("tap"|"step"|"press") + haptic-троттл 60 мс +
+  styleStealthSwitch.
+- `src/components/upload-sheet.tsx` — upload glass sheet (шаги 1-2-3, dirty/
+  abort guards, kb-overlay, resetDraft).
 - `src/components/photo-viewer.tsx` — PhotoSwipe 5, «⋯» = `.pswp__button--actions`
   (стеклянная кнопка), меню — `.viewer-sheet` (v5-стекло).
 - `src/app/layout.tsx` — viewport-мета + ios-viewport-nudge (серия 4 шт,
-  отмена по касанию, без window.resize).
+  отмена по касанию, без window.resize) + два Toaster (toaster-m/toaster-d).
 
 ## Чек-лист перед коммитом стекла
 
@@ -120,15 +160,21 @@ overflow: hidden — единственный клип стекла, внутр�
 - [ ] Панель/поиск/меню на токенах, а не новых rgba-константах.
 - [ ] Обязательные E2E (fail-closed, `bash scripts/run-isolated.sh …`):
       `bun scripts/test-v31.mjs`,
-      `bun scripts/test-mobile-nav-search.mjs` (включая dynamic lens A–J + haptics),
-      `bun scripts/test-mobile-horizontal-nav.mjs`,
+      `bun scripts/test-mobile-nav-search.mjs` (dynamic lens A–J + haptics +
+      P24 sheet/guards/toasts),
+      `bun scripts/test-mobile-horizontal-nav.mjs` (включая rAF-детектор
+      повторного появления),
       `bun scripts/test-photo-viewer-mobile.mjs`,
       `bun scripts/test-p23-themes.mjs` (dark/light/landscape).
 - [ ] Perf (при правках материала стекла):
       `bun scripts/audit-scroll-perf.mjs`, `bun scripts/perf-p23.mjs`
       (blur 40/32/24 + panel-drag; production-значение 40px НЕ менять без цифр).
-- [ ] Контрольные кадры (супплемент J): `bun scripts/dbg-p23-shots.mjs`
-      → tool-results/p23/ (01–09 + dynamic-liquid-lens.mp4).
+- [ ] Контрольные кадры: `bun scripts/dbg-p23-shots.mjs` → tool-results/p23/
+      (01–09 + dynamic-liquid-lens.mp4); P24: `bun scripts/dbg-p24-shots.mjs`
+      → tool-results/p24/ (тёмная линза, фото-фон, sheet, toast над пилюлей,
+      keyboard в sheet + p24-session.mp4).
 - [ ] На реальном iPhone: холодный старт (полоса?), press-вспухание линзы,
-      мост двух вкладок, вибро-отклик (press/step/commit), pinch→зум,
-      палец по панели, панель→поиск→панель.
+      мост двух вкладок, вибро-отклик (press/step/commit — PHASE 2.4 усилил
+      press 18 мс @0.9 + stealth-switch: проверить, что вибрация вернулась),
+      pinch→зум, палец по панели (скорость следования), панель→поиск→панель,
+      upload sheet: открытие/dirty-confirm/клавиатура/abort, тосты над пилюлей.
