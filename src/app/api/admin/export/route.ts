@@ -9,6 +9,9 @@ import {
   UPLOADS_THUMB_DIR,
   RUNTIME_ROOT,
 } from "@/lib/runtime";
+/* PART 1.1 §3.1: токен-аут вынесен в sync-auth.ts — ТЕМ ЖЕ токеном защищён
+   /api/admin/deploy-lock (сравнение timing-safe, единый источник токена). */
+import { isSyncAuthorized } from "@/lib/sync-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -55,35 +58,6 @@ interface UploadFileInfo {
   sha256: string;
 }
 
-/** ТЗ 2.10: техническая авторизация экспорта.
- *  Источник ожидаемого токена (приоритет):
- *   1. env SYNC_EXPORT_TOKEN (если платформа позволяет задать переменные);
- *   2. файл RUNTIME_ROOT/.sync-token — zero-config схема (на платформе нет
- *      .env): токен генерируется ОДИН раз в рабочей области, печётся в
- *      артефакт тем же пайплайном, что и данные, и потому всегда совпадает
- *      с сервером, собранным из этой же зоны. Файл в git не попадает
- *      (download/runtime/ в .gitignore).
- *  Ни env, ни файла → экспорт закрыт (401). */
-async function expectedToken(): Promise<string | null> {
-  if (process.env.SYNC_EXPORT_TOKEN) return process.env.SYNC_EXPORT_TOKEN;
-  try {
-    const t = (await fs.readFile(path.join(RUNTIME_ROOT, ".sync-token"), "utf8")).trim();
-    return t || null;
-  } catch {
-    return null;
-  }
-}
-
-async function authorized(req: NextRequest): Promise<boolean> {
-  const expected = await expectedToken();
-  if (!expected) return false; // токен не настроен на сервере — экспорт закрыт
-  const bearer = req.headers.get("authorization");
-  const sync = req.headers.get("x-sync-token");
-  if (sync && sync === expected) return true;
-  if (bearer && bearer.startsWith("Bearer ")) return bearer.slice(7) === expected;
-  return false;
-}
-
 async function listUploads(dir: string): Promise<UploadFileInfo[]> {
   let entries: string[];
   try {
@@ -119,7 +93,12 @@ async function buildManifest() {
     optimized,
     thumbs,
   ] = await Promise.all([
-    db.photo.count(),
+    /* PART 1.1: ЖИВЫЕ фото (deletedAt IS NULL) — ровно та метрика, которую
+       сверяет sync-from-live.sh со скачанной БД и пишет в маркер
+       (photoCount). Прежний count() без фильтра включал корзину: при любом
+       непустом trash синк падал бы «расхождение счётчиков». Остальные
+       счётчики — справочные, без изменений. */
+    db.photo.count({ where: { deletedAt: null } }),
     db.productVariant.count(),
     db.category.count(),
     db.model.count(),
@@ -140,8 +119,9 @@ async function buildManifest() {
 }
 
 export async function GET(req: NextRequest) {
-  /* ТЗ 2.10: fail-closed — без валидного SYNC_EXPORT_TOKEN экспорт недоступен */
-  if (!(await authorized(req))) {
+  /* ТЗ 2.10: fail-closed — без валидного SYNC_EXPORT_TOKEN экспорт недоступен
+     (PART 1.1 §3.1: isSyncAuthorized — timing-safe, общий с deploy-lock) */
+  if (!(await isSyncAuthorized(req))) {
     return NextResponse.json(
       {
         error:

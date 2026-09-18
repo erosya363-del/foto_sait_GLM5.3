@@ -28,25 +28,193 @@ cd "$NEXTJS_PROJECT_DIR" || exit 1
 export NEXT_TELEMETRY_DISABLED=1
 
 # ═════════════════════════════════════════════════════════════════════════════
+# CRITICAL STABILITY PART 1.1 §4 — BUILD САМ ДЕЛАЕТ FINAL SYNC ПОД LIVE LOCK.
+#
+# Пользователь БОЛЬШЕ НЕ ДОЛЖЕН помнить «sync-from-live перед каждым deploy».
+# Production-схема:
+#
+#   ACQUIRE LIVE LOCK (POST /api/admin/deploy-lock)
+#     → WAIT ACTIVE WRITES = 0 (сервер сам дренирует начатые мутации)
+#     → FINAL SYNC FROM LOCKED LIVE (scripts/sync-from-live.sh, DEPLOY_LOCK_ID)
+#     → VERIFY CURRENT DEPLOY LOCK ID (GET status — lock всё ещё наш)
+#     → BUILD (bun run build)
+#     → ARTIFACT VERIFY (database-runtime-build.sh: guard + post-build verify)
+#
+# Пока идёт snapshot/build, live НЕ принимает новые мутации (423 DEPLOY_LOCKED)
+# — фото, загруженное сотрудником во время сборки, больше не может исчезнуть.
+#
+# ВРЕМЯ ЖИЗНИ LOCK (ТЗ 4.3 — ВАЖНО):
+#   BUILD FAILED  → unlock СРАЗУ (trap cleanup);
+#   BUILD SUCCESS → живой контейнер ОСТАЁТСЯ LOCKED: lock исчезнет вместе со
+#                   старым контейнером при cutover ИЛИ сам истечёт по TTL
+#                   (~30 мин), если платформа упала после успешной сборки.
+#                   НЕ СНИМАТЬ руками — иначе окно «deploy → новый lock» пропустит
+#                   мутации во время переключения контейнера.
+#
+# ПЕРВЫЙ ROLLOUT (ТЗ §11): текущий live ещё НЕ имеет deploy-lock API.
+# ОДНОРАЗОВЫЙ переход: FIRST_DEPLOY_LOCK_BOOTSTRAP=1 — сборка предупреждает
+# КРАСНЫМ, НЕ требует endpoint (пробует lock мягко), синк делает максимально
+# ПОЗДНО, требует ручного maintenance window (запрет загрузок). После первого
+# успешного деплоя флаг БОЛЬШЕ НЕ ИСПОЛЬЗОВАТЬ: обычная сборка без lock'а
+# УПАДЁТ (fail-closed).
+#
+# RUNTIME_BOOTSTRAP_EMPTY=1 — заведомо чистая установка без данных: live-операции
+# пропускаются целиком (тот же контракт, что у deploy-guard и runtime.ts).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Единый конфиг деплоя (PART 1.1 §4.2): URL живого сайта в ОДНОМ месте.
+# Приоритет: env LIVE_BASE_URL → .zscripts/deploy.env.
+if [ -f "$SCRIPT_DIR/deploy.env" ]; then
+    # shellcheck disable=SC1091
+    . "$SCRIPT_DIR/deploy.env"
+fi
+LIVE_BASE_URL="${LIVE_BASE_URL:-${LIVE_BASE_URL_DEFAULT:-}}"
+
+RUNTIME_ZONE="${RUNTIME_ROOT:-$NEXTJS_PROJECT_DIR/download/runtime}"
+FIRST_DEPLOY_LOCK_BOOTSTRAP="${FIRST_DEPLOY_LOCK_BOOTSTRAP:-}"
+
+LOCK_ACQUIRED=0
+BUILD_SUCCESS=0
+LOCK_ID=""
+
+live_lock_api() {
+    # $1 = action-JSON; печатает тело ответа; пусто при любой ошибке сети/404
+    curl -sS --max-time 30 "${AUTH_ARGS[@]}" -H 'Content-Type: application/json' \
+        -X POST "$LIVE_BASE_URL/api/admin/deploy-lock" -d "$1" 2>/dev/null || true
+}
+
+json_field() {
+    # $1 = JSON, $2 = имя поля; печатает значение или пусто (env — чтобы не
+    # подставлять имя поля прямо в JS-код)
+    printf '%s' "$1" | FIELD="$2" bun -e "
+      let s=''; process.stdin.on('data',(d)=>s+=d).on('end',()=>{
+        try { const v = JSON.parse(s)[process.env.FIELD]; console.log(v == null ? '' : String(v)); }
+        catch { console.log(''); }
+      });"
+}
+
+unlock_live() {
+    # best-effort: снимаем СВОЙ lock по id (чужой сервер откажет — это норма)
+    [ -n "$LOCK_ID" ] || return 0
+    live_lock_api "{\"action\":\"unlock\",\"lockId\":\"$LOCK_ID\"}" > /dev/null || true
+}
+
+cleanup() {
+    # ТЗ 4.4: снимаем lock ТОЛЬКО если сборка НЕ удалась. При успехе live
+    # остаётся залоченным до cutover/TTL (защита окна переключения контейнера).
+    if [ "$LOCK_ACQUIRED" = "1" ] && [ "$BUILD_SUCCESS" != "1" ]; then
+        echo "↩︎  Сборка не удалась — снимаем deploy-lock (live снова принимает записи)…"
+        unlock_live || true
+    fi
+}
+trap cleanup EXIT INT TERM
+
+if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" = "1" ]; then
+    echo "⚠  RUNTIME_BOOTSTRAP_EMPTY=1 — live-lock/final-sync пропущены (заведомо чистая установка)"
+else
+    if [ -z "$LIVE_BASE_URL" ]; then
+        echo "❌ LIVE_BASE_URL не задан (env или $SCRIPT_DIR/deploy.env) — сборка БЕЗ final sync запрещена." >&2
+        exit 1
+    fi
+
+    # ── Токен (PART 1.1 §8): env → $RUNTIME_ZONE/.sync-token. НЕ генерируем.
+    SYNC_TOKEN="${SYNC_EXPORT_TOKEN:-}"
+    if [ -z "$SYNC_TOKEN" ] && [ -f "$RUNTIME_ZONE/.sync-token" ]; then
+        SYNC_TOKEN="$(tr -d '[:space:]' < "$RUNTIME_ZONE/.sync-token")"
+    fi
+    AUTH_ARGS=()
+    if [ -n "$SYNC_TOKEN" ]; then
+        AUTH_ARGS=("-H" "X-Sync-Token: $SYNC_TOKEN")
+    elif [ "$FIRST_DEPLOY_LOCK_BOOTSTRAP" != "1" ]; then
+        echo "❌ Токен экспорта не найден (env SYNC_EXPORT_TOKEN или $RUNTIME_ZONE/.sync-token)." >&2
+        echo "   Автогенерация отключена (PART 1.1 §8). Первый переход — см. sync-from-live.sh --bootstrap-token." >&2
+        exit 1
+    fi
+
+    echo "🔒 LIVE: $LIVE_BASE_URL"
+
+    if [ "$FIRST_DEPLOY_LOCK_BOOTSTRAP" = "1" ]; then
+        printf '\033[31m%s\033[0m\n' "════════════════════════════════════════════════════════════════"
+        printf '\033[31m%s\033[0m\n' "❗ FIRST_DEPLOY_LOCK_BOOTSTRAP=1 — ОДНОРАЗОВЫЙ переход на защищённые деплои!"
+        printf '\033[31m%s\033[0m\n' "❗ Живой сайт может ещё НЕ иметь deploy-lock API; ОБЕСПЕЧЬТЕ ручной"
+        printf '\033[31m%s\033[0m\n' "❗ maintenance window (запрет загрузок) на время сборки и деплоя."
+        printf '\033[31m%s\033[0m\n' "❗ После первого успешного деплоя флаг БОЛЬШЕ НЕ ИСПОЛЬЗОВАТЬ."
+        printf '\033[31m%s\033[0m\n' "════════════════════════════════════════════════════════════════"
+        # Пробуем lock мягко: endpoint может отсутствовать на старом live
+        LOCK_RESP=$(live_lock_api '{"action":"lock","ttlSec":1800,"owner":"build"}')
+        LOCK_ID="$(json_field "$LOCK_RESP" lockId)"
+        if [ -n "$LOCK_ID" ]; then
+            LOCK_ACQUIRED=1
+            echo "🔒 deploy-lock получен: $LOCK_ID"
+        else
+            echo "⚠ deploy-lock недоступен на live (ожидаемо для первого перехода) — final sync БЕЗ lock"
+        fi
+    else
+        echo "🔒 [1/4] ACQUIRE LIVE LOCK…"
+        LOCK_RESP=$(live_lock_api '{"action":"lock","ttlSec":1800,"owner":"build"}')
+        LOCK_ID="$(json_field "$LOCK_RESP" lockId)"
+        if [ -z "$LOCK_ID" ]; then
+            echo "❌ deploy-lock НЕ получен — сборка ЗАБЛОКИРОВАНА (fail-closed)." >&2
+            echo "   Ответ live: ${LOCK_RESP:-<нет ответа/сеть/404>}" >&2
+            echo "   Возможные причины: live ещё не обновлён до кода с deploy-lock API" >&2
+            echo "   (первый переход — FIRST_DEPLOY_LOCK_BOOTSTRAP=1), неверный токен," >&2
+            echo "   writers не освободились (503) или уже действует чужой lock (409)." >&2
+            exit 1
+        fi
+        LOCK_ACQUIRED=1
+        echo "   lock: $LOCK_ID ($(json_field "$LOCK_RESP" expiresAt)), activeWriters=$(json_field "$LOCK_RESP" activeWriters)"
+    fi
+
+    # ── FINAL SYNC: максимально поздний, ПОД lock (live заморожен) ──
+    echo "⟳  [2/4] FINAL SYNC FROM LOCKED LIVE…"
+    if [ -n "$LOCK_ID" ]; then
+        DEPLOY_LOCK_ID="$LOCK_ID" RUNTIME_ROOT="$RUNTIME_ZONE" \
+            bash scripts/sync-from-live.sh "$LIVE_BASE_URL" --yes || exit 1
+    else
+        RUNTIME_ROOT="$RUNTIME_ZONE" \
+            bash scripts/sync-from-live.sh "$LIVE_BASE_URL" --yes || exit 1
+    fi
+
+    # ── VERIFY CURRENT LOCK ID: lock всё ещё наш (не истёк/не снят) ──
+    if [ -n "$LOCK_ID" ]; then
+        echo "🛡  [3/4] VERIFY CURRENT DEPLOY LOCK ID…"
+        STATUS=$(curl -sS --max-time 30 "${AUTH_ARGS[@]}" "$LIVE_BASE_URL/api/admin/deploy-lock" 2>/dev/null || true)
+        CUR_ID="$(printf '%s' "$STATUS" | bun -e "
+          let s=''; process.stdin.on('data',(d)=>s+=d).on('end',()=>{
+            try { const j=JSON.parse(s); console.log(j.locked === true && j.lock && j.lock.id ? String(j.lock.id) : ''); }
+            catch { console.log(''); }
+          });")"
+        if [ "$CUR_ID" != "$LOCK_ID" ]; then
+            echo "❌ deploy-lock ИЗМЕНИЛСЯ/ИСТЁК во время синка ($CUR_ID ≠ $LOCK_ID) — сборка ЗАБЛОКИРОВАНА." >&2
+            echo "   Данные могли снова мутировать; повторите сборку (она поставит свежий lock)." >&2
+            exit 1
+        fi
+        echo "   lock подтверждён: $CUR_ID"
+    else
+        echo "🛡  [3/4] VERIFY LOCK: пропущено (bootstrap без lock — см. красное предупреждение выше)"
+    fi
+    echo "✅ [4/4] live заморожен и синхронизирован — можно собирать"
+    # Guard'ы ниже по пайплайну (check-deploy-freshness в database-runtime-build.sh)
+    # обязаны требовать marker.lockId === ТЕКУЩИЙ lock (PART 1.1 §5.1):
+    if [ -n "$LOCK_ID" ]; then
+        export DEPLOY_LOCK_ID="$LOCK_ID"
+    fi
+fi
+
+# ═════════════════════════════════════════════════════════════════════════════
 # ТЗ CRITICAL STABILITY 2.4 — DEPLOY GUARD (pre-flight, fail fast):
-# деплой НЕактуальных данных НЕВОЗМОЖЕН. До сборки проверяем fresh sync marker
-# (.live-sync.json от scripts/sync-from-live.sh): если runtime-зона не
-# синхронизирована с живым сайтом — сборка УПАДАЕТ ЗДЕСЬ, а не выпекает
-# артефакт из устаревшей зоны (именно так пропали ~20 фото, forensics 19.09).
-# Чистая установка: RUNTIME_BOOTSTRAP_EMPTY=1 (тот же флаг, что в runtime.ts).
+# деплой НЕактуальных данных НЕВОЗМОЖЕН. После FINAL SYNC маркер свежий и
+# (в production-пайплайне) привязан к DEPLOY_LOCK_ID — guard проверяет оба
+# условия (PART 1.1 §5/§6). Чистая установка: RUNTIME_BOOTSTRAP_EMPTY=1.
 # Полная проверка повторяется в database-runtime-build.sh + post-build verify.
 # ═════════════════════════════════════════════════════════════════════════════
 echo "🛡  Deploy guard (pre-flight): fresh sync marker + целостность runtime-зоны…"
-if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" != "1" ] && [ ! -f "download/runtime/.live-sync.json" ]; then
-    echo "❌ НЕТ fresh sync маркера download/runtime/.live-sync.json." >&2
-    echo "   Перед деплоем ОБЯЗАТЕЛЬНО синхронизировать данные живого сайта:" >&2
-    echo "     bash scripts/sync-from-live.sh https://<site>.space-z.ai --yes" >&2
-    echo "   Деплой несинхронизированной зоны уничтожает фото, загруженные на живой сайт." >&2
-    echo "   (Только для заведомо чистой установки без данных: RUNTIME_BOOTSTRAP_EMPTY=1)" >&2
+if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" != "1" ] && [ ! -f "$RUNTIME_ZONE/.live-sync.json" ]; then
+    echo "❌ НЕТ fresh sync маркера $RUNTIME_ZONE/.live-sync.json после final sync — ошибка пайплайна." >&2
     exit 1
 fi
 if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" != "1" ]; then
-    bun scripts/check-deploy-freshness.mjs download/runtime || exit 1
+    bun scripts/check-deploy-freshness.mjs "$RUNTIME_ZONE" || exit 1
 fi
 
 BUILD_DIR="/tmp/build_fullstack_$BUILD_ID"
@@ -187,6 +355,18 @@ echo "📦 打包构建产物到 $PACKAGE_FILE..."
 cd "$BUILD_DIR" || exit 1
 tar -czf "$PACKAGE_FILE" .
 cd - > /dev/null || exit 1
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CRITICAL STABILITY PART 1.1 §4.3: сборка УСПЕШНА — live ОСТАЁТСЯ LOCKED.
+# НЕ СНИМАТЬ lock: он исчезнет вместе со старым контейнером после cutover
+# (или истечёт по TTL ~30 мин, если платформа упала после сборки). Снятие
+# открыло бы окно, в котором сотрудник грузит фото в СТАРЫЙ контейнер во
+# время переключения — ровно тот сценарий потери данных, который мы закрыли.
+# ═════════════════════════════════════════════════════════════════════════════
+BUILD_SUCCESS=1
+if [ "$LOCK_ACQUIRED" = "1" ]; then
+    echo "🔒 Сборка успешна — deploy-lock $LOCK_ID ОСТАЁТСЯ на live (до cutover/TTL; НЕ снимаем)"
+fi
 
 # # 清理临时目录
 # rm -rf "$BUILD_DIR"
