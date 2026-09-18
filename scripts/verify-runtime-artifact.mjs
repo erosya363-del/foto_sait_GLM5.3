@@ -10,6 +10,15 @@
  *        → size > 0;
  *        → путь не выходит за runtime root (нет ../, symlink-побегов, abs-путей).
  *
+ * PART 1.1 §9 — SYMLINK HARDENING: прежняя проверка заявляла «symlink-побеги
+ * невозможны», но использовала statSync(), который СЛЕДУЕТ по symlink — файл
+ * uploads/optimized/foo.jpg → /etc/passwd прошёл бы проверку как regular file.
+ * Теперь:
+ *   • lstatSync(): сам symlink → FAIL (в медиа-зоне ссылок быть не должно);
+ *   • realpathSync(файл) обязан лежать внутри realpathSync(ROOT) — нельзя
+ *     вынести данные через никуда-не-ведущую на первый взгляд иерархию;
+ *   • countFiles() НЕ считает symlink обычным media-файлом.
+ *
  * Также сверяет счётчик Photo с числом файлов в optimized/thumbs — чтобы
  * артефакт «БД есть, медиа нет» (первопричина «исчезающих фото») был невозможен.
  *
@@ -110,6 +119,34 @@ function safeJoin(baseDir, url) {
 }
 
 let checked = 0;
+/* PART 1.1 §9: реальный корень (разыменованный) — база для проверки побегов */
+let realRoot = ROOT;
+try {
+  realRoot = fs.realpathSync(ROOT);
+} catch {
+  /* ROOT не существует — дальше всё упадёт на отсутствующих файлах */
+}
+
+/** ТЗ §9: проверка ОДНОГО файла: lstat (без следования symlink),
+ *  realpath обязан остаться внутри реального root. */
+function inspectFile(full) {
+  let lst = null;
+  try {
+    lst = fs.lstatSync(full); // НЕ следует по symlink
+  } catch {
+    return { missing: true };
+  }
+  if (lst.isSymbolicLink()) return { symlink: true };
+  let real = full;
+  try {
+    real = fs.realpathSync(full); // разыменовываем ТОЛЬКО после lstat-проверки
+  } catch {
+    return { missing: true };
+  }
+  if (real !== realRoot && !real.startsWith(realRoot + path.sep)) return { escape: true };
+  return { st: lst };
+}
+
 for (const r of rows) {
   for (const kind of ["url", "thumbUrl"]) {
     const url = r[kind];
@@ -119,21 +156,24 @@ for (const r of rows) {
       continue;
     }
     checked++;
-    let st = null;
-    try {
-      st = fs.statSync(full);
-    } catch {
-      st = null;
+    const res = inspectFile(full);
+    if (res.symlink) {
+      bad(`Photo ${r.id}: ${kind}="${url}" — SYMLINK запрещён (data-integrity): ${full}`);
+      continue;
     }
-    if (!st) {
+    if (res.escape) {
+      bad(`Photo ${r.id}: ${kind}="${url}" — realpath ВЫХОДИТ за root (symlink-побег): ${full}`);
+      continue;
+    }
+    if (res.missing || !res.st) {
       bad(`Photo ${r.id}: ${kind}="${url}" — ФАЙЛ ОТСУТСТВУЕТ: ${full}`);
       continue;
     }
-    if (!st.isFile()) {
+    if (!res.st.isFile()) {
       bad(`Photo ${r.id}: ${kind}="${url}" — не regular file: ${full}`);
       continue;
     }
-    if (st.size <= 0) {
+    if (res.st.size <= 0) {
       bad(`Photo ${r.id}: ${kind}="${url}" — size=0: ${full}`);
       continue;
     }
@@ -146,7 +186,9 @@ function countFiles(dir) {
   try {
     return fs.readdirSync(dir).filter((n) => {
       try {
-        return fs.statSync(path.join(dir, n)).isFile();
+        /* PART 1.1 §9: lstat — symlink НЕ считается обычным media-файлом */
+        const st = fs.lstatSync(path.join(dir, n));
+        return st.isFile() && !st.isSymbolicLink();
       } catch {
         return false;
       }
