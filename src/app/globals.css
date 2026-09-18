@@ -125,6 +125,11 @@
   --z-nav: 40;
   --z-fab: 45;
   --z-pop: 50;
+  /* PHASE 2.4 §4: upload sheet/dialog — над панелью (40) и поиском (50) */
+  --z-sheet: 60;
+  /* PHASE 2.4 §4: материал upload sheet/dialog (v5-стекло) */
+  --sheet-bg: rgba(36, 34, 31, 0.78);
+  --sheet-footer-bg: rgba(40, 38, 35, 0.88);
   --z-hud: 60;
   --z-photo-viewer: 10000;
   --z-photo-viewer-ui: 100000;
@@ -191,6 +196,9 @@
   --caust-1: rgba(20, 184, 166, 0.16);
   --caust-2: rgba(255, 190, 130, 0.13);
   --caust-3: rgba(130, 190, 255, 0.14);
+  /* PHASE 2.4 §4: светлый материал sheet */
+  --sheet-bg: rgba(255, 253, 249, 0.84);
+  --sheet-footer-bg: rgba(255, 254, 251, 0.92);
 }
 
 *,
@@ -509,21 +517,25 @@ html.boot-skip .boot-bg { display: none !important; }
   transform: translateZ(0);
   pointer-events: none;
 }
-/* PATCH v5: opacity .90 */
+/* PATCH v5: opacity .90 → PHASE 2.4 §1.5: .55 — верхний sheen панели на
+   тёмном фоне/фото читался как «лишнее отражение» (жалоба владельца).
+   Светлая тема не меняется (там sheen работает). */
 .pill-surface::before {
   content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none;
   background: radial-gradient(110% 80% at 18% -15%, rgba(255,255,255,.18), rgba(255,255,255,.045) 46%, transparent 70%);
   mix-blend-mode: screen;
-  opacity: .90;
+  opacity: .55;
 }
-
 .pill-caustic {
   position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
   background:
     radial-gradient(34% 60% at 13% 15%, var(--caust-1), transparent 68%),
     radial-gradient(35% 56% at 87% 14%, var(--caust-2), transparent 70%),
     radial-gradient(44% 55% at 66% 100%, var(--caust-3), transparent 72%);
-  mix-blend-mode: screen; opacity: .34;
+  mix-blend-mode: screen;
+  /* PHASE 2.4 §1.5: .34 → .22 — цветная подсветка на фото давала
+     «грязный свет» вокруг стекла; кромки/спекуляр линзы остаются главными */
+  opacity: .22;
 }
 .pill-goo { position: absolute; inset: 0; z-index: 1; pointer-events: none; filter: url(#pill-goo); }
 
@@ -535,31 +547,38 @@ html.boot-skip .boot-bg { display: none !important; }
    SVG-область фильтра расширена. */
 .pill-bubble { position: absolute; top: 2px; bottom: 2px; left: 0; width: 0; border-radius: 999px; will-change: transform; transform-origin: center; }
 
-/* PATCH v5: white neutral glass bubble (iOS 26) */
+/* PATCH v5 → PHASE 2.4 §1.5/§1.6: ТЁМНАЯ ЛИНЗА БЕЗ ДЕШЁВЫХ БЛИКОВ.
+   Было: белый radial 0.55 сверху + ring 0.30 + screen-спекуляр до 0.43 —
+   на тёмном фоне/фото давало «ореол/грязный glow», а после release линза
+   читалась заливкой. Теперь стекло читается:
+     — мягким светлым top-edge (узкая полоска 0.32) — CRISP кромка;
+     — тонким rim 1px (0.12) и слабой глубиной низа;
+     — ОЧЕНЬ сдержанной заливкой (0.03–0.12) — стекло остаётся прозрачным;
+   внешний box-shadow ОТСУТСТВУЕТ — нечему создавать ореол.
+   REST = компактная стеклянная линза (не «selected-pill fill»),
+   PRESS/BRIDGE добавляют specular через ::after (см. ниже). */
 .pill-bubble {
   z-index: 1; opacity: 0;
   background:
-    radial-gradient(100% 80% at 30% 0%, rgba(255,255,255,0.55), transparent 56%),
-    linear-gradient(165deg, rgba(255,255,255,0.22), rgba(255,255,255,0.10) 58%, rgba(255,255,255,0.05));
+    radial-gradient(120% 75% at 30% 0%, rgba(255,255,255,0.20), transparent 55%),
+    linear-gradient(165deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06) 58%, rgba(255,255,255,0.03));
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.80),
-    inset 0 -2px 3px rgba(0,0,0,0.08),
-    inset 0 0 0 1px rgba(255,255,255,0.30);
+    inset 0 1px 0 rgba(255,255,255,0.32),
+    inset 0 -1px 0 rgba(255,255,255,0.07),
+    inset 0 0 0 1px rgba(255,255,255,0.12);
   transition: opacity 140ms ease;
 }
 
-/* PHASE 2.3 supplement H: спекуляр линзы реагирует на давление стекла.
-   --lens-press (0..1) пишет press-пружина, --lens-bridge (0..1) — bridge.
-   Слои СКЛАДЫВАЮТСЯ: базовый v5-градиент (top 0.55) — это REST-спекуляр;
-   ::after добавляет давление поверх: rest +0.10 → press +0.35 →
-   bridge-центр +0.43 (суммарно ≈ 0.55/0.80/0.85 — в коридоре §H).
-   Значения подобраны по кадрам 02/03: прежние 0.55+ давали пересвет
-   (белый мазал вместо стекла). */
+/* PHASE 2.3 supplement H + PHASE 2.4 §1.5: спекуляр линзы реагирует на
+   давление, но БЕЗ пересвета: белый ослаблен 0.60 → 0.40, базовая opacity
+   ПОДНЯТА 0.10 → 0.30 — покой читается как стекло (§1.6 «release не теряет
+   стеклянность»), press 0.60 / bridge-центр 0.72 — в коридоре §H, без
+   неонового мазала (фоновые слои при этом притушены выше). */
 .pill-bubble::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: radial-gradient(120% 60% at 50% -8%, rgba(255,255,255,0.60), rgba(255,255,255,0.10) 52%, transparent 76%);
+  background: radial-gradient(115% 55% at 50% -10%, rgba(255,255,255,0.40), rgba(255,255,255,0.06) 52%, transparent 78%);
   mix-blend-mode: screen;
-  opacity: calc(0.10 + 0.25 * var(--lens-press, 0) + 0.08 * var(--lens-bridge, 0));
+  opacity: calc(0.30 + 0.30 * var(--lens-press, 0) + 0.12 * var(--lens-bridge, 0));
 }
 
 .pill-rim {
@@ -568,7 +587,8 @@ html.boot-skip .boot-bg { display: none !important; }
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude;
-  opacity: .5;
+  /* PHASE 2.4 §1.5: .5 → .38 — «слишком яркий rim» (жалоба) */
+  opacity: .38;
 }
 
 .pill-controls { position: relative; z-index: 4; display: flex; width: 100%; height: 100%; padding: 5px; }
@@ -583,6 +603,11 @@ html.boot-skip .boot-bg { display: none !important; }
 .pill-item:active { transform: scale(.98); }
 .pill-label { font-size: 10px; line-height: 1; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
 .pill-item.is-on { color: var(--brand-strong); }
+
+/* PHASE 2.4 §1.3: вторая вкладка в мосте ПОДСВЕЧИВАЕТСЯ (не только
+   уменьшается): covered поднимает цвет до foreground — «временно накрыта
+   стеклом», is-on (committed) остаётся отдельным состоянием до release. */
+.pill-item.is-lens-covered { color: var(--foreground); }
 
 /* PHASE 2.3 §2/G: КОНТЕНТ сжимается под давлением стекла (illusion press).
    Масштабируется wrapper внутри кнопки, НЕ сама кнопка: hit-area 44px целая,
@@ -937,3 +962,60 @@ html.is-scrolling .fx-grain, html.is-scrolling .aurora { animation-play-state: p
 html.native-ios-shell .pill-nav { display: none !important; }
 html.native-ios-shell .search-chip { bottom: calc(max(10px, var(--sab)) + 8px); }
 html.native-ios-shell .fab-top { bottom: calc(max(10px, var(--sab)) + 10px); }
+
+/* ═══ PHASE 2.4 §3: GLASS TOASTS (sonner) ═══
+   Единый стеклянный материал вместо solid-заливок (richColors УДАЛЕНЫ):
+   статус — только акцентом иконки + тонкое кольцо границы, НЕ заливка.
+   Mobile (<1024): BOTTOM-CENTER НАД нижней пилюлей (панель стоит на
+   max(10px,--sab) + 64px высоты; зазор 12px) — НЕ под Dynamic Island,
+   НЕ поверх панели, home indicator не задет. При открытой клавиатуре
+   (iOS overlay) тост поднимается на --kb-overlay (Android resizes-content
+   получает ≈0 — layout viewport уже сжат, двойного учёта нет — урок v4 п.20).
+   Desktop (≥1024): top-center с safe-area (§3.4).
+   Z: sonner по умолчанию 999999999 — выше photo-viewer и upload sheet:
+   toast не прячется под sheet chrome (§5). */
+.toaster-m { display: block; }
+.toaster-d { display: none; }
+@media (min-width: 1024px) {
+  .toaster-m { display: none; }
+  .toaster-d { display: block; }
+}
+.toaster-m[data-sonner-toaster] {
+  --offset-bottom: calc(max(10px, var(--sab)) + 76px + var(--kb-overlay, 0px)) !important;
+  --mobile-offset-bottom: calc(max(10px, var(--sab)) + 76px + var(--kb-overlay, 0px)) !important;
+}
+.toaster-d[data-sonner-toaster] {
+  --offset-top: calc(var(--sat) + 14px) !important;
+  --mobile-offset-top: calc(var(--sat) + 14px) !important;
+}
+[data-sonner-toast][data-styled="true"] {
+  background: var(--glass-strong) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid var(--border) !important;
+  border-radius: 18px !important;
+  color: var(--foreground) !important;
+  box-shadow: var(--shadow-pop) !important;
+  padding: 12px 14px !important;
+}
+[data-sonner-toast][data-styled="true"] [data-title] {
+  font-weight: 600 !important;
+  color: var(--foreground) !important;
+}
+[data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--muted-foreground) !important;
+}
+[data-sonner-toast] [data-close-button] {
+  background: var(--secondary) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--muted-foreground) !important;
+}
+/* §3.3: статус — мягкий акцент в иконке + hairline-кольцо границы */
+[data-sonner-toast][data-type="success"] { border-color: rgba(52, 211, 153, 0.32) !important; }
+[data-sonner-toast][data-type="success"] [data-icon] { color: #34d399; }
+[data-sonner-toast][data-type="warning"] { border-color: rgba(251, 191, 36, 0.34) !important; }
+[data-sonner-toast][data-type="warning"] [data-icon] { color: #fbbf24; }
+[data-sonner-toast][data-type="error"] { border-color: rgba(251, 113, 133, 0.36) !important; }
+[data-sonner-toast][data-type="error"] [data-icon] { color: #fb7185; }
+[data-sonner-toast][data-type="info"] { border-color: rgba(var(--brand-rgb), 0.38) !important; }
+[data-sonner-toast][data-type="info"] [data-icon] { color: var(--brand-strong); }
