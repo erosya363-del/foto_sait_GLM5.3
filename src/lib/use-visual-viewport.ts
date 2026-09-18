@@ -148,6 +148,19 @@ function onOrient() {
   measure();
 }
 
+/* CRITICAL STABILITY 5.3: возвращение на вкладку / выход из фона —
+   iOS может «проесть» resize/scroll события, и stale KB-состояние
+   (kb-open, --kb-overlay ≠ 0) оставляет полосу и смещённую панель.
+   measure() на pageshow/visibilitychange сбрасывает всё по факту. */
+function onPageShow() {
+  baseH = 0;
+  baseW = 0;
+  measure();
+}
+function onVisibility() {
+  if (document.visibilityState === "visible") measure();
+}
+
 function install() {
   if (installed || typeof window === "undefined") return;
   installed = true;
@@ -156,6 +169,8 @@ function install() {
   vv?.addEventListener("scroll", measure);
   window.addEventListener("resize", measure);
   window.addEventListener("orientationchange", onOrient);
+  window.addEventListener("pageshow", onPageShow);
+  document.addEventListener("visibilitychange", onVisibility);
   document.addEventListener("focusin", measure);
   document.addEventListener("focusout", measure);
   measure();
@@ -169,6 +184,8 @@ function uninstall() {
   vv?.removeEventListener("scroll", measure);
   window.removeEventListener("resize", measure);
   window.removeEventListener("orientationchange", onOrient);
+  window.removeEventListener("pageshow", onPageShow);
+  document.removeEventListener("visibilitychange", onVisibility);
   document.removeEventListener("focusin", measure);
   document.removeEventListener("focusout", measure);
   document.documentElement.classList.remove("kb-open");
