@@ -4,7 +4,20 @@
 Ветка: `main`
 
 START_HEAD: `a573c09ec652a914b3c0634ed424325d01791eb1`
-FINAL_HEAD: см. раздел «COMMITS» (финальный коммит `docs` в этой же сессии).
+FINAL_HEAD: `f7b1198103aa8e72d3e8c0294ae2c3c52731b350` (pushed: `a573c09..f7b1198`)
+
+COMMITS (a573c09..f7b1198, по смыслу — ТЗ §18):
+
+1. `14e93d5` fix(data): add atomic live deploy lock
+2. `6d37d5a` fix(data): auto-sync locked live before build
+3. `9898d3a` fix(data): make runtime fingerprints fail-closed
+4. `e0616ea` fix(data): harden artifact path verification
+5. `8e0fe00` fix(glass): remove remaining lens highlight
+6. `e50dd12` fix(viewport): stabilize browser chrome positioning
+7. `517782a` fix(upload): keep sheet anchored during keyboard
+8. `12206f7` test(data): cover live mutation deploy race
+9. `449a61b` docs: add part1.1 hotfix report
+10. `f7b1198` docs: worklog Task 47 (part1.1 hotfix)
 
 ---
 
