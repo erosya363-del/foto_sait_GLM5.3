@@ -76,6 +76,10 @@ export function initNativeIOSBridge(): () => void {
       // сценария в пилюле ведут к каталогу с сохранением режима вида
       if (state.view === "catalog") state.resetCatalog();
       else state.setView("catalog");
+    } else if (view === "upload") {
+      /* PHASE 2.4 §4.2: upload — не раздел, а glass sheet; committed view
+         нативной оболочки не меняется, sheet открывается поверх. */
+      state.setUploadOpen(true);
     } else if (state.view !== view || state.productId) {
       state.setView(view);
     }

@@ -108,6 +108,10 @@ type PortalState = {
   viewerOpen: boolean;
   /** Открыт дропдаун поиска — верхний слой для Escape */
   searchOpen: boolean;
+  /** PHASE 2.4 §4.2: Upload — НЕ раздел, а сценарное окно (glass sheet).
+     «Загрузка» в панели — action-opener: committed view не меняется,
+     page swipe и линза-навигация на upload не реагируют как на раздел. */
+  uploadOpen: boolean;
   warehouse: Warehouse;
   /** Дриллдаун каталога: выбранная категория и модель */
   catCategory: string | null;
@@ -134,6 +138,8 @@ type PortalState = {
   closeViewer: () => void;
   setViewerIndex: (i: number) => void;
   setSearchOpen: (v: boolean) => void;
+  /** PHASE 2.4 §4.2: открыть/закрыть upload sheet */
+  setUploadOpen: (v: boolean) => void;
   setWarehouse: (w: Warehouse) => void;
   setCatCategory: (c: string | null) => void;
   setCatModel: (m: string | null) => void;
@@ -161,6 +167,7 @@ export const usePortal = create<PortalState>((set, get) => ({
   viewerIndex: 0,
   viewerOpen: false,
   searchOpen: false,
+  uploadOpen: false,
   warehouse: "Обухово",
   catCategory: null,
   catModel: null,
@@ -198,6 +205,8 @@ export const usePortal = create<PortalState>((set, get) => ({
   setViewerIndex: (i) => set({ viewerIndex: i }),
 
   setSearchOpen: (v) => set({ searchOpen: v }),
+
+  setUploadOpen: (v) => set({ uploadOpen: v }),
 
   setWarehouse: (w) => {
     set({ warehouse: w });
@@ -299,8 +308,11 @@ export const usePortal = create<PortalState>((set, get) => ({
         : null;
     const p = loadPersisted();
     const prefs = loadPrefs(); // localStorage приоритетнее сессии для режимов вида
+    /* PHASE 2.4 §4.2: легаси-состояние view:"upload" (из старых сессий/истории)
+       больше не валидный раздел — маппится в «catalog». */
+    const restoredView = st?.view ?? p.view ?? "catalog";
     set({
-      view: st?.view ?? p.view ?? "catalog",
+      view: restoredView === "upload" ? "catalog" : restoredView,
       productId: st?.productId ?? p.productId ?? null,
       productFrom: p.productFrom ?? "catalog",
       warehouse: p.warehouse ?? "Обухово",
