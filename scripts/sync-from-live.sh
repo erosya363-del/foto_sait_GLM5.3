@@ -38,6 +38,15 @@
 # Окружение:
 #   RUNTIME_ROOT — корень приёмника (по умолчанию <проект>/download/runtime);
 #                  удобно для тестов на изолированной папке.
+#   SYNC_EXPORT_TOKEN — токен доступа к /api/admin/export живого сайта
+#                  (требуется, если на сервере настроен; отправляется как
+#                  X-Sync-Token. НЕ коммитить).
+#
+# РЕЗУЛЬТАТ (ТЗ CRITICAL STABILITY 2.5): после успешного синка в runtime-зону
+# пишется маркер .live-sync.json (source/syncedAt/dbSha256/manifestSha256/
+# photoCount/optimizedCount/thumbCount). Его проверяет deploy-guard
+# (scripts/check-deploy-freshness.mjs, вызывается сборкой) — деплой
+# несинхронизированной зоны стал НЕВОЗМОЖЕН (fail-closed).
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -79,6 +88,27 @@ mkdir -p "$TMP/uploads"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
+# ТЗ 2.10: экспорт живого сайта закрыт токеном. Источник токена:
+#   1. env SYNC_EXPORT_TOKEN (приоритет);
+#   2. download/runtime/.sync-token — zero-config (генерируется один раз,
+#      этот же файл печётся в артефакт → совпадает с сервером).
+AUTH_ARGS=()
+SYNC_TOKEN="${SYNC_EXPORT_TOKEN:-}"
+if [ -z "$SYNC_TOKEN" ] && [ -f "$RUNTIME_ROOT/.sync-token" ]; then
+    SYNC_TOKEN="$(tr -d '[:space:]' < "$RUNTIME_ROOT/.sync-token")"
+    echo "── авторизация экспорта: X-Sync-Token (из $RUNTIME_ROOT/.sync-token)"
+fi
+if [ -z "$SYNC_TOKEN" ]; then
+    # Токена нет нигде — генерируем. Первый деплой после этого пекарёт его
+    # на сервер; живой сайт СТАРОГО кода (без токена) примет запрос и так.
+    SYNC_TOKEN="$(bun -e "console.log(require('crypto').randomBytes(32).toString('hex'))")"
+    mkdir -p "$RUNTIME_ROOT"
+    printf '%s\n' "$SYNC_TOKEN" > "$RUNTIME_ROOT/.sync-token"
+    chmod 600 "$RUNTIME_ROOT/.sync-token" 2>/dev/null || true
+    echo "── создан токен экспорта: $RUNTIME_ROOT/.sync-token (не коммитить; env SYNC_EXPORT_TOKEN имеет приоритет)"
+fi
+AUTH_ARGS=("-H" "X-Sync-Token: $SYNC_TOKEN")
+
 echo "── [1/5] Страховочный бэкап текущей runtime-зоны…"
 if [ -f "$DB" ]; then
     RUNTIME_ROOT="$RUNTIME_ROOT" bash scripts/backup-runtime.sh "pre-sync"
@@ -87,10 +117,16 @@ else
 fi
 
 echo "── [2/5] Манифест живого сайта…"
-curl -fsS --max-time 60 "$BASE_URL/api/admin/export" -o "$TMP/manifest.json" || {
-    echo "✗ Не удалось получить манифест: $BASE_URL/api/admin/export" >&2
+MANIFEST_CODE=$(curl -sS --max-time 60 "${AUTH_ARGS[@]}" "$BASE_URL/api/admin/export" -o "$TMP/manifest.json" -w "%{http_code}" || true)
+if [ "$MANIFEST_CODE" != "200" ]; then
+    if [ "$MANIFEST_CODE" = "401" ]; then
+        echo "✗ Экспорт живого сайта требует токен (HTTP 401)." >&2
+        echo "  Задайте SYNC_EXPORT_TOKEN=<токен> в окружении (тот же, что на сервере) и повторите." >&2
+    else
+        echo "✗ Не удалось получить манифест: $BASE_URL/api/admin/export (HTTP $MANIFEST_CODE)" >&2
+    fi
     exit 1
-}
+fi
 
 # ── проверки манифеста ──
 read -r PHOTOS_LIVE OPT_COUNT THM_COUNT < <(MANIFEST="$TMP/manifest.json" bun -e "
@@ -105,10 +141,15 @@ read -r PHOTOS_LIVE OPT_COUNT THM_COUNT < <(MANIFEST="$TMP/manifest.json" bun -e
 echo "    фото в БД: $PHOTOS_LIVE, файлов: optimized=$OPT_COUNT, thumbs=$THM_COUNT"
 
 echo "── [3/5] БД живого сайта…"
-curl -fsS --max-time 180 "$BASE_URL/api/admin/export?part=db" -o "$TMP/custom.db" || {
-    echo "✗ Не удалось скачать БД" >&2
+DB_CODE=$(curl -sS --max-time 180 "${AUTH_ARGS[@]}" "$BASE_URL/api/admin/export?part=db" -o "$TMP/custom.db" -w "%{http_code}" || true)
+if [ "$DB_CODE" != "200" ]; then
+    if [ "$DB_CODE" = "401" ]; then
+        echo "✗ Экспорт БД требует токен (HTTP 401). Задайте SYNC_EXPORT_TOKEN." >&2
+    else
+        echo "✗ Не удалось скачать БД (HTTP $DB_CODE)" >&2
+    fi
     exit 1
-}
+fi
 
 INTEGRITY=$(DB_ABS="$TMP/custom.db" bun -e "
   const { PrismaClient } = require('@prisma/client');
@@ -165,6 +206,12 @@ MANIFEST="$TMP/manifest.json" BASE_URL="$BASE_URL" TMP="$TMP" bun -e "
 echo "── [5/5] Замена runtime-зоны…"
 mkdir -p "$RUNTIME_ROOT/database"
 
+# Хеши ДЛЯ МАРКЕРА считаем от скачанных и уже сверенных данных:
+# маркер описывает ровно то, что сейчас уедет в runtime-зону (а затем в артефакт)
+DB_SHA256=$(sha256sum "$TMP/custom.db" | cut -d' ' -f1)
+MANIFEST_SHA256=$(sha256sum "$TMP/manifest.json" | cut -d' ' -f1)
+SYNC_AT=$(date -Iseconds)
+
 # uploads целиком (mv внутри той же ФС — атомарная операция)
 if [ -d "$RUNTIME_ROOT/uploads" ]; then
     rm -rf "$TMP/uploads-old"
@@ -177,11 +224,29 @@ mv "$TMP/uploads" "$RUNTIME_ROOT/uploads"
 mv -f "$TMP/custom.db" "$DB"
 rm -f "$DB-wal" "$DB-shm"
 
+# ТЗ 2.5: FRESH SYNC MARKER — паспорт синка для deploy-guard.
+# БД уже на месте ($DB заменена mv'ом выше), хеши считаны из скачанных файлов.
+MARKER_JSON="$RUNTIME_ROOT/.live-sync.json.tmp"
+{
+  printf '{\n'
+  printf '  "source": "%s",\n' "$BASE_URL"
+  printf '  "generatedAt": "%s",\n' "$(MANIFEST="$TMP/manifest.json" bun -e "const m=JSON.parse(require('fs').readFileSync(process.env.MANIFEST,'utf8'));console.log(m.generatedAt)")"
+  printf '  "syncedAt": "%s",\n' "$SYNC_AT"
+  printf '  "dbSha256": "%s",\n' "$DB_SHA256"
+  printf '  "manifestSha256": "%s",\n' "$MANIFEST_SHA256"
+  printf '  "photoCount": %s,\n' "$PHOTOS_DB"
+  printf '  "optimizedCount": %s,\n' "$OPT_COUNT"
+  printf '  "thumbCount": %s\n' "$THM_COUNT"
+  printf '}\n'
+} > "$MARKER_JSON"
+mv -f "$MARKER_JSON" "$RUNTIME_ROOT/.live-sync.json"
+
 echo ""
 echo "✅ Синхронизация завершена: данных живого сайта от $(MANIFEST="$TMP/manifest.json" bun -e "
   const m = JSON.parse(require('fs').readFileSync(process.env.MANIFEST, 'utf8'));
   console.log(m.generatedAt);
 ")"
 echo "   Живых фото: $PHOTOS_DB, файлов: optimized=$OPT_COUNT, thumbs=$THM_COUNT"
+echo "   Маркер свежего синка: $RUNTIME_ROOT/.live-sync.json (deploy-guard пропустит сборку)"
 echo "   Если dev-сервер запущен — перезапусти его, чтобы он открыл новую БД."
 echo "   Теперь можно делать правки и запускать деплой: данные уедут в артефакт."

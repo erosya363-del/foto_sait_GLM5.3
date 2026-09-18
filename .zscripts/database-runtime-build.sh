@@ -36,36 +36,56 @@ set -euo pipefail
 PROJECT_DIR="${PROJECT_DIR:-/home/z/my-project}"
 BUILD_DIR="${BUILD_DIR:?BUILD_DIR is required}"
 
-RUNTIME_DB="$PROJECT_DIR/download/runtime/database/custom.db"
-LEGACY_DB="$PROJECT_DIR/db/custom.db"
-TEMPLATE_DB="$PROJECT_DIR/db/schema-template-empty.db"
-UPLOADS_SRC="$PROJECT_DIR/download/runtime/uploads"
+# RUNTIME_ROOT можно переопределить (изолированные тесты пайплайна данных);
+# по умолчанию — рабочая runtime-зона проекта (истина приложения).
+RUNTIME_SRC="${RUNTIME_ROOT:-$PROJECT_DIR/download/runtime}"
+
+RUNTIME_DB="$RUNTIME_SRC/database/custom.db"
+UPLOADS_SRC="$RUNTIME_SRC/uploads"
 DIST_DIR="$BUILD_DIR/next-service-dist"
 UPLOADS_DST="$DIST_DIR/download/runtime/uploads"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ТЗ CRITICAL STABILITY 2.4/2.5 — DEPLOY GUARD: деплой НЕактуальных данных
+# НЕВОЗМОЖЕН. Прежде чем что-то печь, проверяем свежий sync-маркер
+# (.live-sync.json, который пишет scripts/sync-from-live.sh): без него/со
+# старым маркером сборка УПАДАЕТ — именно так пропали ~20 фото (деплой выпёк
+# артефакт из несинхронизированной зоны).
+# Чистая установка: RUNTIME_BOOTSTRAP_EMPTY=1 (тот же флаг, что в runtime.ts).
+# ═════════════════════════════════════════════════════════════════════════════
+if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" = "1" ]; then
+    echo "⚠  RUNTIME_BOOTSTRAP_EMPTY=1 — deploy-guard пропущен (ЯВНАЯ чистая установка)"
+else
+    echo "🛡  Deploy guard: проверка свежего sync-маркера и целостности runtime-зоны…"
+    (cd "$PROJECT_DIR" && bun scripts/check-deploy-freshness.mjs "$RUNTIME_SRC")
+fi
 
 mkdir -p "$BUILD_DIR/db"
 
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
 
-# ── [1/3] БД: выбор источника ───────────────────────────────────────────────
+# ── [1/3] БД: ЕДИНСТВЕННЫЙ источник — runtime-зона (ТЗ 2.6: фолбэков нет) ──
+# Легаси db/custom.db и пустой шаблон БОЛЬШЕ НЕ подставляются молча:
+# «тихий» фолбэк умел вернуть старый набор фото после пропажи runtime-зоны —
+# тот самый симптом. Чистая установка — ТОЛЬКО с RUNTIME_BOOTSTRAP_EMPTY=1.
 if [ -f "$RUNTIME_DB" ]; then
     SRC_DB="$RUNTIME_DB"
-    SRC_KIND="runtime-зона (истина)"
-elif [ -f "$LEGACY_DB" ]; then
-    SRC_DB="$LEGACY_DB"
-    SRC_KIND="⚠️  ЛЕГАСИ db/custom.db — runtime-зона не найдена!"
-elif [ -f "$TEMPLATE_DB" ]; then
-    SRC_DB="$TEMPLATE_DB"
-    SRC_KIND="⚠️  ПУСТАЯ схема — деплой будет БЕЗ данных каталога"
+    echo "🗄️  Источник БД: runtime-зона: $SRC_DB"
+elif [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" = "1" ]; then
+    echo "⚠  Чистая установка: БД будет пустой схемой (RUNTIME_BOOTSTRAP_EMPTY=1)"
+    SRC_DB=""
 else
-    echo "❌ Нет ни runtime-БД, ни db/custom.db, ни шаблона схемы — нечего выпекать" >&2
+    echo "❌ Runtime-БД не найдена: $RUNTIME_DB — деплой БЕЗ данных запрещён (fail-closed)." >&2
+    echo "   Восстановление: bash scripts/restore-runtime.sh <архив.tar.gz>" >&2
+    echo "   Список бэкапов:  ls -1t download/backups/runtime-*.tar.gz" >&2
+    echo "   Синк с живым сайтом: bash scripts/sync-from-live.sh <BASE_URL> --yes" >&2
+    echo "   Только для заведомо чистой установки (без данных): RUNTIME_BOOTSTRAP_EMPTY=1" >&2
     exit 1
 fi
-echo "🗄️  Источник БД: $SRC_KIND"
-echo "    $SRC_DB"
 
-# ── [2/3] Консистентный снапшот БД → артефакт ──────────────────────────────
+# ── [2/3] Консистентный снапшот БД → артефакт ──────────────────────────
+if [ -n "$SRC_DB" ]; then
 echo "🗄️  Консистентный снапшот БД (VACUUM INTO staging)…"
 if ! (
     cd "$PROJECT_DIR"
@@ -107,6 +127,12 @@ echo "🗄️  Синхронизация схемы prisma по копии ар
     cd "$PROJECT_DIR"
     DATABASE_URL="file:$BUILD_DIR/db/custom.db" bunx prisma db push --skip-generate
 )
+else
+    # Чистая установка (RUNTIME_BOOTSTRAP_EMPTY=1): пустая схема — тот же
+    # источник, что разрешён src/lib/runtime.ts; 0 строк, никаких данных
+    cp "$PROJECT_DIR/db/schema-template-empty.db" "$BUILD_DIR/db/custom.db"
+    echo "🗄️  В артефакт положена ПУСТАЯ схема (0 строк)"
+fi
 
 # ── [3/3] Фото пользователей → внутрь standalone-корня артефакта ───────────
 if [ ! -d "$DIST_DIR" ]; then
@@ -116,22 +142,41 @@ if [ ! -d "$DIST_DIR" ]; then
 fi
 
 if [ ! -d "$UPLOADS_SRC" ]; then
-    echo "❌ $UPLOADS_SRC не найден — в артефакт нечего положить, деплой будет без фото." >&2
-    echo "   Runtime-зона рабочей области повреждена? Восстановление:" >&2
-    echo "     bash scripts/restore-runtime.sh <архив.tar.gz>" >&2
-    echo "     ls -1t download/backups/runtime-*.tar.gz" >&2
-    exit 1
-fi
-
+    if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" = "1" ]; then
+        echo "⚠  Чистая установка: uploads не существует — в артефакт пойдут пустые каталоги"
+        mkdir -p "$UPLOADS_DST/optimized" "$UPLOADS_DST/thumbs"
+    else
+        echo "❌ $UPLOADS_SRC не найден — в артефакт нечего положить, деплой будет без фото." >&2
+        echo "   Runtime-зона рабочей области повреждена? Восстановление:" >&2
+        echo "     bash scripts/restore-runtime.sh <архив.tar.gz>" >&2
+        echo "     ls -1t download/backups/runtime-*.tar.gz" >&2
+        exit 1
+    fi
+else
 mkdir -p "$UPLOADS_DST"
 cp -a "$UPLOADS_SRC/." "$UPLOADS_DST/"
+fi
 
 OPT_COUNT=$(ls -1 "$UPLOADS_DST/optimized" 2>/dev/null | wc -l | tr -d ' ')
 THM_COUNT=$(ls -1 "$UPLOADS_DST/thumbs" 2>/dev/null | wc -l | tr -d ' ')
-if [ "$OPT_COUNT" = "0" ]; then
+if [ "$OPT_COUNT" = "0" ] && [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" != "1" ]; then
     echo "⚠️  uploads/optimized пуст — БД ссылается на фото, которых нет в артефакте (404 на живом сайте)"
 else
     echo "🖼️  Фото в артефакте: optimized=$OPT_COUNT, thumbs=$THM_COUNT → $UPLOADS_DST"
+fi
+
+# ═════════════════════════════════════════════════════════════════════
+# ТЗ 2.8 — POST-BUILD VERIFY: проверяем УЖЕ АРТЕФАКТ, а не исходную зону:
+# артефактная БД ↔ артефактные optimized/thumbs. Любая битая ссылка —
+# сборка падает ЗДЕСЬ, а не после деплоя на живом сайте.
+# ═════════════════════════════════════════════════════════════════════
+echo "🛡  Post-build verify: фото-ссылки В АРТЕФАКТЕ (БД ↔ optimized/thumbs)…"
+(cd "$PROJECT_DIR" && bun scripts/verify-runtime-artifact.mjs "$DIST_DIR/download/runtime" --db "$BUILD_DIR/db/custom.db")
+
+# ТЗ 2.10: токен экспорта едет ВНУТРИ артефакта (RUNTIME_ROOT/.sync-token →
+# сервер прочитает его тем же путём) — авторизация работает без .env.
+if [ -f "$RUNTIME_SRC/.sync-token" ]; then
+    cp "$RUNTIME_SRC/.sync-token" "$DIST_DIR/download/runtime/.sync-token"
 fi
 
 echo "✅ Данные каталога выпечены в артефакт: $BUILD_DIR/db/custom.db + $UPLOADS_DST"

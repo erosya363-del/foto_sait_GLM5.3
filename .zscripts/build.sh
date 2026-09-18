@@ -27,6 +27,28 @@ cd "$NEXTJS_PROJECT_DIR" || exit 1
 # 设置环境变量
 export NEXT_TELEMETRY_DISABLED=1
 
+# ═════════════════════════════════════════════════════════════════════════════
+# ТЗ CRITICAL STABILITY 2.4 — DEPLOY GUARD (pre-flight, fail fast):
+# деплой НЕактуальных данных НЕВОЗМОЖЕН. До сборки проверяем fresh sync marker
+# (.live-sync.json от scripts/sync-from-live.sh): если runtime-зона не
+# синхронизирована с живым сайтом — сборка УПАДАЕТ ЗДЕСЬ, а не выпекает
+# артефакт из устаревшей зоны (именно так пропали ~20 фото, forensics 19.09).
+# Чистая установка: RUNTIME_BOOTSTRAP_EMPTY=1 (тот же флаг, что в runtime.ts).
+# Полная проверка повторяется в database-runtime-build.sh + post-build verify.
+# ═════════════════════════════════════════════════════════════════════════════
+echo "🛡  Deploy guard (pre-flight): fresh sync marker + целостность runtime-зоны…"
+if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" != "1" ] && [ ! -f "download/runtime/.live-sync.json" ]; then
+    echo "❌ НЕТ fresh sync маркера download/runtime/.live-sync.json." >&2
+    echo "   Перед деплоем ОБЯЗАТЕЛЬНО синхронизировать данные живого сайта:" >&2
+    echo "     bash scripts/sync-from-live.sh https://<site>.space-z.ai --yes" >&2
+    echo "   Деплой несинхронизированной зоны уничтожает фото, загруженные на живой сайт." >&2
+    echo "   (Только для заведомо чистой установки без данных: RUNTIME_BOOTSTRAP_EMPTY=1)" >&2
+    exit 1
+fi
+if [ "${RUNTIME_BOOTSTRAP_EMPTY:-}" != "1" ]; then
+    bun scripts/check-deploy-freshness.mjs download/runtime || exit 1
+fi
+
 BUILD_DIR="/tmp/build_fullstack_$BUILD_ID"
 echo "📁 清理并创建构建目录: $BUILD_DIR"
 mkdir -p "$BUILD_DIR"

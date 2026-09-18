@@ -38,7 +38,14 @@ export const dynamic = "force-dynamic";
  * /api/media/{optimized|thumbs}/<name> — так синхронизация идёт штатными
  * маршрутами приложения и не тащит произвольные пути.
  *
- * Доступ: уровень остальных /api/admin/* (внутренний контур каталога).
+ * ДОСТУП (ТЗ CRITICAL STABILITY 2.10): полный экспорт БД+манифеста — это
+ * копия ВСЕХ данных каталога; публичным ему быть не положено. Техническая
+ * авторизация: SYNC_EXPORT_TOKEN (окружение сервера). Токен принимается
+ * заголовком Authorization: Bearer <token> или X-Sync-Token: <token>.
+ *   - сервер БЕЗ SYNC_EXPORT_TOKEN / с неверным токеном → 401
+ *     (fail-closed: пока токен не настроен, экспорт закрыт);
+ *   - sync-from-live.sh читает тот же токен из окружения рабочей области и
+ *     отправляет X-Sync-Token. Токен НЕ коммитится никуда.
  * Ответ всегда no-store (middleware /api/*) — выгрузка не кэшируется.
  */
 
@@ -46,6 +53,35 @@ interface UploadFileInfo {
   name: string;
   bytes: number;
   sha256: string;
+}
+
+/** ТЗ 2.10: техническая авторизация экспорта.
+ *  Источник ожидаемого токена (приоритет):
+ *   1. env SYNC_EXPORT_TOKEN (если платформа позволяет задать переменные);
+ *   2. файл RUNTIME_ROOT/.sync-token — zero-config схема (на платформе нет
+ *      .env): токен генерируется ОДИН раз в рабочей области, печётся в
+ *      артефакт тем же пайплайном, что и данные, и потому всегда совпадает
+ *      с сервером, собранным из этой же зоны. Файл в git не попадает
+ *      (download/runtime/ в .gitignore).
+ *  Ни env, ни файла → экспорт закрыт (401). */
+function expectedToken(): string | null {
+  if (process.env.SYNC_EXPORT_TOKEN) return process.env.SYNC_EXPORT_TOKEN;
+  try {
+    const t = fs.readFileSync(path.join(RUNTIME_ROOT, ".sync-token"), "utf8").trim();
+    return t || null;
+  } catch {
+    return null;
+  }
+}
+
+function authorized(req: NextRequest): boolean {
+  const expected = expectedToken();
+  if (!expected) return false; // токен не настроен на сервере — экспорт закрыт
+  const bearer = req.headers.get("authorization");
+  const sync = req.headers.get("x-sync-token");
+  if (sync && sync === expected) return true;
+  if (bearer && bearer.startsWith("Bearer ")) return bearer.slice(7) === expected;
+  return false;
 }
 
 async function listUploads(dir: string): Promise<UploadFileInfo[]> {
@@ -104,6 +140,17 @@ async function buildManifest() {
 }
 
 export async function GET(req: NextRequest) {
+  /* ТЗ 2.10: fail-closed — без валидного SYNC_EXPORT_TOKEN экспорт недоступен */
+  if (!authorized(req)) {
+    return NextResponse.json(
+      {
+        error:
+          "Экспорт runtime-данных закрыт. Требуется заголовок X-Sync-Token (или Authorization: Bearer) с SYNC_EXPORT_TOKEN сервера.",
+      },
+      { status: 401, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const part = req.nextUrl.searchParams.get("part") || "";
 
   try {
