@@ -108,19 +108,23 @@ export default function RootLayout({
                   void html.offsetHeight;
                   html.style.minHeight = prev;
                   window.dispatchEvent(new Event("resize"));
-                  /* ФИКС ПОЛОСЫ, повторно (аудит v2.6): форс-репейнт стекла пилюли —
-                     iOS standalone иногда отдаёт backdrop-filter-слой с неверной
-                     геометрией до первого касания; мгновенный compositor-толчок
-                     перерисовывает капсулу на всю ширину */
+                  /* ФИКС ПОЛОСЫ, повторно + PHASE 2.2 (регресс на iOS 26 с тяжёлым
+                     стеклом v5 blur 40/sat 2): слой backdrop-filter при холодном
+                     старте живёт с неверной геометрией ДО ПЕРВОГО КАСАНИЯ —
+                     пользователь видит «пустую полосу под панелью», первое
+                     взаимодействие перестраивает композитор и панель «опускается
+                     на место». (а) Хинт стал сильнее: scale-пульс а не только
+                     translateZ; (б) серия продлена до 7.6 с — прежние 3 с
+                     кончались раньше, чем пользователь успевал коснуться экрана. */
                   var pill = document.querySelector(".pill-shell");
                   if (pill) {
-                    pill.style.transform = "translateZ(0)";
-                    setTimeout(function () { pill.style.transform = ""; }, 80);
+                    pill.style.transform = "translateZ(0) scale(1.002)";
+                    setTimeout(function () { pill.style.transform = ""; }, 90);
                   }
                   syncMeta();
                 } catch (e) {}
               };
-              [120, 420, 900, 1500, 2200, 3000].forEach(function (ms) { setTimeout(nudge, ms); });
+              [120, 420, 900, 1500, 2200, 3000, 4200, 5600, 7600].forEach(function (ms) { setTimeout(nudge, ms); });
               window.addEventListener("pageshow", function (e) { if (e.persisted) nudge(); });
             } catch (e) {}
           })();`}

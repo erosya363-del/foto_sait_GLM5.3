@@ -37,7 +37,7 @@ export function BootSplash() {
         /* молча */
       }
     };
-    const timers = [150, 500, 1000, 1600, 2400, 3200].map((ms) => setTimeout(nudge, ms));
+    const timers = [150, 500, 1000, 1600, 2400, 3200, 4500, 6000].map((ms) => setTimeout(nudge, ms));
     const onTouch = () => nudge();
     const onVis = () => {
       if (document.visibilityState === "visible") nudge();
