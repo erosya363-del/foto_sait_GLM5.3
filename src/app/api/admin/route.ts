@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { purgePhotoFiles } from "@/lib/photo-fs";
+/* CRITICAL STABILITY PART 1.1 §2.3/§2.4: runtime-мутации под writer-lease;
+   GET view=trash под deploy-lock НЕ выполняет автоочистку (read-only). */
+import {
+  beginRuntimeWrite,
+  runtimeLockedResponse,
+  currentDeployLock,
+} from "@/lib/runtime-write-lock";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +67,14 @@ export async function GET(req: NextRequest) {
   const view = req.nextUrl.searchParams.get("view") || "";
   try {
     if (view === "trash") {
-      const autoPurged = await autoPurgeTrash();
+      /* PART 1.1 §2.4: GET view=trash ВЫЗЫВАЕТ autoPurgeTrash(), которая
+         физически удаляет фото/файлы/варианты — во время deploy-lock READ
+         endpoint НЕ должен мутировать runtime (блокировка мутации -> потеря
+         "только что удалённых из корзины" строк при snapshot). Под lock
+         возвращаем данные как обычно, но autoPurge НЕ выполняем:
+         автоочистка догонит при первом обращении ПОСЛЕ снятия lock. */
+      const lock = await currentDeployLock();
+      const autoPurged = lock ? 0 : await autoPurgeTrash();
       const rows = await db.photo.findMany({
         where: { deletedAt: { not: null } },
         orderBy: { deletedAt: "desc" },
@@ -173,6 +187,22 @@ export async function GET(req: NextRequest) {
  * Товары:      quickCreateVariant / renameVariant / deleteVariant (мягкое)
  */
 export async function POST(req: NextRequest) {
+  /* PART 1.1 §2.3: ВЕСЬ POST под ОДНИМ writer-lease (не каждая action
+     отдельно): create/rename/delete/restore/purgePhoto/purgeTrash/movePhoto/
+     quickCreateVariant и т.д. — единая точка, где деплой дожидается любой
+     начатой мутации; под deploy-lock — честный 423. */
+  const writer = await beginRuntimeWrite("admin");
+  if (!writer.ok) return runtimeLockedResponse(writer.lock);
+  try {
+    return await adminPostHandler(req);
+  } finally {
+    await writer.release();
+  }
+}
+
+/** Вся существующая логика POST — без изменений (ТЗ §2.3 «не оборачивать
+    каждую action отдельно» — обёртка одна, на весь POST). */
+async function adminPostHandler(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
 
@@ -522,6 +552,18 @@ export async function POST(req: NextRequest) {
  * Ответ содержит данные фото — для совместимости со старым undo-тостом.
  */
 export async function DELETE(req: NextRequest) {
+  /* PART 1.1 §2 (аудит): DELETE = мутация (мягкое удаление в корзину) —
+     под тем же writer-lease. */
+  const writer = await beginRuntimeWrite("admin");
+  if (!writer.ok) return runtimeLockedResponse(writer.lock);
+  try {
+    return await adminDeleteHandler(req);
+  } finally {
+    await writer.release();
+  }
+}
+
+async function adminDeleteHandler(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const photoId = sp.get("photoId");
   if (!photoId) return NextResponse.json({ error: "Нужен photoId" }, { status: 400 });

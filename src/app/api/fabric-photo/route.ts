@@ -6,6 +6,8 @@ import sharp from "sharp";
 import { db } from "@/lib/db";
 import { UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR } from "@/lib/paths";
 import { purgePhotoFiles } from "@/lib/photo-fs";
+/* CRITICAL STABILITY PART 1.1 §2.2: та же схема writer-lease, что и upload */
+import { beginRuntimeWrite, runtimeLockedResponse } from "@/lib/runtime-write-lock";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -20,6 +22,19 @@ const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
  * удаляется с диска, чтобы не копить мусор.
  */
 export async function POST(req: NextRequest) {
+  /* PART 1.1 §2.2: маршрут пишет optimized/thumb, удаляет старые файлы и
+     обновляет Material — ОБЯЗАН идти под тем же writer-lease (деплой дожидается;
+     под deploy-lock — честный 423). */
+  const writer = await beginRuntimeWrite("fabric-photo");
+  if (!writer.ok) return runtimeLockedResponse(writer.lock);
+  try {
+    return await fabricPhotoHandler(req);
+  } finally {
+    await writer.release();
+  }
+}
+
+async function fabricPhotoHandler(req: NextRequest) {
   let form: FormData;
   try {
     form = await req.formData();

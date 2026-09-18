@@ -5,6 +5,10 @@ import crypto from "crypto";
 import sharp from "sharp";
 import { db } from "@/lib/db";
 import { UPLOADS_OPT_DIR, UPLOADS_THUMB_DIR } from "@/lib/paths";
+/* CRITICAL STABILITY PART 1.1 §2.1: runtime-мутации под writer-lease —
+   деплой-пайплайн дожидается начатых записей (нет гонки
+   «sync → upload → build → фото потеряно»); под deploy-lock — честный 423. */
+import { beginRuntimeWrite, runtimeLockedResponse } from "@/lib/runtime-write-lock";
 
 /**
  * Загрузка фото товара (мобильная «Загрузка» и мастер создания в админке).
@@ -49,6 +53,22 @@ async function ensureDirs() {
 }
 
 export async function POST(req: NextRequest) {
+  /* PART 1.1 §2.1: lease берётся ДО чтения больших файлов (req.formData()).
+     Lock → честный 423 (пользователь ждёт, ничего не теряется),
+     иначе — lease: если во время загрузки стартует deploy, пайплайн
+     ДОЖДЁТСЯ этой записи, прежде чем делать final sync. */
+  const writer = await beginRuntimeWrite("upload");
+  if (!writer.ok) return runtimeLockedResponse(writer.lock);
+  try {
+    return await uploadHandler(req);
+  } finally {
+    await writer.release();
+  }
+}
+
+/** Вся существующая логика загрузки — БЕЗ изменений (sharp/25 МБ/10 фото/
+    partial success/rollback/variant logic — ТЗ §2.1 «не менять»). */
+async function uploadHandler(req: NextRequest) {
   try {
     const fd = await req.formData();
     const categoryId = String(fd.get("categoryId") ?? "").trim();
