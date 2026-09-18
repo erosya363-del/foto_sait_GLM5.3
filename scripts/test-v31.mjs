@@ -117,15 +117,13 @@ ok("иконки стоят на месте — боксы пунктов пик
 const bubbleMove = await page.evaluate(async () => {
   const bubble = document.querySelector(".pill-bubble");
   const goo = document.querySelector(".pill-goo");
-  const ghost = document.querySelector(".pill-ghost");
   const t0 = bubble.style.transform;
   document.querySelectorAll(".pill-shell .pill-item")[1].click();
-  /* середина полёта: призрак жив (goo.is-live), тянучка пишет scaleX */
+  /* середина полёта: goo.is-live, тянучка пишет scaleX (PHASE 2.2: призрака нет) */
   await new Promise((r) => setTimeout(r, 120));
   const mid = {
     live: goo.classList.contains("is-live"),
     midTransform: bubble.style.transform,
-    ghostOpacity: getComputedStyle(ghost).opacity,
   };
   /* ждём финиш полёта поллингом (headless троттлит rAF — фиксированный
      таймаут нестабилен); потолок 6с */
@@ -134,7 +132,6 @@ const bubbleMove = await page.evaluate(async () => {
     await new Promise((r) => setTimeout(r, 100));
     if (!goo.classList.contains("is-live")) {
       settledLive = false;
-      /* фейд призрака 240мс после снятия is-live */
       await new Promise((r) => setTimeout(r, 450));
       break;
     }
@@ -144,15 +141,14 @@ const bubbleMove = await page.evaluate(async () => {
     mid,
     t1: bubble.style.transform,
     settledLive,
-    ghostSettled: getComputedStyle(ghost).opacity,
   };
 });
-ok("капля оторвалась: в полёте goo.is-live + призрак виден + тянучка scaleX",
-  bubbleMove.mid.live && Number(bubbleMove.mid.ghostOpacity) > 0.3 && /scaleX/.test(bubbleMove.mid.midTransform),
+ok("капля оторвалась: в полёте goo.is-live + тянучка scaleX",
+  bubbleMove.mid.live && /scaleX/.test(bubbleMove.mid.midTransform),
   JSON.stringify(bubbleMove.mid));
-ok("капля собралась: покой без is-live, призрак скрыт (после фейда 240мс), чистый translateX",
-  !bubbleMove.settledLive && Number(bubbleMove.ghostSettled) < 0.01 && /translateX/.test(bubbleMove.t1) && !/scaleX/.test(bubbleMove.t1),
-  JSON.stringify({ t1: bubbleMove.t1, ghost: bubbleMove.ghostSettled }));
+ok("капля собралась: покой без is-live, translate3d, тянучка схлопнулась (scaleX(1))",
+  !bubbleMove.settledLive && /translate3d/.test(bubbleMove.t1) && /scaleX\(1\)/.test(bubbleMove.t1),
+  JSON.stringify({ t1: bubbleMove.t1 }));
 ok("капля переехала к новой вкладке", bubbleMove.t0 !== bubbleMove.t1, `${bubbleMove.t0} → ${bubbleMove.t1}`);
 /* Перед следующими секциями ждём ПОЛНОГО финиша капли: в headless rAF идёт
    в ~4× медленнее, и активный rAF-цикл капли сбивает тайминги жестов pswp */
@@ -180,13 +176,19 @@ await page.locator(".pill-search").click();
 await page.waitForTimeout(350);
 const searchMode = await page.evaluate(() => {
   const nav = document.querySelector(".pill-nav");
+  const cs = getComputedStyle(nav);
   return {
-    display: getComputedStyle(nav).display,
+    display: cs.display,
+    opacity: cs.opacity,
+    visibility: cs.visibility,
+    morphOut: nav.classList.contains("pill-morph-out"),
     popOpen: document.querySelector(".search-pop")?.classList.contains("is-open"),
   };
 });
 ok("карточка поиска открыта", searchMode.popOpen);
-ok("панель display:none в search mode", searchMode.display === "none", searchMode.display);
+ok("панель скрыта морфом (pill-morph-out, opacity 0; НЕ display:none — ТЗ 2.8)",
+  searchMode.morphOut && searchMode.opacity === "0" && searchMode.display !== "none",
+  JSON.stringify(searchMode));
 
 console.log("\n— 4. Клавиатура: панель скрыта, возврат на ту же координату (P0.3/1.14) —");
 /* Android-эмуляция resizes-content: фокус в поле + сжатие layout-viewport. */
@@ -241,6 +243,21 @@ await page.setViewportSize({ width: 390, height: 780 });
 await page.waitForTimeout(400);
 await page.locator(".search-pop-close").click();
 await page.waitForTimeout(300);
+
+/* PHASE 2.2: секции 6+ используют dev-глобалы (__pswp/__portal), которые
+   по соображениям безопасности существуют ТОЛЬКО в dev-сборке. В изоляции
+   (run-isolated = production) они недоступны — viewer-часть честно
+   пропускается: она полностью покрыта production-safe суитом
+   scripts/test-photo-viewer-mobile.mjs. Секции 1-5 (панель/капля/поиск/
+   клавиатура) — основная ценность здесь — выполняются всегда. */
+const devGlobals = await page.evaluate(() =>
+  Boolean(window.__pswp) && Boolean(window.__portal)
+);
+if (!devGlobals) {
+  console.log("\n— 6+. Viewer-секции пропущены: production-сборка без dev-глобалов (покрыто test-photo-viewer-mobile) —");
+  console.log(`\n══ ИТОГ (секции 1-5): PASS=${passed} FAIL=${failed} ══`);
+  process.exit(failed === 0 ? 0 : 1);
+}
 
 console.log("\n— 6. Photo Viewer (PhotoSwipe): мобильный — тач-режим —");
 const productId = await page.evaluate(async () => {

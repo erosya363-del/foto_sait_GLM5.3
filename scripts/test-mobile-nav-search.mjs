@@ -16,7 +16,7 @@
  *        (visibility/opacity, НЕ display:none), search surface симметрично
  *        приезжает; interruptible (rapid open→close).
  *   PH2-4 is-scrolling (ТЗ 2.7): класс появляется при скролле и снимается.
- *   PH2-5 Прозрачность (ТЗ 2.2): alpha --pill-bg ≤ 0.25.
+ *   PH2-5 Прозрачность (ТЗ 2.2): alpha --pill-bg ≤ 0.30 (v5: 0.28 — патч владельца iOS 26).
  *
  * Тест ТОЛЬКО ЧИТАЮЩИЙ, но запуск — fail-closed через явный E2E_BASE:
  *   bash scripts/run-isolated.sh bun scripts/test-mobile-nav-search.mjs
@@ -127,7 +127,7 @@ const dom = await lensGeometry();
 ok("nav.pill-nav = 1", dom?.navCount === 1, `got ${dom?.navCount}`);
 ok(".pill-shell = 1", dom?.shellCount === 1, `got ${dom?.shellCount}`);
 ok(".pill-bubble = 1", dom?.bubbleCount === 1, `got ${dom?.bubbleCount}`);
-ok(".pill-ghost = 1", dom?.ghostCount === 1, `got ${dom?.ghostCount}`);
+ok(".pill-ghost = 0 (PHASE 2.2: вторая линза удалена)", dom?.ghostCount === 0, `got ${dom?.ghostCount}`);
 ok("в кнопках панели НЕТ input (п.3)", dom?.navInputs === 0, `got ${dom?.navInputs}`);
 ok("активный пункт = Каталог", dom?.active?.label === "Каталог", dom?.active?.label);
 
@@ -478,7 +478,9 @@ console.log("── 11. PH2-4/5: is-scrolling + прозрачность (ТЗ 2
     const parts = m ? m[1].split(",").map((s) => parseFloat(s)) : [];
     return parts.length === 4 ? parts[3] : 1;
   });
-  ok("панель прозрачнее: alpha --pill-bg ≤ 0.25", alpha <= 0.251, `alpha=${alpha}`);
+  /* Liquid Glass v5 (патч владельца): dark --pill-bg = rgba(50,48,44,0.28) —
+     чуть плотнее, чем ТЗ 2.2 (0.25) — осознанное решение v5, НЕ регресс. */
+  ok("панель прозрачнее: alpha --pill-bg ≤ 0.30 (v5: 0.28)", alpha <= 0.301, `alpha=${alpha}`);
 }
 
 await page.close();

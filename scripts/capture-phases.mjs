@@ -35,23 +35,20 @@ await page.evaluate(() => {
 });
 
 for (const p of phases) {
-  await page.evaluate(({ name, bubble, ghost }) => {
+  await page.evaluate(({ name, bubble }) => {
     const gooEl = document.querySelector(".pill-goo");
     const b = document.querySelector(".pill-bubble");
-    const g = document.querySelector(".pill-ghost");
     const items = [...document.querySelectorAll(".pill-item")];
     const x0 = items[0].offsetLeft;
     const x1 = items[2].offsetLeft;
     const w = items[0].offsetWidth;
     gooEl.classList.add("is-live");
     const bx = x0 + (x1 - x0) * bubble;
-    const gx = x0 + (x1 - x0) * ghost;
     b.style.transition = "none";
     b.style.width = `${w}px`;
     b.style.transform = `translateX(${bx}px) scaleX(1.12) scaleY(0.93)`;
     b.style.opacity = "1";
-    g.style.width = `${w}px`;
-    g.style.transform = `translate3d(${gx}px,0,0) scale(0.82)`;
+    /* PHASE 2.2: .pill-ghost удалён — фазы призрака больше не рисуются */
   }, p);
   await page.waitForTimeout(120);
   await page.screenshot({ path: `${OUT}/${p.name}.png` });
