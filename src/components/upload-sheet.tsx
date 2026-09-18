@@ -26,13 +26,21 @@ import type { Dictionaries } from "@/lib/portal";
  *   mobile  — bottom sheet: spring снизу, dimmed backdrop, handle,
  *             glass-материал v5, внутренний скролл ТОЛЬКО контента;
  *   desktop — центрированная glass-карточка (fade+scale).
- * Клавиатура (§4.5 — урок search-pop БЕЗ двойного учёта):
- *   sheet стоит на bottom: var(--kb-overlay) — ФАКТИЧЕСКОЕ overlay-перекрытие
- *   (iOS>0, Android resizes-content≈0 — см. use-visual-viewport), плавный
- *   подъём 220 мс; доступная высота = 100dvh − sat − overlay; скроллится
- *   только внутренний контент; фокус-скролл подводит поле, CTA в sticky
- *   footer остаётся доступным. Весь sheet целиком НЕ транслируется
- *   transform'ом на высоту клавиатуры.
+ * Клавиатура (PART 1.1 §14 — ИСПРАВЛЕНО: sheet НЕ двигается целиком):
+ *   ранее bottom = var(--kb-overlay) физически поднимал ВЕСЬ sheet вместе с
+ *   header'ом — прыжок при каждом появлении клавиатуры. Теперь:
+ *     — сам sheet жёстко стоит на bottom: 0 (safe-area не нужен: контент
+ *       имеет свой паддинг), высота = 86dvh (клампнутая) и НЕ зависит от
+ *       клавиатуры → header НЕ прыгает;
+ *     — при клавиатуре внутренний body получает padding-bottom:
+ *       calc(16px + var(--sab) + var(--kb-overlay)) — контент скроллится
+ *       над клавиатурой;
+ *     — sticky CTA-футеры встают на bottom: var(--kb-overlay) — поднимаются
+ *       НАД клавиатурой (iOS overlay; Android resizes-content ≈ 0, там dvh
+ *       сжимается сам);
+ *     — focused field подводится scrollIntoView (320 мс — iOS сначала
+ *       поднимает клавиатуру).
+ *   Проверить на реальном iPhone (headless клавиатуру не эмулирует).
  *
  * Dirty/close guard (§4.7): чистое состояние закрывается сразу; есть
  * введённое/файлы — inline confirm discard; во время отправки закрытие
@@ -506,9 +514,9 @@ export function UploadSheet() {
           <p className="text-[11px] leading-snug text-muted-foreground">
             Доступны значения из справочника. Новые пункты добавляет администратор.
           </p>
-          {/* CRITICAL STABILITY 7.3: CTA в sticky footer — доступен при клавиатуре,
-              как на шаге 3 (единый паттерн sticky-подвала во всех шагах) */}
-          <div className="sticky bottom-0 -mx-5 mt-1 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
+          {/* CRITICAL STABILITY 7.3 + PART 1.1 §14.2: CTA в sticky footer,
+              поднимается НАД клавиатурой (bottom: var(--kb-overlay)) */}
+          <div className="sticky bottom-[var(--kb-overlay,0px)] -mx-5 mt-1 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
             <button
               type="button"
               disabled={!categoryId || !modelId}
@@ -588,9 +596,9 @@ export function UploadSheet() {
         </div>
       )}
 
-      {/* sticky-подвал шага 2 (CRITICAL STABILITY 7.3) */}
+      {/* sticky-подвал шага 2 (CRITICAL STABILITY 7.3) — §14.2: над клавиатурой */}
       {step === 2 && !done && (
-        <div className="sticky bottom-0 -mx-5 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
+        <div className="sticky bottom-[var(--kb-overlay,0px)] -mx-5 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
           <div className="flex gap-2">
             <button type="button" onClick={() => setStep(1)} className="btn-ghost px-4 py-3 text-[13px]">
               Назад
@@ -713,8 +721,8 @@ export function UploadSheet() {
             </div>
           )}
 
-          {/* §4.5: CTA в sticky footer — остаётся доступным при клавиатуре */}
-          <div className="sticky bottom-0 z-[1] -mx-5 flex gap-2 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
+          {/* §4.5/§14.2: CTA в sticky footer — поднимается НАД клавиатурой */}
+          <div className="sticky bottom-[var(--kb-overlay,0px)] z-[1] -mx-5 flex gap-2 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
             <button type="button" onClick={() => setStep(2)} disabled={busy} className="btn-ghost px-4 py-3 text-[13px] disabled:opacity-45">
               Назад
             </button>
@@ -900,13 +908,13 @@ export function UploadSheet() {
             </motion.div>
           ) : (
             /* ── MOBILE: bottom sheet, spring снизу —
-               Якорь низа = var(--kb-overlay) — фактическое перекрытие
-               клавиатурой (iOS>0, Android≈0): подъём плавный (220 мс).
-               CRITICAL STABILITY 7.1/7.2: ЯВНАЯ высота 86dvh (не только
-               maxHeight!): sheet больше НЕ сжимается по контенту до ~40%
-               экрана; при клавиатуре height-clamp ограничивает доступной
-               областью (sheet НЕ превращается в маленькую карточку:
-               при kb 40% это ~55dvh, скроллится только внутренний контент). */
+               PART 1.1 §14.1: ЖЁСТКИЙ ЯКОРЬ bottom: 0 — клавиатура БОЛЬШЕ
+               НЕ двигает весь sheet (header не прыгает). Высота = 86dvh
+               (клампнутая) и НЕ зависит от клавиатуры: при iOS overlay
+               клавиатура НАКРЫВАЕТ нижнюю часть sheet, а доступность
+               контента обеспечивает body padding-bottom + sticky footer
+               на --kb-overlay (см. §14.2 ниже). На Android (resizes-content)
+               dvh сжимается сам — формула совпадает. */
             <motion.div
               key="sheet"
               role="dialog"
@@ -916,9 +924,8 @@ export function UploadSheet() {
               data-upload-sheet=""
               className="fixed inset-x-0 z-[var(--z-sheet)] flex flex-col rounded-t-[28px] border-t border-x border-border bg-[var(--sheet-bg)] shadow-[0_-18px_50px_-18px_rgba(0,0,0,0.55)] backdrop-blur-[var(--glass-blur)] backdrop-saturate-[var(--glass-saturation)]"
               style={{
-                bottom: "var(--kb-overlay, 0px)",
-                height: "min(86dvh, calc(100dvh - max(18px, var(--sat)) - var(--kb-overlay, 0px) - 10px))",
-                transition: "bottom 220ms cubic-bezier(0.22, 0.61, 0.36, 1)",
+                bottom: "0",
+                height: "min(86dvh, calc(100dvh - max(18px, var(--sat)) - 10px))",
               }}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
@@ -950,6 +957,14 @@ export function UploadSheet() {
                 data-upload-sheet-body=""
                 onFocusCapture={onBodyFocusCapture}
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-3 pt-3"
+                /* PART 1.1 §14.2: при клавиатуре НЕ двигаем sheet — вместо
+                   этого тело получает доп. нижний паддинг, чтобы контент
+                   (включая последнее поле) скроллился НАД клавиатурой.
+                   16px базовый + safe-area + фактическое overlay-перекрытие. */
+                style={{
+                  paddingBottom: "calc(16px + var(--sab, 0px) + var(--kb-overlay, 0px))",
+                  transition: "padding-bottom 220ms cubic-bezier(0.22, 0.61, 0.36, 1)",
+                }}
               >
                 {form}
               </div>
