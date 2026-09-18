@@ -1082,3 +1082,28 @@ Stage Summary:
 - ДАННЫЕ: восстановить ~20 фото НЕВОЗМОЖНО из workspace (не найдены); повторение ПОТЕРИ теперь невозможно (deploy-guard fail-closed, доказано негатив-тестом).
 - REAL XIAOMI / REAL IPHONE: NOT TESTED — нужен ручной redeploy и проверка владельцем (чек-лист в отчёте).
 - ОСТАНОВ по ТЗ §15: PART 2 НЕ начата (toasts/админка не тронуты).
+
+---
+Task ID: 47 (CRITICAL STABILITY PART 1.1 HOTFIX — deploy-lock гонка + 3 front-фикса)
+Agent: main (Super Z)
+Task: ТЗ PART 1.1 (START_HEAD=a573c09 совпал): P0 гонка потери runtime-данных при deploy (atomic deploy lock + writer lease + auto final sync в build) + token fail-closed + symlink hardening + front: линза без прожектора / browser panel / upload sheet keyboard. НЕ делать: redeploy, PART 2, admin UI, business logic.
+
+Work Log:
+- START_HEAD верифицирован: a573c09 = origin/main, дерево чистое; кодовая база изучена дважды (sync/build/export/upload/fabric/admin routes + фронт).
+- P0 LOCK (§1-2): src/lib/runtime-write-lock.ts — deploy-lock (.deploy-write-lock.json, TTL 30 мин, stale-самоудаление) + writer lease (.runtime-writers/, check→lease→RE-check→mutation→finally release), атомарно через tmp+link; runtimeLockedResponse 423 (Retry-After 60, человеческий текст). Обёрнуты: upload POST (lease ДО formData), fabric-photo POST, admin POST (весь) + DELETE (аудит), admin GET trash под lock НЕ purge'ит (autoPurged=0). Аудит остальных API: мутаций нет.
+- P0 API (§3): src/lib/sync-auth.ts (timingSafeEqual, общий токен) + /api/admin/deploy-lock (POST lock→drain≤120s→ok/503 WRITERS_BUSY; unlock только своим lockId; GET status), 401 fail-closed.
+- P0 BUILD (§4): build.sh сам делает ACQUIRE LOCK → DRAIN → FINAL SYNC (DEPLOY_LOCK_ID) → VERIFY LOCK ID → BUILD → ARTIFACT VERIFY; trap: unlock только при неудаче; при успехе live остаётся locked (cutover/TTL); LIVE_BASE_URL в .zscripts/deploy.env; FIRST_DEPLOY_LOCK_BOOTSTRAP=1 — красное предупреждение, мягкий lock, maintenance window; после первого rollout сборка без lock падает.
+- P0 MARKER/FINGERPRINT (§5-7): sync-from-live пишет lockId в маркер; манифест A/B fingerprint (counts+name+bytes+sha256, generatedAt исключён) — A≠B → LOCK BYPASS FAIL без замены; check-deploy-freshness: lockId===env обязателен, dbSha mismatch → FAIL (был warn), 72ч — диагностика при lock; токен: env→.sync-token→FAIL, автогенерация запрещена (--bootstrap-token/SYNC_TOKEN_BOOTSTRAP=1 — только первый переход).
+- P1 SYMLINK (§9): verify-runtime-artifact — lstatSync (symlink → FAIL), realpath внутри realpath(ROOT), countFiles не считает symlink.
+- FIX ПОПОУТНЫЙ: экспорт-манифест считает ЖИВЫЕ фото (deletedAt:null) — раньше count() включал корзину и auto-sync падал бы при непустом trash.
+- FRONT (§12-14): globals.css — линза rgba(var(--brand-rgb),.035/.025)+1px бренд-граница, ::after display:none, белые radial/top-edge/гало/наружные тени УДАЛЕНЫ, sheen .55→.10 mobile/.30 desktop, каустики .22→.14; use-visual-viewport — visualBottomInset + --browser-bottom-inset (rAF, epsilon 1.5px, clamp 160px, browser-only, не kb-open, не PWA) + CSS-правило для .pill-nav + viewportDebug поля; upload-sheet — sheet на bottom:0 (86dvh, header не прыгает), клавиатура = body padding-bottom calc(16px+sab+kb-overlay) + sticky CTA bottom: kb-overlay.
+- ТЕСТЫ: НОВЫЙ test-live-sync-race.sh (verify:race) — 38/0: drain in-flight writer (lease-holder.ts через реальный beginRuntimeWrite), 423 upload/fabric/admin POST/DELETE под lock, trash GET без purge, final sync под lock, artifact build+verify, wrong-lockId/dbSha/no-marker/no-DB/broken-file → BLOCK, манифест A/B (fake-live) → FAIL без замены, symlink hardening, prod md5 не тронут. НОВЫЙ test-part11-front.mjs (verify:part11) — 22/0. nav-search 16c обновлён под §14. Регрессия: deploy-cycle 22/0, nav-search 110/0, horizontal-nav 125/0, v31 22/0, themes 33/0, stability 66/0, regression 17/0, roundtrip 13/0, typecheck/lint/build OK.
+- ГРАБЛИ: bun:sqlite молча убивает процесс на SQL-ошибках (инсерт без updatedAt в product_variants; Date.now() внутри SQL) и на inline-кириллице в SQL — все инсерты тестов на bind-параметрах с try/catch; pipefail перебивал grep на verify-exit-1 (захват в файл).
+- LOST PHOTOS (§20): в доступных источниках не обнаружены; platform snapshot ещё не проверен. REDEPLOY НЕ делался (по ТЗ).
+- ДОКУМЕНТЫ: docs/CRITICAL_STABILITY_PART11_REPORT.md (все секции §19/§21).
+
+Stage Summary:
+- FINAL_HEAD: коммиты 14e93d5..docs (fix(data) x4, fix(glass), fix(viewport), fix(upload), test(data), docs — см. git log).
+- RACE CLOSED: LOCK→DRAIN→SYNC→BUILD доказана тестом 38/0; повторение потери фото при деплое невозможно (fail-closed по lockId/dbSha/manifest-AB/файлам).
+- REAL IPHONE/XIAOMI: NOT TESTED — клавиатура sheet, browser toolbar (viewportDebug), хаптика — чек-лист в отчёте §14.
+- ОСТАНОВ по ТЗ: redeploy НЕ выполнен; PART 2/Админка/роли НЕ начаты. Токен: env → download/runtime/.sync-token; backup вне Git (platform secret).
