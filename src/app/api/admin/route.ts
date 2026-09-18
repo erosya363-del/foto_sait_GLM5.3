@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { purgePhotoFiles } from "@/lib/photo-fs";
-/* CRITICAL STABILITY PART 1.1 §2.3/§2.4: runtime-мутации под writer-lease;
-   GET view=trash под deploy-lock НЕ выполняет автоочистку (read-only). */
-import {
-  beginRuntimeWrite,
-  runtimeLockedResponse,
-  currentDeployLock,
-} from "@/lib/runtime-write-lock";
+/* CRITICAL STABILITY PART 1.1 §2.3/§2.4 (rev.2): runtime-мутации под
+   writer-lease; автоочистка корзины в GET view=trash — ТОЖЕ под lease
+   (схема «check → lease → re-check» вместо голого currentDeployLock-чека). */
+import { beginRuntimeWrite, runtimeLockedResponse } from "@/lib/runtime-write-lock";
 
 export const dynamic = "force-dynamic";
 
@@ -67,14 +64,25 @@ export async function GET(req: NextRequest) {
   const view = req.nextUrl.searchParams.get("view") || "";
   try {
     if (view === "trash") {
-      /* PART 1.1 §2.4: GET view=trash ВЫЗЫВАЕТ autoPurgeTrash(), которая
-         физически удаляет фото/файлы/варианты — во время deploy-lock READ
-         endpoint НЕ должен мутировать runtime (блокировка мутации -> потеря
-         "только что удалённых из корзины" строк при snapshot). Под lock
-         возвращаем данные как обычно, но autoPurge НЕ выполняем:
-         автоочистка догонит при первом обращении ПОСЛЕ снятия lock. */
-      const lock = await currentDeployLock();
-      const autoPurged = lock ? 0 : await autoPurgeTrash();
+      /* PART 1.1 §2.4 (rev.2, отзыв владельца п.1): autoPurgeTrash() —
+         полноценная runtime-мутация → проводится через beginRuntimeWrite()
+         (writer-lease), а НЕ через голый currentDeployLock()-чек.
+         Схема «check → lease → re-check» закрывает TOCTOU-гонку: если
+         deploy-lock ставится МЕЖДУ проверкой и началом автоочистки, lease
+         остаётся видимым и drain дождётся её окончания — snapshot не
+         случится посреди удаления файлов/строк.
+         Если lock УЖЕ действует → lease не выдан, autoPurge ПРОПУСКАЕТСЯ
+         (autoPurged=0): GET по-прежнему отдаёт данные корзины, ничего не
+         удаляя; автоочистка догонит при первом обращении ПОСЛЕ снятия lock. */
+      let autoPurged = 0;
+      const purgeTicket = await beginRuntimeWrite("admin:trash-purge").catch(() => null);
+      if (purgeTicket && purgeTicket.ok) {
+        try {
+          autoPurged = await autoPurgeTrash();
+        } finally {
+          await purgeTicket.release();
+        }
+      }
       const rows = await db.photo.findMany({
         where: { deletedAt: { not: null } },
         orderBy: { deletedAt: "desc" },
