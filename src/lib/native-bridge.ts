@@ -1,6 +1,6 @@
 "use client";
 
-import { usePortal, type View } from "@/lib/store";
+import { usePortal, type View, type LegacyView } from "@/lib/store";
 
 /**
  * Мост «нативная iOS-оболочка (AskonaApp, UIKit + WKWebView) ↔ сайт».
@@ -16,8 +16,9 @@ import { usePortal, type View } from "@/lib/store";
  * Событийный обмен, без polling/timers (п.31 ТЗ).
  */
 
-/** ID вкладок нативного таб-бара (порядок = порядок в RootTabBarController) */
-export type NativeTabId = "catalog" | "upload" | "admin" | "stock";
+/** ID вкладок нативного таб-бара (порядок = порядок в RootTabBarController).
+ *  CRITICAL STABILITY 8: «upload» — таб-действие (sheet), не View. */
+export type NativeTabId = LegacyView;
 
 declare global {
   interface Window {
@@ -43,8 +44,8 @@ function postToNative(message: Record<string, unknown>): void {
   }
 }
 
-/** native tab id → валидный View (строго whitelist) */
-function toView(tab: unknown): View | null {
+/** native tab id → валидный LegacyView (строго whitelist) */
+function toView(tab: unknown): LegacyView | null {
   return tab === "catalog" || tab === "upload" || tab === "admin" || tab === "stock"
     ? tab
     : null;

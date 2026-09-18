@@ -2,7 +2,11 @@
 
 import { create } from "zustand";
 
-export type View = "catalog" | "stock" | "upload" | "admin";
+export type View = "catalog" | "stock" | "admin";
+/** CRITICAL STABILITY 8: upload — НЕ раздел (это action/sheet uploadOpen).
+ *  Легаси-значение сохранено для миграции старых сессий/истории:
+ *  в новых кодовых путях setView("upload") невозможно по типам. */
+export type LegacyView = View | "upload";
 export type Warehouse = "Обухово" | "Владимир";
 export type CatalogMode = "grid" | "rows" | "large";
 export type StockMode = "compact" | "cards";
@@ -82,7 +86,12 @@ export type CatalogJumpTarget = {
 function loadPersisted(): Partial<Persisted> {
   if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(sessionStorage.getItem(SS_KEY) || "{}") as Partial<Persisted>;
+    const p = JSON.parse(sessionStorage.getItem(SS_KEY) || "{}") as Partial<Persisted>;
+    /* CRITICAL STABILITY 8: легаси-миграция view:"upload" → catalog
+       (upload теперь action/sheet). sessionStorage НЕ типизирован —
+       старое значение возможно, сравнение через LegacyView. */
+    if ((p.view as LegacyView) === "upload") p.view = "catalog";
+    return p;
   } catch {
     return {};
   }
@@ -308,11 +317,13 @@ export const usePortal = create<PortalState>((set, get) => ({
         : null;
     const p = loadPersisted();
     const prefs = loadPrefs(); // localStorage приоритетнее сессии для режимов вида
-    /* PHASE 2.4 §4.2: легаси-состояние view:"upload" (из старых сессий/истории)
-       больше не валидный раздел — маппится в «catalog». */
-    const restoredView = st?.view ?? p.view ?? "catalog";
+    /* PHASE 2.4 §4.2 / CRITICAL STABILITY 8: легаси-состояние view:"upload"
+       (из старых сессий/истории — данные НЕ типизированы) больше не валидный
+       раздел — маппится в «catalog». */
+    const restoredViewRaw: LegacyView = (st?.view ?? p.view ?? "catalog") as LegacyView;
+    const restoredView: View = restoredViewRaw === "upload" ? "catalog" : restoredViewRaw;
     set({
-      view: restoredView === "upload" ? "catalog" : restoredView,
+      view: restoredView,
       productId: st?.productId ?? p.productId ?? null,
       productFrom: p.productFrom ?? "catalog",
       warehouse: p.warehouse ?? "Обухово",

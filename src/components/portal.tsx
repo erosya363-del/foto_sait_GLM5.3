@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck, X } from "lucide-react";
 import {
   usePortal, snapshot, dismissProduct, isPushSuppressed,
-  type View, type PortalSnapshot,
+  type View, type LegacyView, type PortalSnapshot,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { playTick, playStep } from "@/lib/tick";
@@ -22,11 +22,18 @@ import { UploadSheet } from "@/components/upload-sheet";
 import { AdminView } from "@/components/admin-view";
 import { PhotoViewer } from "@/components/photo-viewer";
 
-const NAV: Array<{ key: View; label: string; short: string; Icon: typeof Boxes }> = [
-  { key: "catalog", label: "Каталог фото", short: "Каталог", Icon: Images },
-  { key: "stock", label: "Остатки", short: "Остатки", Icon: Boxes },
-  { key: "upload", label: "Загрузка", short: "Загрузка", Icon: UploadCloud },
-  { key: "admin", label: "Админ", short: "Админ", Icon: ShieldCheck },
+/* CRITICAL STABILITY 8: NAV различает VIEW и ACTION (discriminated union).
+   TypeScript НЕ позволяет setView("upload") — upload может быть только
+   action (openUploadSheet). */
+type NavItem =
+  | { type: "view"; key: View; label: string; short: string; Icon: typeof Boxes }
+  | { type: "action"; key: "upload"; label: string; short: string; Icon: typeof UploadCloud };
+
+const NAV: NavItem[] = [
+  { type: "view", key: "catalog", label: "Каталог фото", short: "Каталог", Icon: Images },
+  { type: "view", key: "stock", label: "Остатки", short: "Остатки", Icon: Boxes },
+  { type: "action", key: "upload", label: "Загрузка", short: "Загрузка", Icon: UploadCloud },
+  { type: "view", key: "admin", label: "Админ", short: "Админ", Icon: ShieldCheck },
 ];
 
 /* PHASE2 ТЗ 3.1: горизонтальная структура разделов — индекс определяет
@@ -38,10 +45,6 @@ const VIEW_ORDER: View[] = ["catalog", "stock", "admin"];
 const VIEW_COMPONENTS: Record<View, ComponentType> = {
   catalog: CatalogView,
   stock: StockView,
-  /* PHASE 2.4 §4.2: upload больше НЕ раздел — рендерится UploadSheet
-     в Portal; здесь стаб для полноты Record (view:"upload" невалиден и
-     мигрируется в "catalog" в restore/popstate) */
-  upload: () => null,
   admin: AdminView,
 };
 
@@ -325,7 +328,9 @@ export function Portal() {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const gooRef = useRef<HTMLDivElement | null>(null);
   const bubbleRef = useRef<HTMLSpanElement | null>(null);
-  const itemRefs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
+  /* LegacyView (не только View): кнопка «Загрузка» — ACTION, но она в панели
+     участвует в геометрии линзы (drag накрывает её, release открывает sheet) */
+  const itemRefs = useRef<Partial<Record<LegacyView, HTMLButtonElement | null>>>({});
 
   /* Состояние пружин (refs, НЕ setState — ноль ререндеров в кадре).
      PHASE 2.3: ТРИ пружины в ОДНОМ rAF (§1.11/1.12 — не хаотично, а
@@ -821,8 +826,8 @@ export function Portal() {
     const shell = shellRef.current;
     if (!shell) return;
 
-    type Hit = { key: View; el: HTMLButtonElement; dist: number };
-    type TabGeo = { key: View; left: number; width: number; right: number; center: number };
+    type Hit = { key: LegacyView; el: HTMLButtonElement; dist: number };
+    type TabGeo = { key: LegacyView; left: number; width: number; right: number; center: number };
 
     let phase: "idle" | "tracking" | "dragging" = "idle";
     let startX = 0;
@@ -835,11 +840,11 @@ export function Portal() {
        в цикле жеста. */
     let geo: TabGeo[] = [];
     let anchorIdx = 0;            // вкладка, к которой «прикреплена» линза
-    let coveredKeys: View[] = []; // текущие is-lens-covered
+    let coveredKeys: LegacyView[] = []; // текущие is-lens-covered
 
     const snapshotGeo = (): TabGeo[] => {
       const list: TabGeo[] = [];
-      for (const [key, el] of Object.entries(itemRefs.current) as Array<[View, HTMLButtonElement | null]>) {
+      for (const [key, el] of Object.entries(itemRefs.current) as Array<[LegacyView, HTMLButtonElement | null]>) {
         if (!el) continue;
         const left = el.offsetLeft;
         const width = el.offsetWidth;
@@ -866,7 +871,7 @@ export function Portal() {
 
     const nearestItem = (clientX: number): Hit | null => {
       let best: Hit | null = null;
-      for (const [key, el] of Object.entries(itemRefs.current) as Array<[View, HTMLButtonElement | null]>) {
+      for (const [key, el] of Object.entries(itemRefs.current) as Array<[LegacyView, HTMLButtonElement | null]>) {
         if (!el) continue;
         const r = el.getBoundingClientRect();
         const d = Math.abs(clientX - (r.left + r.width / 2));
@@ -876,12 +881,12 @@ export function Portal() {
     };
 
     /* Обновление is-lens-covered ТОЛЬКО при реальной смене пары (§2.4) */
-    const setCovered = (keys: View[]) => {
+    const setCovered = (keys: LegacyView[]) => {
       const same =
         keys.length === coveredKeys.length &&
         keys.every((k) => coveredKeys.includes(k));
       if (same) return;
-      for (const [key, el] of Object.entries(itemRefs.current) as Array<[View, HTMLButtonElement | null]>) {
+      for (const [key, el] of Object.entries(itemRefs.current) as Array<[LegacyView, HTMLButtonElement | null]>) {
         if (!el) continue;
         const was = coveredKeys.includes(key);
         const now = keys.includes(key);
@@ -947,7 +952,7 @@ export function Portal() {
       drivePillRef.current(left, w, true);
       bridgePillRef.current(0);
 
-      const cov: View[] = [];
+      const cov: LegacyView[] = [];
       for (const tab of geo) {
         const overlap =
           Math.min(left + w, tab.right) - Math.max(left, tab.left);
@@ -1682,8 +1687,9 @@ export function Portal() {
         viewerOpen: viewerOk,
         viewerIndex: viewerOk ? s.viewerIndex : 0,
         productId: st?.productId ?? null,
-        /* PHASE 2.4: легаси view:"upload" из истории — больше не раздел */
-        view: st?.view === "upload" ? "catalog" : (st?.view ?? "catalog"),
+        /* PHASE 2.4/CRITICAL STABILITY 8: легаси view:"upload" из истории
+           (история НЕ типизирована) — больше не раздел, мигрируется в catalog */
+        view: ((st?.view as LegacyView | undefined) === "upload" ? "catalog" : (st?.view ?? "catalog")) as View,
         searchQuery: st ? st.searchQuery : null,
         catCategory: st ? st.catCategory : null,
         catModel: st ? st.catModel : null,
