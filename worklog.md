@@ -1129,3 +1129,28 @@ Stage Summary:
 - Отчёт PART 1.1: FINAL_HEAD = 8c0d625 (по указанию владельца), REV.2-коммиты после него перечислены в §17; фактический финальный HEAD фиксируется в финальном ответе задачи
 - LOST PHOTOS: 0/~20, platform snapshot pending (без изменений; redeploy по-прежнему НЕ делается)
 - Тесты: verify:race 41/0, deploy-lock-heartbeat 9/0, verify:data 22/0, tsc/lint/build — зелёные
+
+---
+Task ID: 49
+Agent: main (Super Z)
+Task: ТЗ NEXT_AGENT_TASKS_REFERENCE_DATA_AND_PHOTO_PERSISTENCE — BLOCK A/C/D/E/F/G/H: snapshot/топология, канонический master-data в Git, идемпотентный сидер, seeding live, восстановление runtime-зоны, smoke сохранности фото (2 защищённых деплоя), отчёт.
+
+Work Log:
+- Диагностика: рабочая копия повреждена платформенным откатом (src/app/api/upload/route.ts стёрт с диска — 4-й случай; 147 файлов — шум режимов); восстановлено из HEAD 35c4c39 (git checkout -- .)
+- BLOCK C: data/reference/catalog-master-data.json — канонический источник в Git (2 категории, 39 диванов, 102 кровати, 190 тканей; кресла/основания исключены; байт-точность имён проверена)
+- BLOCK D: scripts/seed-reference-data.ts — идемпотентный сидер (--dry-run/--apply, конфликты регистров/пробелов → пропуск+отчёт, apply в $transaction, ProductVariant/Photo не затрагиваются + сверка счётчиков, CHAIRS_IMPORTED=0 структурно); два транспорта: прямой Prisma (алгоритм пути БД как в runtime.ts) и HTTP (--live-url: GET /api/dictionaries + существующий POST /api/admin create)
+- Локальные тесты сидера: 6/6 PASS (пустая БД dry/apply; идемпотентность dry+apply; конфликт «только регистровый вариант в БД» — канон не вставлен; дубль регистра в БД репортится)
+- BLOCK E: HTTP dry-run против live (2/1+36+102/17+161 existing, 14 конфликтов), затем apply как explicit maintenance action («seed live до deploy-lock»): 138 моделей + 161 материал вставлены, 0 ошибок; словари live 2/146/196; верификация повторным GET — все канонические строки на месте или в конфликтах
+- Конфликты (14) не слиты: Карина ПРО/Ника ПРО + 12 Casanova в нижнем регистре — владельцу на ручное решение
+- Bootstrap-синк: download/runtime восстановлена из live (26 фото, 38+38 файлов, sha256+fingerprint A==B, .sync-token создан, маркер записан, сидированные словари подтверждены)
+- BLOCK F: scripts/post-deploy-photo-smoke.mjs + docs/POST_DEPLOY_PHOTO_PERSISTENCE.md; выявлено: роут читает fd.getAll("photos") (не «photos[]»)
+- Прогон smoke --local-pipeline: полный новый пайплайн дважды (build.sh: LOCK→DRAIN→FINAL SYNC→VERIFY→BUILD→ARTIFACT VERIFY→post-artifact re-check→renew 3600c; cutover = сервер из tar-артефакта): ЦИКЛ 1 PASS (фото №1 пережило деплой), ЦИКЛ 2 PASS (фото №1+№2 пережили второй деплой; db=true, optimized=200, thumb=200, счётчики не назад) → result: PASS; evidence tool-results/post-deploy-photo-persistence.json (коммитится, исключение в .gitignore)
+- .gitignore: /tool-results/ → /tool-results/* + !post-deploy-photo-persistence.json
+- tsc --noEmit чисто; коммиты ветки перечислены в отчёте §9
+- docs/REFERENCE_DATA_AND_POST_DEPLOY_REPORT.md: BLOCK A (PLATFORM SNAPSHOT: PENDING + чек-лист владельцу; TOPOLOGY: SINGLE_INSTANCE по evidence FIX_REPORT §17.2 + caveat replicas=1; bootstrap-инструкция — live-экспорт сейчас публичный, FIRST_DEPLOY_LOCK_BOOTSTRAP=1 одноразово), BLOCK G (iPhone/Xiaomi NOT TESTED + чек-листы), BLOCK H
+
+Stage Summary:
+- Справочники live засеяны каноническими данными (138+161, 0 ошибок); кресла НЕ импортированы; ProductVariant/Photo не тронуты
+- Smoke сохранности фото: локальный полный пайплайн PASS (2 цикла); реальный live-цикл — поэтапный режим готов, выполняется вокруг защищённого редеплоя владельца
+- REDEPLOY НЕ выполнялся (только владелец); PART 2/Admin/roles не начаты
+- LOST PHOTOS: 0/~20, platform snapshot pending (формулировка «невосстановимы» не используется)

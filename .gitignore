@@ -66,7 +66,10 @@ download/sait_copy_1.tar.gz
 /mini-services/
 /upload/
 scripts/*.png
-/tool-results/
+# tool-results игнорируется ЦЕЛИКОМ, КРОМЕ evidence-файла сохранности фото
+# (ТЗ BLOCK F: JSON-отчёт коммитится; бинарники/логи/фикстуры — нет)
+/tool-results/*
+!/tool-results/post-deploy-photo-persistence.json
 
 # Загруженные пользователями файлы — рантайм-контент (в git не храним, в снапшотах есть)
 /public/uploads/

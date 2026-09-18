@@ -1,0 +1,532 @@
+{
+  "version": 1,
+  "source": {
+    "sofas_sheet": "диваны",
+    "beds_sheet": "кровати",
+    "fabrics_sheet": "fabrics",
+    "chairs_sheet": "кресла",
+    "note": "chairs intentionally excluded from this import until explicitly requested"
+  },
+  "categories": [
+    "Кровати",
+    "Диваны"
+  ],
+  "models": {
+    "Диваны": [
+      "Амани Мини",
+      "Амани Про",
+      "Антарес Про",
+      "Бингем Мини",
+      "Бонни",
+      "Буш",
+      "Вега Нова",
+      "Джерси",
+      "Джордан",
+      "Джордан Мини",
+      "Домо Про",
+      "Карина Про",
+      "Квина Нью",
+      "Лагуна Мини",
+      "Лагуна",
+      "Локо Мини",
+      "Локо Про",
+      "Магни",
+      "Мару",
+      "Меллоу",
+      "Мирей",
+      "Мольто",
+      "Монако Нью",
+      "Ника Про",
+      "Отто",
+      "Раклет",
+      "Ральф (Ralph)",
+      "Сельвио",
+      "Сквайр Нью",
+      "Скотт",
+      "Сохо",
+      "Ститч",
+      "Твинс",
+      "Тедди",
+      "Томас",
+      "Трентон",
+      "Фолли",
+      "Харпер",
+      "Энсо (Enso)"
+    ],
+    "Кровати": [
+      "Adagio (Адажио)",
+      "Alfa (Альфа)",
+      "Allegro (Аллегро)",
+      "Andria (Андрия)",
+      "Astra Long (Астра Лонг)",
+      "Avocado (Авокадо)",
+      "Avril (Аврил)",
+      "Baikal (Байкал)",
+      "Barna (Барна)",
+      "Blanca (Бланка)",
+      "Bridget Plus (Бриджит плюс)",
+      "Carla Nova (Карла нова)",
+      "Cassis (Кассис)",
+      "Chloe Nova (Хлоя нова)",
+      "Chris (Крис)",
+      "Corsa (Корса)",
+      "Dallas (Даллас)",
+      "Domenico Lux (Доменико люкс)",
+      "Domenico Nova (Доменико нова)",
+      "Dora Nova (Дора нова)",
+      "Duglas New (Дуглас Нью)",
+      "Duna (Дюна)",
+      "Elisa Nova (Элиза нова)",
+      "Emma Nova (Эмма нова)",
+      "Ergobalance Connect Pro",
+      "Ergobalance Transform Pro",
+      "Ergomotion Duetto Beige",
+      "Ergomotion Duetto Grey",
+      "Ergomotion Duetto Pro M Beige",
+      "Ergomotion Premium",
+      "Extra Nova (Экстра нова)",
+      "Flavia (Флавия)",
+      "Friza nova (Фриза нова)",
+      "Gamma Pro (Гамма про)",
+      "Gracia (Грация)",
+      "Grether & Wells Heaven Prestige",
+      "Grether & Wells Rose",
+      "Grether & Wells Royal Desert",
+      "Gretta Pro (Гретта Про)",
+      "Imperia (Империя)",
+      "Innovo Ice (Инново айс)",
+      "Issa (Исса)",
+      "Istra Pro (Истра Про)",
+      "Ivona (Ивона)",
+      "Jessica Pro (Джессика Про)",
+      "Kasli (Касли)",
+      "Linea Nova (Линея нова)",
+      "Lira nova (Лира нова)",
+      "Luara (Луара)",
+      "Maas (Маас)",
+      "Magica (Магика)",
+      "Magica Box (Магика Бокс)",
+      "Margot nova (Марго нова)",
+      "Milana nova (Милана нова)",
+      "Milora nova (Милора нова)",
+      "Mira nova (Мира нова)",
+      "Moris Pro (Морис Про)",
+      "Murrey Nova (Мюррей нова)",
+      "Navara (Навара)",
+      "Neman (Неман)",
+      "Next Plus (Некст плюс)",
+      "Niks (Никс)",
+      "Nolan (Нолан)",
+      "Opera (Опера)",
+      "Orlando Nova (Орландо нова)",
+      "Palermo (Палермо)",
+      "Plato (Плато)",
+      "Plato Elisa (Плато Элиза)",
+      "Plato Linea (Плато Линея)",
+      "Plato Opera (Плато Опера)",
+      "Plato Pola (Плато Пола)",
+      "Plato Virgino (Плато Вирджинио)",
+      "Pola Nova (Пола нова)",
+      "Prima (Прима)",
+      "Pronto Pro (Пронто Про)",
+      "Rachel New (Рэйчел Нью)",
+      "Ralto (Ральто)",
+      "Rein (Рейн)",
+      "Relax Nova (Релакс нова)",
+      "Richard New (Ричард Нью)",
+      "Sandra (Сандра)",
+      "Sarah (Сара)",
+      "Silvana nova (Сильвана нова)",
+      "Simple (Симпл)",
+      "Smart Folding (Смарт Фолдинг)",
+      "Spirit (Спирит)",
+      "Story Pro (Стори Про)",
+      "Story Pro Cube (Стори Про Куб)",
+      "Terek (Терек)",
+      "Tess Ergo (Тесс Эрго)",
+      "Tiara (Тиара)",
+      "Tilda Soft (Тильда Софт)",
+      "Torino (Торинo)",
+      "Treyci (Трейси)",
+      "Tuna (Туна)",
+      "Twills (Твиллс)",
+      "Una Lux (Уна люкс)",
+      "Vanessa Nova (Ванесса нова)",
+      "Vesta Pro (Веста про)",
+      "Viana (Виана)",
+      "Virginio Nova (Вирджинио нова)",
+      "Zima (Зима)"
+    ]
+  },
+  "materials": [
+    "Alaska 06",
+    "Alaska 08",
+    "Alaska 12",
+    "Alaska 19",
+    "Alaska 22",
+    "Alaska 26",
+    "Alaska 30",
+    "Aura 03",
+    "Aura 18",
+    "Aura 11",
+    "Aura 06",
+    "Aura 05",
+    "Aura 09",
+    "Aura 15",
+    "Balance 784",
+    "Balance 996",
+    "Balance 130",
+    "Balance 235",
+    "Balance 900",
+    "Balance 290",
+    "Belgium 7009",
+    "Belgium 7002",
+    "Belgium 7010",
+    "Belgium 7004",
+    "Belgium 7007",
+    "Belgium 7011",
+    "Belgium 7005",
+    "Belgium 7012",
+    "Bond 522",
+    "Bond 690",
+    "Bond 900",
+    "Bond 920",
+    "Bond 994",
+    "Casanova Seawave",
+    "Casanova Beige",
+    "Casanova Chocolate",
+    "Casanova Grey",
+    "Casanova Lilac",
+    "Casanova Milk",
+    "Casanova Stone",
+    "Casanova Marsala",
+    "Casanova Desert",
+    "Casanova Ice",
+    "Casanova Grass",
+    "Casanova Scandy",
+    "Casanova pudra",
+    "Casanova celodan",
+    "Cilium Brown",
+    "Cilium Cream",
+    "Cilium Indigo",
+    "Cilium Steel",
+    "Cilium Grafit",
+    "Cilium Umber",
+    "Cilium Forest",
+    "Dumont 02",
+    "Dumont 08",
+    "Dumont 24",
+    "Dumont 26",
+    "Dumont 32",
+    "Forte 01",
+    "Forte 13",
+    "Forte 07",
+    "Forte 15",
+    "Forte 14",
+    "Forte 16",
+    "Forte 03",
+    "Forte 17",
+    "Galaktika Beige",
+    "Galaktika Brown",
+    "Galaktika grap",
+    "Galaktika ASH",
+    "Galaktika Blue",
+    "Galaktika Cacao",
+    "Galaktika Grey",
+    "Galaktika cloud",
+    "Happy 972",
+    "Happy 697",
+    "Happy 233",
+    "Happy 980",
+    "Happy 102",
+    "Hilton 01",
+    "Hilton 03",
+    "Hilton 11",
+    "Hilton 12",
+    "Hilton 15",
+    "Hilton 17",
+    "Hilton 18",
+    "Kvadro Blue",
+    "Montreal 1025",
+    "Montreal 1020",
+    "Montreal 1017",
+    "Montreal 1016",
+    "Montreal 1015",
+    "Montreal 1014",
+    "Montreal 1008",
+    "Montreal 1012",
+    "Montreal 1005",
+    "Montreal 1002",
+    "Montreal 1001",
+    "Ovis 01",
+    "Ovis 18",
+    "Ovis 30",
+    "Ovis 78",
+    "Ovis 81",
+    "Ovis 86",
+    "Prime White",
+    "Prime Dark",
+    "Prime Blue",
+    "Prime Grey",
+    "Prime Mocca",
+    "Raven 06",
+    "Raven 22",
+    "Raven 28",
+    "Raven 44",
+    "Raven 80",
+    "Raven 86",
+    "Royal I Capri",
+    "Royal I Lavanda",
+    "Royal I Mist",
+    "Royal I Sherwood",
+    "Royal I Shiitake",
+    "Royal I Field",
+    "Royal I Indigo",
+    "Royal I Haze",
+    "Royal I Sorbet",
+    "Royal I Aqua",
+    "Royal I Plombir",
+    "Shammy Foggy",
+    "Shammy Matte",
+    "Shammy Sunrise",
+    "Shammy Frosty",
+    "Shammy Smoky",
+    "Shammy Terra",
+    "Shammy Navy",
+    "Sky Velvet 21",
+    "Sky Velvet 30",
+    "Sky Velvet 16",
+    "Sky Velvet 03",
+    "Sky Velvet 42",
+    "Sky Velvet 08",
+    "Sky Velvet 40",
+    "Sky Velvet 38",
+    "Sky Velvet 17",
+    "Sky Velvet 02",
+    "Sky Velvet 01",
+    "Sky Velvet 18",
+    "Sky Velvet 31",
+    "Sky Velvet 32",
+    "Sky Velvet 12",
+    "Sky Velvet 251",
+    "Sky Velvet 252",
+    "Sky Velvet 253",
+    "Soul 000",
+    "Soul 112",
+    "Soul 292",
+    "Soul 493",
+    "Soul 618",
+    "Soul 784",
+    "Soul 900",
+    "Soul 995",
+    "Velutto 06",
+    "Velutto 32",
+    "Velutto 52",
+    "Velutto 48",
+    "Velutto 26",
+    "Velutto 11",
+    "Velutto 33",
+    "Velutto 43",
+    "Velutto 55",
+    "Velutto 07",
+    "Velutto 12",
+    "Velutto 19",
+    "Velutto 40",
+    "Velutto 01",
+    "Velutto 09",
+    "Velutto 31",
+    "Velutto 37",
+    "Velutto 18",
+    "Velutto 47",
+    "Velutto 22",
+    "Velutto 08",
+    "Velutto 30",
+    "Velutto 05",
+    "Velutto 57",
+    "Velutto 69",
+    "Апиа 01",
+    "Апиа 02",
+    "Апиа 08",
+    "Апиа 13",
+    "Апиа 14"
+  ],
+  "excluded": {
+    "Кровати": [
+      "Основание ASKONA",
+      "Основание с ламелями"
+    ],
+    "Кресла": "Entire chairs workbook excluded from this seed"
+  },
+  "normalization": {
+    "sofas": [
+      {
+        "source": "Амани Мини",
+        "canonical": "Амани Мини"
+      },
+      {
+        "source": "Амани Про с анатомическим матрасом",
+        "canonical": "Амани Про"
+      },
+      {
+        "source": "Антарес Про c анатомическим матрасом",
+        "canonical": "Антарес Про"
+      },
+      {
+        "source": "Бингем Мини",
+        "canonical": "Бингем Мини"
+      },
+      {
+        "source": "Бонни",
+        "canonical": "Бонни"
+      },
+      {
+        "source": "Буш со спальным местом 180х200",
+        "canonical": "Буш"
+      },
+      {
+        "source": "Вега Нова с выбором жесткости",
+        "canonical": "Вега Нова"
+      },
+      {
+        "source": "Джерси",
+        "canonical": "Джерси"
+      },
+      {
+        "source": "Джордан",
+        "canonical": "Джордан"
+      },
+      {
+        "source": "Джордан Мини",
+        "canonical": "Джордан Мини"
+      },
+      {
+        "source": "Домо Про",
+        "canonical": "Домо Про"
+      },
+      {
+        "source": "Карина ПРО Акция",
+        "canonical": "Карина Про"
+      },
+      {
+        "source": "Карина Про с классическими подлокотниками",
+        "canonical": "Карина Про"
+      },
+      {
+        "source": "Карина Про с фигурными подлокотниками",
+        "canonical": "Карина Про"
+      },
+      {
+        "source": "Квина Нью с беспружинным матрасом",
+        "canonical": "Квина Нью"
+      },
+      {
+        "source": "Лагуна Мини",
+        "canonical": "Лагуна Мини"
+      },
+      {
+        "source": "Лагуна с анатомическим матрасом",
+        "canonical": "Лагуна"
+      },
+      {
+        "source": "Локо Мини, со спальным местом 140х200",
+        "canonical": "Локо Мини"
+      },
+      {
+        "source": "Локо Про",
+        "canonical": "Локо Про"
+      },
+      {
+        "source": "Магни с анатомическим матрасом",
+        "canonical": "Магни"
+      },
+      {
+        "source": "Мару",
+        "canonical": "Мару"
+      },
+      {
+        "source": "Меллоу",
+        "canonical": "Меллоу"
+      },
+      {
+        "source": "Мирей",
+        "canonical": "Мирей"
+      },
+      {
+        "source": "Мольто",
+        "canonical": "Мольто"
+      },
+      {
+        "source": "Монако Нью",
+        "canonical": "Монако Нью"
+      },
+      {
+        "source": "Ника ПРО",
+        "canonical": "Ника Про"
+      },
+      {
+        "source": "Отто",
+        "canonical": "Отто"
+      },
+      {
+        "source": "Раклет",
+        "canonical": "Раклет"
+      },
+      {
+        "source": "Ральф (Ralph)",
+        "canonical": "Ральф (Ralph)"
+      },
+      {
+        "source": "Сельвио",
+        "canonical": "Сельвио"
+      },
+      {
+        "source": "Сквайр Нью",
+        "canonical": "Сквайр Нью"
+      },
+      {
+        "source": "Скотт",
+        "canonical": "Скотт"
+      },
+      {
+        "source": "Сохо",
+        "canonical": "Сохо"
+      },
+      {
+        "source": "Ститч",
+        "canonical": "Ститч"
+      },
+      {
+        "source": "Твинс",
+        "canonical": "Твинс"
+      },
+      {
+        "source": "Тедди",
+        "canonical": "Тедди"
+      },
+      {
+        "source": "Томас",
+        "canonical": "Томас"
+      },
+      {
+        "source": "Трентон",
+        "canonical": "Трентон"
+      },
+      {
+        "source": "Фолли",
+        "canonical": "Фолли"
+      },
+      {
+        "source": "Харпер",
+        "canonical": "Харпер"
+      },
+      {
+        "source": "Энсо (Enso)",
+        "canonical": "Энсо (Enso)"
+      }
+    ],
+    "beds": {
+      "Sandra (Сандра) Орех дымчатый + Тк. G1082-4": "Sandra (Сандра)",
+      "Sarah (Сара) дуб натуральный": "Sarah (Сара)"
+    }
+  }
+}

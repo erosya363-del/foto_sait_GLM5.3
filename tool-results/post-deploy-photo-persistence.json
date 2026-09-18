@@ -1,0 +1,98 @@
+{
+  "cycles": {},
+  "notes": [
+    "2026-09-18T22:52:32.791Z локальный пайплайн: результат PASS (финальный сервер http://127.0.0.1:3443, фото=2)"
+  ],
+  "environment": "local-pipeline-simulation",
+  "startedAt": "2026-09-18T22:50:49.488Z",
+  "liveUrl": "http://127.0.0.1:3441",
+  "before": {
+    "photoCount": 0,
+    "optimizedCount": null,
+    "thumbCount": null,
+    "note": "изолированная среда: оптимизированных файлов в старте нет"
+  },
+  "cycle1": {
+    "testPhoto": {
+      "file": "smoke-CYCLE1-2026-09-18T22-51-16-531Z.jpg",
+      "id": "cmu7jyqew0003mzxckgnctxkl",
+      "url": "/api/media/optimized/mu7jyqer-b185a9eb36e9.jpg",
+      "thumbUrl": "/api/media/thumbs/mu7jyqer-b185a9eb36e9.jpg.jpg"
+    },
+    "beforeDeploy": "PASS",
+    "beforeDeployDetails": {
+      "check": {
+        "dbVisible": true,
+        "optimizedStatus": 200,
+        "thumbStatus": 200,
+        "pass": true
+      }
+    },
+    "afterDeploy": "PASS",
+    "afterDeployDetails": {
+      "cutoverUrl": "http://127.0.0.1:3442",
+      "check": {
+        "dbVisible": true,
+        "optimizedStatus": 200,
+        "thumbStatus": 200,
+        "pass": true
+      },
+      "photoCount": 1,
+      "countsNotBackwards": true
+    }
+  },
+  "cycle2": {
+    "testPhoto": {
+      "file": "smoke-CYCLE2-2026-09-18T22-51-55-829Z.jpg",
+      "id": "cmu7jzkq10001mzb0izdgjty4",
+      "url": "/api/media/optimized/mu7jzkpw-e74e6d9718ab.jpg",
+      "thumbUrl": "/api/media/thumbs/mu7jzkpw-e74e6d9718ab.jpg.jpg"
+    },
+    "beforeDeploy": "PASS",
+    "beforeDeployDetails": {
+      "check": {
+        "dbVisible": true,
+        "optimizedStatus": 200,
+        "thumbStatus": 200,
+        "pass": true
+      }
+    },
+    "afterDeploy": "PASS",
+    "afterDeployDetails": {
+      "cutoverUrl": "http://127.0.0.1:3443",
+      "photo1": {
+        "dbVisible": true,
+        "optimizedStatus": 200,
+        "thumbStatus": 200,
+        "pass": true
+      },
+      "photo2": {
+        "dbVisible": true,
+        "optimizedStatus": 200,
+        "thumbStatus": 200,
+        "pass": true
+      },
+      "photoCount": 2
+    }
+  },
+  "deploys": [
+    {
+      "cycle": 1,
+      "buildId": "SMOKE1",
+      "artifact": "/tmp/build_fullstack_SMOKE1.tar.gz",
+      "lockId": null,
+      "finalRenewSec": 3600,
+      "log": "tool-results/photo-smoke-files/build-SMOKE1.log"
+    },
+    {
+      "cycle": 2,
+      "buildId": "SMOKE2",
+      "artifact": "/tmp/build_fullstack_SMOKE2.tar.gz",
+      "lockId": null,
+      "finalRenewSec": 3600,
+      "log": "tool-results/photo-smoke-files/build-SMOKE2.log"
+    }
+  ],
+  "result": "PASS",
+  "finishedAt": "2026-09-18T22:52:32.791Z"
+}
