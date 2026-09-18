@@ -13,6 +13,7 @@ import { useKeyboardOpen } from "@/lib/use-visual-viewport";
 import { initNativeIOSBridge } from "@/lib/native-bridge";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { BootSplash } from "@/components/boot-splash";
+import { ViewportDebug } from "@/components/viewport-debug";
 import { SearchBar } from "@/components/search-bar";
 import { StockView } from "@/components/stock-view";
 import { CatalogView } from "@/components/catalog-view";
@@ -424,9 +425,15 @@ export function Portal() {
        scaleY = rest 0.90 (54px внутри панели 64px) → press 1.20 (72px — линза
        выпирает выше/ниже панели, §1.3/D), объём сохраняется от velocity. */
     const render = () => {
+      /* CRITICAL STABILITY 4.1/4.3: линза в drag — ЕДИНАЯ капсула press-размера.
+         velocity-тянучка оставлена ТОЛЬКО как очень лёгкий акцент: максимум
+         НЕСКОЛЬКО процентов (потолок 0.14 → 0.04, ТЗ 4.3 «можно оставить ОЧЕНЬ
+         небольшое velocity stretch, но максимум несколько процентов»).
+         Растяжения в мост/«колбасу» больше нет по определению: ширина в жесте
+         задаётся gesture-контроллером как константа press-капсулы. */
       const stretch = Math.min(
-        Math.abs(a.velocity) * 0.0012,
-        0.14
+        Math.abs(a.velocity) * 0.001,
+        0.04
       );
 
       const scaleX = 1 + stretch;
@@ -497,12 +504,17 @@ export function Portal() {
        * пружина подхватывает с текущих x/velocity — без скачка.
        */
       if (a.dragging) {
-        const kx = 1 - Math.exp(-dt * 30);
+        /* CRITICAL STABILITY 4.8: τ≈22 мс (экспериментальная сетка ТЗ:
+           16/22/28/33 — выбран самый быстрый без headless-дрожания;
+           rate = 1000/τ ≈ 45). Ощущение direct manipulation;
+           ширина капсулы — сглаживание с чуть большим τ (36 мс): размер
+           визуально постоянен, без импульсного «дыхания». */
+        const kx = 1 - Math.exp(-dt * 45);
         const nx = a.x + (a.target - a.x) * kx;
         a.velocity = dt > 0 ? (nx - a.x) / dt : 0;
         a.x = nx;
 
-        const kw = 1 - Math.exp(-dt * 26);
+        const kw = 1 - Math.exp(-dt * 28);
         const nw = a.w + (a.targetW - a.w) * kw;
         a.wv = dt > 0 ? (nw - a.w) / dt : 0;
         a.w = nw;
@@ -696,15 +708,31 @@ export function Portal() {
     syncPosition(false);
 
     /*
-     * Resize НЕ должен создавать полёт.
+     * CRITICAL STABILITY 6.4: resize НЕ должен создавать полёт, и — главное —
+     * ВЕРТИКАЛЬНЫЕ resize (скрытие/показ browser-chrome toolbar) НЕ должны
+     * пересчитывать/сбрасывать геометрию линзы: горизонтальной позиции линзы
+     * интересны ТОЛЬКО ширина shell и геометрия вкладок. Подмена цели на ту же
+     * самую выглядела как reset/settle (панель «прыгала» при движении тулбара
+     * в браузере). Теперь: пересинк ТОЛЬКО при фактической смене ширины shell
+     * (±0.5px); высотные колебания игнорируются полностью.
      */
+    let lastSyncShellW = shell.clientWidth;
+
     const ro = new ResizeObserver(() => {
+      const w = shell.clientWidth;
+      if (Math.abs(w - lastSyncShellW) < 0.5) return; /* высота/toolbar — мимо */
+      lastSyncShellW = w;
       syncPosition(false);
     });
 
     ro.observe(shell);
 
-    const onResize = () => syncPosition(false);
+    const onResize = () => {
+      const w = shell.clientWidth;
+      if (Math.abs(w - lastSyncShellW) < 0.5) return;
+      lastSyncShellW = w;
+      syncPosition(false);
+    };
 
     window.addEventListener("resize", onResize);
 
@@ -893,83 +921,40 @@ export function Portal() {
       dragModePillRef.current(false);
     };
 
-    /* TWO-PHASE EDGE STRETCH (supplement B.1/B.2): физика «тянущейся капли».
-       t ∈ [0,1] — позиция пальца между ЦЕНТРАМИ from/to; dir — сторона цели.
-       Фаза 1 (t<0.5): ведущая кромка тянется к цели, задняя держит исходную.
-       Фаза 2 (t≥0.5): задняя кромка догоняет, масса собирается вокруг цели.
-       ease — easeOutCubic; bridge = sin(PI·t) — подушка ширины (6px) и спекуляр.
-       Ширина: lerp(компактная × press 1.10, полная масса моста, bridge). */
-    const applySegment = (fromIdx: number, toIdx: number, dir: 1 | -1, fx: number) => {
-      const from = geo[fromIdx];
-      const to = geo[toIdx];
-      const span = Math.abs(to.center - from.center);
-      const raw = span > 1 ? Math.abs(fx - from.center) / span : 0;
-      const t = Math.min(1, Math.max(0, raw));
-      const ease = (x: number) => 1 - Math.pow(1 - x, 3);
+    /* TWO-PHASE EDGE STRETCH УДАЛЁН (CRITICAL STABILITY 4.1–4.3).
+       Новая модель по ТЗ: при drag линза — ЕДИНАЯ КАПСУЛА press-размера
+       (width = pressWidth anchor-вкладки, height = press), следует за пальцем
+       (τ≈22 мс) и НЕ меняет размер. Мост как растяжение больше не существует;
+       bridge-фактор в спекуляр больше не подаётся (0).
+       pressScale — ТЗ 4.2: +15–20% к обычной ширине (выбрано 1.18). */
+    const pressScale = 1.18;
+    /* Минимальное перекрытие линзы и вкладки, при котором вкладка считается
+       covered (ТЗ 4.4: реальное пересечение lensRect vs вкладок, ОБЕ
+       одновременно накрытые — covered; исключает шум касания кромкой в 1px). */
+    const COVER_MIN = 6;
+    /* Ширина shell — снимок на входе в drag (клапм капсулы внутри панели) */
+    let shellW = 0;
 
-      let targetLeft: number;
-      let targetRight: number;
-      if (dir === 1) {
-        if (t < 0.5) {
-          targetLeft = from.left;
-          targetRight = from.right + (to.right - from.right) * ease(t * 2);
-        } else {
-          targetLeft = from.left + (to.left - from.left) * ease((t - 0.5) * 2);
-          targetRight = to.right;
-        }
-      } else {
-        if (t < 0.5) {
-          targetLeft = from.left + (to.left - from.left) * ease(t * 2);
-          targetRight = from.right;
-        } else {
-          targetLeft = to.left;
-          targetRight = from.right + (to.right - from.right) * ease((t - 0.5) * 2);
-        }
-      }
+    const capsuleW = (idx: number): number =>
+      Math.max(24, geo[idx].width * pressScale);
 
-      const bridgeS = Math.sin(Math.PI * t);
-      const pad = 6 * bridgeS; /* bridgePadding, ТЗ §1.8: 4–10px */
-      targetLeft -= pad / 2;
-      targetRight += pad / 2;
+    /* Единая капсула: центр = палец (кламп в панель), размер — press-константа;
+       covered = РЕАЛЬНОЕ пересечение [left, left+w] с каждой вкладкой. */
+    const applyFollow = (fx: number) => {
+      const w = capsuleW(anchorIdx);
+      const left = Math.max(0, Math.min(shellW - w, fx - w / 2));
 
-      const baseW = from.width + (to.width - from.width) * t;
-      const pressW = baseW * 1.1; /* press width scale, ТЗ §1.5: ×1.08–1.14 */
-      const fullBridge =
-        Math.max(from.right, to.right) - Math.min(from.left, to.left) + 6;
-      const targetW = pressW + (fullBridge - pressW) * bridgeS;
+      drivePillRef.current(left, w, true);
+      bridgePillRef.current(0);
 
-      drivePillRef.current(targetLeft, targetW, true);
-      bridgePillRef.current(bridgeS);
-
-      /* Накрыты вкладки, чьи ЦЕНТРЫ внутри целевой массы стекла (G.1:
-         «стекло физически прошло поверх объектов»); is-on не трогаем. */
       const cov: View[] = [];
       for (const tab of geo) {
-        if (tab.center >= targetLeft && tab.center <= targetRight) cov.push(tab.key);
+        const overlap =
+          Math.min(left + w, tab.right) - Math.max(left, tab.left);
+        if (overlap >= Math.min(COVER_MIN, tab.width * 0.25)) cov.push(tab.key);
       }
       if (cov.length === 0) cov.push(geo[zoneAt(fx)].key);
       setCovered(cov);
-    };
-
-    const updateLens = (fx: number) => {
-      if (!geo.length) return;
-      /* Пересечение центра вкладки = смена anchor = ОДИН playStep (§5.2 B) */
-      const z = zoneAt(fx);
-      if (z !== anchorIdx) {
-        anchorIdx = z;
-        playStep();
-      }
-      const a0 = geo[anchorIdx];
-      if (fx > a0.center + 1 && anchorIdx < geo.length - 1) {
-        applySegment(anchorIdx, anchorIdx + 1, 1, fx);
-      } else if (fx < a0.center - 1 && anchorIdx > 0) {
-        applySegment(anchorIdx, anchorIdx - 1, -1, fx);
-      } else {
-        /* В «ядре» вкладки — компактная линза с press-инфляцией */
-        drivePillRef.current(a0.left, a0.width * 1.1, true);
-        bridgePillRef.current(0);
-        setCovered([a0.key]);
-      }
     };
 
     const onDown = (e: PointerEvent) => {
@@ -981,14 +966,16 @@ export function Portal() {
       startX = e.clientX;
       pointerId = e.pointerId;
       geo = snapshotGeo();
+      shellW = shell.clientWidth;
       anchorIdx = zoneAt(e.clientX - shell.getBoundingClientRect().left);
       coveredKeys = [];
-      /* PRESS: визуал + хаптика ОДНОВРЕМЕННО (§1.5/I) */
+      /* PRESS: визуал + хаптика ОДНОВРЕМЕННО (§1.5/I); ширина — press-капсула
+         ×1.18 (ТЗ 4.2), высота растёт пружиной press (54→72px) */
       pressPillRef.current(true);
       playTick("press");
       const tab = geo[anchorIdx];
       if (tab) {
-        drivePillRef.current(tab.left, tab.width * 1.1, true);
+        drivePillRef.current(tab.left, tab.width * pressScale, true);
         setCovered([tab.key]);
       }
     };
@@ -999,23 +986,35 @@ export function Portal() {
       if (phase === "tracking" && Math.abs(dx) > 8) {
         phase = "dragging";
         dragLeft = shell.getBoundingClientRect().left;
+        shellW = shell.clientWidth;
         shell.addEventListener("click", stopDragClick, { capture: true });
-        /* PHASE 2.4 §1.1: активный drag — линза переходит на прямое
-           слежение за пальцем (τ≈33 мс) */
+        /* PHASE 2.4 §1.1: активный drag — прямое слежение за пальцем (τ≈22 мс);
+           CRITICAL STABILITY 4.6: на время drag подсветка is-on старой вкладки
+           гаснет (CSS .pill-shell.is-dragging) — highlight определяет ТОЛЬКО
+           covered; committed view сохраняется логически до commit. */
+        shell.classList.add("is-dragging");
         dragModePillRef.current(true);
       }
       if (phase !== "dragging") return;
-      /* НЕПРЕРЫВНЫЙ preview за РЕАЛЬНЫМ пальцем (PHASE 2.1 сохранён);
-         nearestItem вызывается ТОЛЬКО в finish() на pointerup. */
-      updateLens(e.clientX - dragLeft);
+      /* НЕПРЕРЫВНЫЙ preview за РЕАЛЬНЫМ пальцем; nearestItem — ТОЛЬКО в finish().
+         CRITICAL STABILITY 4.3: линза едет единой капсулой press-размера. */
+      const fx = e.clientX - dragLeft;
+      const z = zoneAt(fx);
+      if (z !== anchorIdx) {
+        anchorIdx = z;
+        playStep();
+      }
+      applyFollow(fx);
     };
 
     const finish = (clientX: number) => {
       const wasDragging = phase === "dragging";
       const wasTracking = phase === "tracking";
       phase = "idle";
+      shell.classList.remove("is-dragging");
       endDragMode();
-      /* §4: линза НИКОГДА не остаётся увеличенной/растянутой/над панелью */
+      /* §4: линза НИКОГДА не остаётся увеличенной/растянутой/над панелью;
+         CRITICAL STABILITY 4.7: press-размер → плавный settle → нормальный rest */
       clearGestureVisual();
       unbindClickGuard();
       if (wasDragging) {
@@ -1056,6 +1055,7 @@ export function Portal() {
       const wasActive = phase !== "idle";
       phase = "idle";
       if (wasActive) {
+        shell.classList.remove("is-dragging");
         endDragMode();
         clearGestureVisual();
         settleBack();
@@ -1072,6 +1072,7 @@ export function Portal() {
     cancelPanelGestureRef.current = () => {
       if (phase === "idle") return;
       phase = "idle";
+      shell.classList.remove("is-dragging");
       endDragMode();
       clearGestureVisual();
       settleBack();
@@ -1774,6 +1775,10 @@ export function Portal() {
       <ScrollHud />
 
       <BootSplash />
+
+      {/* CRITICAL STABILITY 5.1/5.2: debug overlay полосы снизу —
+          ТОЛЬКО с ?viewportDebug=1 (без параметра не рендерится) */}
+      <ViewportDebug />
 
       {/* Сайдбар — десктоп */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col justify-between border-r border-border p-4 lg:flex">
