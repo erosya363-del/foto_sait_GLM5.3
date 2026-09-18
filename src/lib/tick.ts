@@ -45,19 +45,27 @@ function hapticsEngine(): WebHaptics | null {
   return engine;
 }
 
-type TickKind = "tap" | "step";
+type TickKind = "tap" | "step" | "press";
 
 /**
  * playTick — звук + хаптика одним вызовом.
  * opts.hapticOn === false — пропустить хаптический движок (оставить только
  * звук). Использовалось точками, где отклик даёт другой механизм; обычным
  * кнопкам панели передавать не нужно — просто playTick("tap").
+ *
+ * PHASE 2.3 (§5.2 A/I): у панели появился ОТДЕЛЬНЫЙ мягкий «press»-отклик
+ * на pointerdown — лёгкий и короткий (16 мс — нижняя граница осязаемости),
+ * играющий ОДНОВРЕМЕННО с визуальным вспуханием линзы. Полная схема
+ * панели: press (down) → step (пересечение границы вкладки в drag) →
+ * tap (commit на release). Троттл 60 мс схлопывает press + click обычного
+ * тапа в один отклик.
  */
 export function playTick(kind: TickKind = "tap", opts?: { hapticOn?: boolean }) {
   const now = Date.now();
   if (now - lastTickAt < 60) return;
   lastTickAt = now;
-  if (opts?.hapticOn !== false) haptic(kind === "step" ? 10 : 22);
+  if (opts?.hapticOn !== false)
+    haptic(kind === "step" ? 10 : kind === "press" ? 16 : 22);
   if (typeof window === "undefined") return;
   try {
     const AC =
@@ -71,12 +79,13 @@ export function playTick(kind: TickKind = "tap", opts?: { hapticOn?: boolean }) 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    // «step» — тише и короче (бег линзы за пальцем), «tap» — обычный отклик
-    const peak = kind === "step" ? 0.05 : 0.11;
-    const dur = kind === "step" ? 0.045 : 0.07;
+    // «step» — тише и короче (бег линзы за пальцем), «press» — мягкий down,
+    // «tap» — обычный отклик
+    const peak = kind === "step" ? 0.05 : kind === "press" ? 0.07 : 0.11;
+    const dur = kind === "step" ? 0.045 : kind === "press" ? 0.055 : 0.07;
 
     osc.type = "triangle";
-    osc.frequency.setValueAtTime(kind === "step" ? 1500 : 1750, t);
+    osc.frequency.setValueAtTime(kind === "step" ? 1500 : kind === "press" ? 1650 : 1750, t);
     osc.frequency.exponentialRampToValueAtTime(950, t + dur);
 
     gain.gain.setValueAtTime(0.0001, t);
