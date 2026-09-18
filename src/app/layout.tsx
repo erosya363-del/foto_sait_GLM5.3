@@ -100,6 +100,18 @@ export default function RootLayout({
               var ua = navigator.userAgent || "";
               var iOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
               if (!iOS) return;
+              /* ФИКС «ПОЛОСЫ» — РАБОЧИЙ ПРИЁМ (workaround) для наблюдаемого на
+                 iOS холодного старта тяжёлого стекла (слой backdrop-filter
+                 живёт с неверной геометрией ДО первого касания). Причина на
+                 реальном устройстве НЕ доказана — требуется проверка владельцем
+                 (PHASE 2.3 §6.6: не называть root cause доказанным).
+                 PHASE 2.3 §6.2–6.5: окно нуджей сокращено ДО 1.5 c (было 7.6 c);
+                 (а) ГЛОБАЛЬНЫЙ window.resize БОЛЬШЕ НЕ dispatch (§6.5) —
+                 достаточно forced reflow + compositor-пульса самого стекла;
+                 (б) первый pointerdown/touchstart пользователя отменяет ВСЕ
+                 оставшиеся нуджи (§6.3): после касания композитор уже
+                 перестроен сам; (в) любой жест начинается с этих же событий,
+                 поэтому «нудж во время жеста» невозможен (§6.4). */
               var nudge = function () {
                 try {
                   var html = document.documentElement;
@@ -107,15 +119,6 @@ export default function RootLayout({
                   html.style.minHeight = "calc(100dvh + 1px)";
                   void html.offsetHeight;
                   html.style.minHeight = prev;
-                  window.dispatchEvent(new Event("resize"));
-                  /* ФИКС ПОЛОСЫ, повторно + PHASE 2.2 (регресс на iOS 26 с тяжёлым
-                     стеклом v5 blur 40/sat 2): слой backdrop-filter при холодном
-                     старте живёт с неверной геометрией ДО ПЕРВОГО КАСАНИЯ —
-                     пользователь видит «пустую полосу под панелью», первое
-                     взаимодействие перестраивает композитор и панель «опускается
-                     на место». (а) Хинт стал сильнее: scale-пульс а не только
-                     translateZ; (б) серия продлена до 7.6 с — прежние 3 с
-                     кончались раньше, чем пользователь успевал коснуться экрана. */
                   var pill = document.querySelector(".pill-shell");
                   if (pill) {
                     pill.style.transform = "translateZ(0) scale(1.002)";
@@ -124,7 +127,14 @@ export default function RootLayout({
                   syncMeta();
                 } catch (e) {}
               };
-              [120, 420, 900, 1500, 2200, 3000, 4200, 5600, 7600].forEach(function (ms) { setTimeout(nudge, ms); });
+              var nudgeTimers = [120, 420, 900, 1500].map(function (ms) { return setTimeout(nudge, ms); });
+              var stopNudges = function () {
+                nudgeTimers.forEach(function (t) { clearTimeout(t); });
+                window.removeEventListener("pointerdown", stopNudges, true);
+                window.removeEventListener("touchstart", stopNudges, true);
+              };
+              window.addEventListener("pointerdown", stopNudges, true);
+              window.addEventListener("touchstart", stopNudges, true);
               window.addEventListener("pageshow", function (e) { if (e.persisted) nudge(); });
             } catch (e) {}
           })();`}

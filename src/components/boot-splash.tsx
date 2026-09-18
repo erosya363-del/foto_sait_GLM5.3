@@ -20,6 +20,11 @@ export function BootSplash() {
   // ФИКС ПОЛОСЫ v3: при первом запуске standalone-PWA iOS раскладывает страницу
   // во вьюпорт без нижнего safe-area. Серия пересчётов вьюпорта под сплэшем —
   // к моменту появления контента вьюпорт уже правильный.
+  // PHASE 2.3 §6.2–6.4: серия сокращена (было до 6000 мс), глобальный
+  // window.resize больше не dispatch (forced reflow достаточно), а ПЕРВОЕ
+  // касание пользователя отменяет все оставшиеся нуджи: после касания
+  // композитор уже перестроен сам. Workaround — причина на реальном
+  // устройстве не доказана (см. layout.tsx §6.6).
   useEffect(() => {
     const ua = navigator.userAgent || "";
     const iOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -32,21 +37,23 @@ export function BootSplash() {
         html.style.minHeight = "calc(100dvh + 1px)";
         void html.offsetHeight; // принудительный reflow
         html.style.minHeight = prev;
-        window.dispatchEvent(new Event("resize"));
       } catch {
         /* молча */
       }
     };
-    const timers = [150, 500, 1000, 1600, 2400, 3200, 4500, 6000].map((ms) => setTimeout(nudge, ms));
-    const onTouch = () => nudge();
+    const timers = [150, 500, 1000, 1500].map((ms) => setTimeout(nudge, ms));
+    const stopNudges = () => {
+      timers.forEach((t) => clearTimeout(t));
+      window.removeEventListener("touchstart", stopNudges, true);
+    };
     const onVis = () => {
       if (document.visibilityState === "visible") nudge();
     };
-    window.addEventListener("touchend", onTouch, { passive: true });
+    window.addEventListener("touchstart", stopNudges, { capture: true });
     document.addEventListener("visibilitychange", onVis);
     return () => {
       timers.forEach(clearTimeout);
-      window.removeEventListener("touchend", onTouch);
+      window.removeEventListener("touchstart", stopNudges, { capture: true });
       document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
