@@ -480,6 +480,11 @@ html.boot-skip .boot-bg { display: none !important; }
 .pill-shell {
   position: relative; width: 100%; height: 64px; border-radius: 999px;
   overflow: hidden; isolation: isolate; pointer-events: auto;
+  /* ФИКС «ПОЛОСЫ» (регресс на iOS 26): стекло с backdrop-filter при холодном
+     старте иногда получает СЛОЙ С НЕВЕРНОЙ ГЕОМЕТРИЕЙ (узкая пустая полоса
+     вместо капсулы) до первого касания; постоянный compositor-хинт вынуждает
+     СВОЙ слой с первого кадра. Не конфликтует с morph-транзишном .pill-nav. */
+  transform: translateZ(0);
   background: var(--pill-bg);
   /* PATCH v5: brightness 1.09 */
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) brightness(1.09);
@@ -511,14 +516,9 @@ html.boot-skip .boot-bg { display: none !important; }
 }
 .pill-goo { position: absolute; inset: 0; z-index: 1; pointer-events: none; filter: url(#pill-goo); }
 
-.pill-ghost, .pill-bubble { position: absolute; top: 6px; bottom: 6px; left: 0; width: 0; border-radius: 999px; will-change: transform; transform-origin: center; }
-.pill-ghost {
-  z-index: 0; opacity: 0;
-  background: linear-gradient(165deg, var(--drop-a), var(--drop-b) 58%, var(--drop-c));
-  box-shadow: inset 0 1px 0 var(--drop-rim-top);
-  transition: opacity 120ms ease;
-}
-.pill-goo.is-live .pill-ghost { opacity: .48; }
+/* PHASE 2.2: .pill-ghost УДАЛЁН (вторая линза не успевала за основной).
+   Осталась одна капля: позиция/ширина — из portal.tsx, «тянучка» — scaleX по скорости. */
+.pill-bubble { position: absolute; top: 6px; bottom: 6px; left: 0; width: 0; border-radius: 999px; will-change: transform; transform-origin: center; }
 
 /* PATCH v5: white neutral glass bubble (iOS 26) */
 .pill-bubble {
@@ -563,8 +563,6 @@ html.boot-skip .boot-bg { display: none !important; }
 }
 .pill-search:active { transform: scale(.98); }
 .pill-svg-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
-
-@media (prefers-reduced-motion: reduce) { .pill-ghost { display: none; } }
 
 /* PATCH v5: light theme highlight 0.92 */
 .light .pill-shell {
@@ -807,6 +805,24 @@ html.is-scrolling .fx-grain, html.is-scrolling .aurora { animation-play-state: p
 .pswp__top-bar { padding: max(10px, var(--sat)) 10px 0; height: auto; }
 .pswp__button { min-width: var(--tap-min); min-height: var(--tap-min); color: #fff; opacity: 0.92; }
 .pswp__button:active { transform: scale(0.9); }
+/* PHASE 2.2: «⋯» (действия) — стеклянная кнопка в стиле Liquid Glass v5
+   (та же капсула, что у счётчика, но на токенах v5): на светлых фото белый
+   «⋯» без подложки был еле виден. Тап — заметная пружинная вдавленность. */
+.pswp__button--actions {
+  width: 44px; height: 44px; min-width: 44px; border-radius: 999px;
+  margin-right: 4px;
+  background: rgba(20, 22, 24, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 22px -10px rgba(0, 0, 0, 0.55);
+  transition: transform 0.25s var(--ease-spring), background-color 0.2s ease;
+}
+.pswp__button--actions:active { transform: scale(0.9); background: rgba(20, 22, 24, 0.68); }
+@media (prefers-reduced-motion: reduce) { .pswp__button--actions { transition: none; } }
 .pswp__counter {
   display: inline-flex; align-items: center; padding: 8px 15px; border-radius: 999px;
   background: rgba(20, 22, 24, 0.55); border: 1px solid rgba(255, 255, 255, 0.14);
@@ -822,12 +838,23 @@ html.is-scrolling .fx-grain, html.is-scrolling .aurora { animation-play-state: p
   width: 100%; max-width: 480px; max-height: min(72dvh, 560px);
   overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 2px;
+  position: relative;
   padding: 10px 12px calc(12px + var(--sab));
   border-radius: 26px 26px 0 0;
-  background: rgba(28, 30, 32, 0.92);
-  -webkit-backdrop-filter: blur(30px) saturate(1.5); backdrop-filter: blur(30px) saturate(1.5);
+  /* PHASE 2.2: меню действий — Liquid Glass v5 (токены панели): blur 40/sat 2,
+     светлее фон (стекло, а не краска) + спекуляр-блик как у панели */
+  background: rgba(30, 32, 35, 0.78);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) brightness(1.06);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation)) brightness(1.06);
   border: 1px solid rgba(255, 255, 255, 0.14); border-bottom: none;
-  box-shadow: 0 -18px 60px -20px rgba(0, 0, 0, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 -18px 60px -20px rgba(0, 0, 0, 0.8);
+}
+.viewer-sheet::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(120% 60% at 18% -10%, rgba(255, 255, 255, 0.14), transparent 55%);
+  mix-blend-mode: screen; opacity: 0.8;
 }
 .viewer-sheet-handle { width: 40px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.28); margin: 2px auto 8px; flex-shrink: 0; }
 .viewer-sheet-title { padding: 2px 10px 8px; font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255, 255, 255, 0.55); }

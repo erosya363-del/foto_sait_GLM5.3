@@ -288,26 +288,24 @@ export function Portal() {
   /* ── Пилюля: ОДНО статичное стекло + ЖИДКАЯ линза ПОД кнопками ──
      Архитектура (ТЗ v4): GLASS SHELL → BACKGROUND/CAUSTICS → LIQUID LENS →
      RIM → ICONS+LABELS. Активный пункт = линза .pill-bubble внутри .pill-goo
-     (SVG-goo-фильтр): линза движется ПЕРМАНЕНТНОЙ rAF-пружиной, «призрак»
-     .pill-ghost отстаёт на своей пружине — фильтр растягивает между ними
-     «шею», капля отделяется и собирается. Кнопки ВСЕГДА выше линзы (z-слои
-     в CSS). Контроллер живёт в ОДНОМ []-эффекте и ПЕРЕЖИВАЕТ смены вкладок:
+     (SVG-goo-фильтр): линза движется ПЕРМАНЕНТНОЙ rAF-пружиной с «тянучкой»
+     (scaleX по скорости — растяжение при разгоне, сужение при оседании).
+     PHASE 2.2: ВТОРАЯ ЛИНЗА-ПРИЗРАК (.pill-ghost) УДАЛЕНА — визуально не
+     успевала за основной и читалась как отдельный «догоняющий» блоб.
+     Осталась ОДНА капля. Кнопки ВСЕГДА выше линзы (z-слои в CSS).
+     Контроллер живёт в ОДНОМ []-эффекте и ПЕРЕЖИВАЕТ смены вкладок:
      быстрые Каталог→Остатки→Загрузка за 100 мс — это одно непрерывное
      движение (меняется только target, rAF не пересоздаётся). */
   const shellRef = useRef<HTMLDivElement | null>(null);
   const gooRef = useRef<HTMLDivElement | null>(null);
-  const ghostRef = useRef<HTMLSpanElement | null>(null);
   const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const itemRefs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
 
-  /* Состояние пружин (refs, НЕ setState — ноль ререндеров в кадре):
-     x/velocity — основная линза; ghostX/ghostVelocity — отстающий призрак. */
+  /* Состояние пружины (refs, НЕ setState — ноль ререндеров в кадре):
+     x/velocity — единственная линза; target — куда едет. */
   const dropAnim = useRef({
     x: 0,
     velocity: 0,
-
-    ghostX: 0,
-    ghostVelocity: 0,
 
     target: 0,
 
@@ -346,9 +344,8 @@ export function Portal() {
     const shell = shellRef.current;
     const goo = gooRef.current;
     const bubble = bubbleRef.current;
-    const ghost = ghostRef.current;
 
-    if (!shell || !goo || !bubble || !ghost) return;
+    if (!shell || !goo || !bubble) return;
 
     const a = dropAnim.current;
 
@@ -372,9 +369,6 @@ export function Portal() {
         `translate3d(${a.x.toFixed(2)}px,0,0) ` +
         `scaleX(${scaleX.toFixed(4)}) ` +
         `scaleY(${scaleY.toFixed(4)})`;
-
-      ghost.style.transform =
-        `translate3d(${a.ghostX.toFixed(2)}px,0,0) scale(0.88)`;
     };
 
     const settle = (x: number) => {
@@ -383,9 +377,6 @@ export function Portal() {
       a.x = x;
       a.target = x;
       a.velocity = 0;
-
-      a.ghostX = x;
-      a.ghostVelocity = 0;
 
       a.last = 0;
 
@@ -415,24 +406,11 @@ export function Portal() {
       a.velocity += mainForce * dt;
       a.x += a.velocity * dt;
 
-      /*
-       * Ghost:
-       * немного медленнее основной линзы.
-       */
-      const ghostForce =
-        (a.target - a.ghostX) * 92 -
-        a.ghostVelocity * 17;
-
-      a.ghostVelocity += ghostForce * dt;
-      a.ghostX += a.ghostVelocity * dt;
-
       render();
 
       const settled =
         Math.abs(a.target - a.x) < 0.25 &&
-        Math.abs(a.velocity) < 2 &&
-        Math.abs(a.target - a.ghostX) < 0.35 &&
-        Math.abs(a.ghostVelocity) < 2;
+        Math.abs(a.velocity) < 2;
 
       if (settled) {
         settle(a.target);
@@ -448,7 +426,6 @@ export function Portal() {
       animate = true
     ) => {
       bubble.style.width = `${width}px`;
-      ghost.style.width = `${width}px`;
 
       bubble.style.opacity = "1";
 
@@ -497,7 +474,6 @@ export function Portal() {
       goo.classList.remove("is-live");
 
       a.velocity = 0;
-      a.ghostVelocity = 0;
       a.last = 0;
     };
 
@@ -1567,18 +1543,14 @@ export function Portal() {
               aria-hidden="true"
             />
 
-            {/* Жидкая линза ПОД кнопками: призрак + основная капля.
+            {/* Жидкая линза ПОД кнопками: ОДНА капля (PHASE 2.2: призрак
+                удалён — не успевал за основной линзой).
                 pointer-events:none — тапы проходят к кнопкам пилюли */}
             <div
               ref={gooRef}
               className="pill-goo"
               aria-hidden="true"
             >
-              <span
-                ref={ghostRef}
-                className="pill-ghost"
-              />
-
               <span
                 ref={bubbleRef}
                 className="pill-bubble"
