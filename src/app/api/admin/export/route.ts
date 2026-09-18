@@ -64,18 +64,18 @@ interface UploadFileInfo {
  *      с сервером, собранным из этой же зоны. Файл в git не попадает
  *      (download/runtime/ в .gitignore).
  *  Ни env, ни файла → экспорт закрыт (401). */
-function expectedToken(): string | null {
+async function expectedToken(): Promise<string | null> {
   if (process.env.SYNC_EXPORT_TOKEN) return process.env.SYNC_EXPORT_TOKEN;
   try {
-    const t = fs.readFileSync(path.join(RUNTIME_ROOT, ".sync-token"), "utf8").trim();
+    const t = (await fs.readFile(path.join(RUNTIME_ROOT, ".sync-token"), "utf8")).trim();
     return t || null;
   } catch {
     return null;
   }
 }
 
-function authorized(req: NextRequest): boolean {
-  const expected = expectedToken();
+async function authorized(req: NextRequest): Promise<boolean> {
+  const expected = await expectedToken();
   if (!expected) return false; // токен не настроен на сервере — экспорт закрыт
   const bearer = req.headers.get("authorization");
   const sync = req.headers.get("x-sync-token");
@@ -141,7 +141,7 @@ async function buildManifest() {
 
 export async function GET(req: NextRequest) {
   /* ТЗ 2.10: fail-closed — без валидного SYNC_EXPORT_TOKEN экспорт недоступен */
-  if (!authorized(req)) {
+  if (!(await authorized(req))) {
     return NextResponse.json(
       {
         error:
