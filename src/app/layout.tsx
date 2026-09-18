@@ -97,6 +97,33 @@ export default function RootLayout({
                 } catch (e) {}
               };
               syncMeta();
+              /* ═══ CRITICAL STABILITY 3.2/6.1: capability-детект ДО первой
+                 отрисовки (классы на <html> до гидратации, без FOUC).
+                 glass-full/glass-fallback: full = backdrop-filter поддержан
+                 И платформа не Android (SVG goo url()-фильтр исторически
+                 нестабилен на Android-композиции — на Xiaomi линза не видна;
+                 эвристика документирована в отчёте §ANDROID). Debug-переопределение:
+                 ?glass=full | ?glass=fallback (эмуляция capability failure — ТЗ 10.2).
+                 is-standalone/is-browser: стратегии нижней панели (ТЗ 6.2/6.3). */
+              try {
+                var bfOK = false;
+                try {
+                  bfOK = !!(window.CSS && window.CSS.supports && (window.CSS.supports("backdrop-filter", "blur(2px)") || window.CSS.supports("-webkit-backdrop-filter", "blur(2px)")));
+                } catch (e) {}
+                var isAndroid = /Android/.test(navigator.userAgent || "");
+                var glassFull = bfOK && !isAndroid;
+                try {
+                  var gq = new URLSearchParams(location.search).get("glass");
+                  if (gq === "full") glassFull = true;
+                  else if (gq === "fallback") glassFull = false;
+                } catch (e) {}
+                document.documentElement.classList.add(glassFull ? "glass-full" : "glass-fallback");
+                var isStandalone = false;
+                try {
+                  isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+                } catch (e) {}
+                document.documentElement.classList.add(isStandalone ? "is-standalone" : "is-browser");
+              } catch (e) {}
               var ua = navigator.userAgent || "";
               var iOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
               if (!iOS) return;
