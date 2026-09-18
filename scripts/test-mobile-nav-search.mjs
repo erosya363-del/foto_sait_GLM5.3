@@ -664,9 +664,35 @@ console.log("── 13. P23-D/E: single drag за пальцем + TWO-TAB BRIDG
   await pillMove(midCS, panel.cy);
   await page.waitForTimeout(260);
   ls = await lensState();
-  ok("E. BRIDGE: ширина > таб × 1.4", ls.bW > catalog.width * 1.4, `bW=${ls.bW.toFixed(0)} vs ${catalog.width.toFixed(0)}`);
-  ok("E. BRIDGE: накрыты ОБА центра (Каталог и Остатки)", ls.bLeft < catalog.cx && ls.bRight > stock.cx, `[${ls.bLeft.toFixed(0)}..${ls.bRight.toFixed(0)}] vs ${catalog.cx.toFixed(0)}/${stock.cx.toFixed(0)}`);
-  ok("E. BRIDGE: оба пункта is-lens-covered", (await pillPanel()).items.filter((i) => i.covered).map((i) => i.label).join("+") === "Каталог+Остатки");
+  /* CRITICAL STABILITY 4.1/4.3: моста-растяжения БОЛЬШЕ НЕТ — линза едет
+     ЕДИНОЙ капсулой press-размера (width = таб × 1.18 ± tolerance); «мост» —
+     это состояние covered-пересечения, а не растянутая геометрия */
+  ok("E. КАПСУЛА: ширина = таб × 1.18 (не растягивается, tolerance ±12%)",
+     Math.abs(ls.bW - catalog.width * 1.18) < catalog.width * 0.14,
+     `bW=${ls.bW.toFixed(0)} vs ожидаем ${(catalog.width * 1.18).toFixed(0)}`);
+  ok("E. КАПСУЛА: ширина НЕ больше таб × 1.32 (анти-«колбаса»)", ls.bW < catalog.width * 1.32, `bW=${ls.bW.toFixed(0)}`);
+  ok("E. пересечение: накрыты ОБА центра (Каталог и Остатки)", ls.bLeft < catalog.cx && ls.bRight > stock.cx, `[${ls.bLeft.toFixed(0)}..${ls.bRight.toFixed(0)}] vs ${catalog.cx.toFixed(0)}/${stock.cx.toFixed(0)}`);
+  ok("E. covered: оба пункта is-lens-covered (реальное пересечение, ТЗ 4.4)", (await pillPanel()).items.filter((i) => i.covered).map((i) => i.label).join("+") === "Каталог+Остатки");
+  /* CRITICAL STABILITY 4.6 «тяну из Каталога к Остаткам — Каталог ещё горит,
+     хотя палец уже ушёл» — БАГ. Подводим палец ЗА центр Остатков: капсула
+     полностью уходит с Каталога (перекрытие < 0) → is-on Каталога
+     (уже не covered) обязан ГАСНУТЬ (цвет = muted, не brand). */
+  await pillMove(stock.cx + 14, panel.cy);
+  await page.waitForTimeout(240);
+  /* во время drag подсветка committed is-on ГАСНЕТ, если линза её уже
+     не накрывает: computed color = muted-foreground (не brand) */
+  const dimInfo = await page.evaluate(() => {
+    const on = document.querySelector(".pill-item.is-on");
+    if (!on) return null;
+    return { covered: on.classList.contains("is-lens-covered"), color: getComputedStyle(on).color };
+  });
+  const brandRgb = await page.evaluate(() => {
+    const p = document.querySelector(".pill-item.is-lens-covered");
+    return p ? getComputedStyle(p).color : null;
+  });
+  ok("E. старая вкладка ГАСНЕТ: is-on без covered имеет НЕ-brand цвет (ТЗ 4.6)",
+     dimInfo && !dimInfo.covered && brandRgb && dimInfo.color !== brandRgb,
+     `onColor=${dimInfo?.color} coveredColor=${brandRgb}`);
   ok("E. BRIDGE: is-on всё ещё Каталог (commit только на release)", ls.onLabel === "Каталог", ls.onLabel);
   ok("E. BRIDGE: линза одна (не две)", ls.bW > 0 && (await page.evaluate(() => document.querySelectorAll(".pill-bubble").length)) === 1);
 
@@ -684,8 +710,9 @@ console.log("── 13. P23-D/E: single drag за пальцем + TWO-TAB BRIDG
   await pillMove(midSU, panel.cy);
   await page.waitForTimeout(260);
   ls = await lensState();
-  ok("F. BRIDGE-2: ширина > таб × 1.4", ls.bW > stock.width * 1.4, `bW=${ls.bW.toFixed(0)}`);
-  ok("F. BRIDGE-2: накрыты ОБА центра (Остатки и Загрузка)", ls.bLeft < stock.cx && ls.bRight > upload.cx, `[${ls.bLeft.toFixed(0)}..${ls.bRight.toFixed(0)}]`);
+  ok("F. КАПСУЛА-2: ширина = таб × 1.18 (постоянна, ТЗ 4.3)", Math.abs(ls.bW - stock.width * 1.18) < stock.width * 0.14, `bW=${ls.bW.toFixed(0)} vs ${(stock.width * 1.18).toFixed(0)}`);
+  ok("F. КАПСУЛА-2: ширина НЕ больше таб × 1.32", ls.bW < stock.width * 1.32, `bW=${ls.bW.toFixed(0)}`);
+  ok("F. пересечение-2: накрыты ОБА центра (Остатки и Загрузка)", ls.bLeft < stock.cx && ls.bRight > upload.cx, `[${ls.bLeft.toFixed(0)}..${ls.bRight.toFixed(0)}]`);
 
   /* H: release НЕ дотянув (до Загрузки далеко) → возврат к Остаткам */
   await pillUp(stock.cx + 12, panel.cy);
@@ -801,7 +828,10 @@ console.log("── 16. P24: UPLOAD SHEET — guards, dirty, keyboard (§4) ─�
   const modelSel = page.locator('[data-upload-sheet] select').nth(1);
   await modelSel.selectOption({ index: 1 }).catch(() => {});
   await page.waitForTimeout(250);
-  await page.mouse.click(195, 200); // тап по backdrop (верх экрана)
+  // CRITICAL STABILITY: sheet теперь 86dvh (top ≈ 118px при 844) —
+  // тап по backdrop ВЫШЕ верха sheet
+  const sheetTop = await page.evaluate(() => document.querySelector("[data-upload-sheet]")?.getBoundingClientRect().top ?? 200);
+  await page.mouse.click(195, Math.max(20, sheetTop / 2)); // тап по backdrop над sheet
   await page.waitForTimeout(400);
   let confirm = await page.evaluate(() => Boolean(document.querySelector("[data-upload-confirm]")));
   ok("16b. dirty sheet: backdrop показывает discard-confirm", confirm);
@@ -823,7 +853,7 @@ console.log("── 16. P24: UPLOAD SHEET — guards, dirty, keyboard (§4) ─�
       bottomGap: window.innerHeight - r.bottom,
       top: r.top,
       height: r.height,
-      maxHeight: getComputedStyle(sh).maxHeight,
+      height: getComputedStyle(sh).height,
     };
   });
   ok("16c. клавиатура: низ sheet = --kb-overlay (300)", Math.abs(kb.bottomGap - 300) < 4, `gap=${kb.bottomGap}`);

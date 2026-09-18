@@ -11,6 +11,8 @@
     "verify:static": "bun run typecheck && bun run lint && bun run build",
     "verify:e2e": "bash scripts/run-isolated.sh bun scripts/test-s4.mjs && bash scripts/run-isolated.sh bun scripts/test-s5.mjs && bash scripts/run-isolated.sh node scripts/audit-full.mjs --quick && bash scripts/run-isolated.sh node scripts/stabilize-viewport-audit.mjs",
     "verify:runtime": "bun scripts/regression-photo-persistence.mjs && bash scripts/test-restore-roundtrip.sh",
+    "verify:data": "bash scripts/test-deploy-cycle.sh",
+    "verify:stability": "bash scripts/run-isolated.sh node scripts/test-stability-part1.mjs",
     "verify": "bun run verify:static && bun run verify:e2e && bun run verify:runtime",
     "db:generate": "prisma generate",
     "db:push": "bash scripts/db-push.sh",
