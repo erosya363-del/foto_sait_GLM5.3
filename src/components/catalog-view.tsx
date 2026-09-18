@@ -397,7 +397,7 @@ function VariantCard({
             className="img-fade h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
           />
         )}
-        <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-md">
+        <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-[var(--glass-blur)]">
           <Camera size={11} strokeWidth={2.5} />
           {v.photoCount}
         </span>

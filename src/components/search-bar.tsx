@@ -224,7 +224,7 @@ export function SearchBar() {
                     key={p}
                     type="button"
                     onClick={() => commit(p)}
-                    className="rounded-full border border-border bg-secondary/70 px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 backdrop-blur-md transition-all hover:border-[var(--border-strong)] hover:text-foreground active:scale-95"
+                    className="rounded-full border border-border bg-secondary/70 px-3 py-1.5 text-[12.5px] font-semibold text-foreground/90 backdrop-blur-[var(--glass-blur)] transition-all hover:border-[var(--border-strong)] hover:text-foreground active:scale-95"
                   >
                     {p}
                   </button>

@@ -119,7 +119,7 @@ export function ProductView() {
                 />
                 {/* Подсказка «открыть просмотрщик» — иконка увеличения */}
                 <span
-                  className="pointer-events-none absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100"
+                  className="pointer-events-none absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-black/50 text-white opacity-0 backdrop-blur-[var(--glass-blur)] transition-opacity duration-300 group-hover:opacity-100"
                   aria-hidden
                 >
                   <Maximize2 size={14} strokeWidth={2.4} />
