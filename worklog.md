@@ -1107,3 +1107,25 @@ Stage Summary:
 - RACE CLOSED: LOCK→DRAIN→SYNC→BUILD доказана тестом 38/0; повторение потери фото при деплое невозможно (fail-closed по lockId/dbSha/manifest-AB/файлам).
 - REAL IPHONE/XIAOMI: NOT TESTED — клавиатура sheet, browser toolbar (viewportDebug), хаптика — чек-лист в отчёте §14.
 - ОСТАНОВ по ТЗ: redeploy НЕ выполнен; PART 2/Админка/роли НЕ начаты. Токен: env → download/runtime/.sync-token; backup вне Git (platform secret).
+
+---
+Task ID: 48
+Agent: main (Super Z)
+Task: PART 1.1 HOTFIX — REV.2: правки по отзыву владельца (4 пункта): (1) GET view=trash — autoPurgeTrash() через beginRuntimeWrite() вместо currentDeployLock()-чека; (2) deploy-lock action:"renew" + heartbeat сборки; (3) post-artifact перепроверка live lockId + финальное продление lock >=3600 c; (4) FINAL_HEAD в отчёте -> 8c0d625.
+
+Work Log:
+- П.1: src/app/api/admin/route.ts — автоочистка корзины в GET view=trash переведена на writer-lease beginRuntimeWrite("admin:trash-purge") (try/finally release); под lock lease не выдан -> autoPurged=0, GET отдаёт данные как прежде. TOCTOU-дыра голого чека закрыта (lock, поставленный между чеком и purge, дожидается lease через drain)
+- П.2: src/lib/runtime-write-lock.ts — renewDeployLock(lockId, ttlMs): продление ТОЛЬКО совпадающим id (истёкший/снятый/чужой -> null, fail-closed), атомарность tmp+rename; src/app/api/admin/deploy-lock/route.ts — action:"renew" (400 без lockId / 409 LOCK_NOT_RENEWABLE при чужом-отсутствующем / 200 {ok, lockId, expiresAt})
+- П.2: .zscripts/build.sh — heartbeat: фоновый heartbeat_loop продлевает lock каждые LOCK_HEARTBEAT_SEC=240 c (TTL 1800 c) от момента lock до конца сборки; неудача фиксируется маркером $HEARTBEAT_STATE/failed; stop_heartbeat в cleanup при любом исходе
+- П.3: .zscripts/build.sh — POST-ARTIFACT CHECKPOINT после упаковки tar: [B] GET live lockId — потерян/истёк/подменён -> BUILD FAIL (артефакт больше не актуален); [C] финальный renew LOCK_FINAL_TTL_SEC=3600 c -> нет подтверждения -> BUILD FAIL; только затем BUILD_SUCCESS=1 (lock остаётся на live до cutover)
+- Тесты: scripts/test-live-sync-race.sh +C8 (renew свой -> ok, expiresAt ~+1800 c), +C9 (чужой -> 409), +G4 (после unlock -> 409); пересборка standalone -> verify:race 41/0; verify:data 22/0
+- Новый scripts/test-deploy-lock-heartbeat.sh: механика renew_live/heartbeat_loop/stop_heartbeat из РЕАЛЬНЫХ функций build.sh (awk-извлечение, curl->мок) — renew ok/чужой/сеть, маркер неудачи, фоновый цикл стартует/глушится, no-op без lock — 9/0
+- tsc --noEmit, eslint (изменённые файлы) — чисто; bun run build (standalone с renew-route) — ок
+- П.4: docs/CRITICAL_STABILITY_PART11_REPORT.md — FINAL_HEAD исправлен f7b1198 -> 8c0d625 (фактический финал ветки, подтверждён владельцем); COMMITS дополнен 8c0d625; §2/§3/§4/§11/§13/§16 синхронизированы с REV.2; новая §17 «REV.2 — правки по отзыву владельца» с коммитами 7172b59/adda04f
+- Коммиты: 7172b59 fix(data): route trash purge through writer lease; adda04f feat(data): deploy-lock renew action with build heartbeat; docs-коммит отчёта+ворклога следует за этой записью
+
+Stage Summary:
+- REV.2 завершена полностью: 4/4 пунктов владельца внесены; live-lock схема стала самоподдерживающейся (heartbeat не даёт сборке пережить TTL, финальный renew >=3600 c покрывает окно redeploy/cutover, потеря lock после упаковки артефакта = BUILD FAIL)
+- Отчёт PART 1.1: FINAL_HEAD = 8c0d625 (по указанию владельца), REV.2-коммиты после него перечислены в §17; фактический финальный HEAD фиксируется в финальном ответе задачи
+- LOST PHOTOS: 0/~20, platform snapshot pending (без изменений; redeploy по-прежнему НЕ делается)
+- Тесты: verify:race 41/0, deploy-lock-heartbeat 9/0, verify:data 22/0, tsc/lint/build — зелёные

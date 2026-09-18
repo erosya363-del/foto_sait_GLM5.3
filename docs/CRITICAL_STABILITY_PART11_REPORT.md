@@ -4,9 +4,9 @@
 Ветка: `main`
 
 START_HEAD: `a573c09ec652a914b3c0634ed424325d01791eb1`
-FINAL_HEAD: `f7b1198103aa8e72d3e8c0294ae2c3c52731b350` (pushed: `a573c09..f7b1198`)
+FINAL_HEAD: `8c0d62582c3f702cf47f3ace039427adcf088ac9` (pushed: `a573c09..8c0d625`; фактический финал ветки подтверждён владельцем — исправлено в REV.2, было ошибочно `f7b1198`; коммиты REV.2 после него — §17)
 
-COMMITS (a573c09..f7b1198, по смыслу — ТЗ §18):
+COMMITS (a573c09..8c0d625, по смыслу — ТЗ §18):
 
 1. `14e93d5` fix(data): add atomic live deploy lock
 2. `6d37d5a` fix(data): auto-sync locked live before build
@@ -18,6 +18,7 @@ COMMITS (a573c09..f7b1198, по смыслу — ТЗ §18):
 8. `12206f7` test(data): cover live mutation deploy race
 9. `449a61b` docs: add part1.1 hotfix report
 10. `f7b1198` docs: worklog Task 47 (part1.1 hotfix)
+11. `8c0d625` docs: pin FINAL_HEAD f7b1198 + commit list in part1.1 report
 
 ---
 
@@ -69,7 +70,7 @@ createMany/deleteMany/updateMany/writeFile/unlink/$executeRaw/INSERT/UPDATE):
 | `POST /api/fabric-photo` | optimized/thumb + Material | writer-lease `fabric-photo`; под lock — 423 |
 | `POST /api/admin` | все admin-action (create/rename/delete/restore/purgePhoto/purgeTrash/movePhoto/quickCreateVariant/…) | ВЕСЬ POST под ОДНИМ lease (не каждая action отдельно); под lock — 423 |
 | `DELETE /api/admin?photoId` | мягкое удаление → корзина | writer-lease (найдено аудитом, ТЗ §2) |
-| `GET /api/admin?view=trash` | `autoPurgeTrash()` физически удаляет данные | Под lock `autoPurge` ПРОПУСКАЕТСЯ (`lock ? 0 : await autoPurgeTrash()`): GET отдаёт данные, ничего не удаляя (ТЗ §2.4). Поведение вне lock не изменено |
+| `GET /api/admin?view=trash` | `autoPurgeTrash()` физически удаляет данные | REV.2 (отзыв п.1): автоочистка проводится через writer-lease `beginRuntimeWrite("admin:trash-purge")`, а НЕ голый `currentDeployLock()`-чек — схема «check → lease → re-check» закрывает TOCTOU-гонку (lock, поставленный между чеком и началом purge, дожидается lease через drain). Под lock lease не выдан → `autoPurged=0`, GET отдаёт данные без удаления (ТЗ §2.4). Поведение вне lock не изменено |
 | catalog / dictionaries / media / search / stock / `GET export` | мутаций НЕТ (аудит; export делает `VACUUM INTO` во временный файл вне runtime) | без lock-логики — экспорт обязан работать ПОД lock для final sync |
 
 ## 3. DEPLOY LOCK API (P0, ТЗ §3) — PASS
@@ -87,6 +88,10 @@ createMany/deleteMany/updateMany/writeFile/unlink/$executeRaw/INSERT/UPDATE):
   Чужой lock уже стоит → 409 `ALREADY_LOCKED`.
 * `POST {action:"unlock", lockId}` — снимается ТОЛЬКО совпадающий id
   (чужой → 409 `LOCK_ID_MISMATCH`).
+* `POST {action:"renew", lockId, ttlSec}` (REV.2, отзыв п.2) — продлить
+  ДЕЙСТВУЮЩИЙ lock: только владелец lockId; истёк/снят/чужой → 409
+  `LOCK_NOT_RENEWABLE` (fail-closed). Атомарность продления — tmp+rename.
+  Используется heartbeat'ом сборки и финальным продлением (§4).
 * `GET` → `{locked, lock, activeWriters}` (token-protected).
 
 ## 4. AUTO FINAL SYNC В BUILD (P0, ТЗ §4) — PASS
@@ -97,18 +102,33 @@ createMany/deleteMany/updateMany/writeFile/unlink/$executeRaw/INSERT/UPDATE):
 ```
 [deps install без lock]
 → ACQUIRE LIVE LOCK (POST /api/admin/deploy-lock, ttlSec 1800, owner build)
+→ HEARTBEAT: фоновый цикл продлевает lock каждые 240 c (REV.2, отзыв п.2)
 → WAIT ACTIVE WRITES = 0 (сервер делает drain сам)
 → FINAL SYNC FROM LOCKED LIVE (scripts/sync-from-live.sh + DEPLOY_LOCK_ID)
 → VERIFY CURRENT DEPLOY LOCK ID (GET status: lock всё ещё наш; иначе FAIL)
 → deploy-guard (marker + lockId)
 → BUILD → ARTIFACT VERIFY (database-runtime-build.sh: guard + verify)
+→ POST-ARTIFACT: перепроверка live lockId → ФИНАЛЬНЫЙ RENEW до 3600 c (REV.2, отзыв п.3)
 ```
 
 * **Shell trap (§4.4):** `LOCK_ACQUIRED` / `BUILD_SUCCESS` / `LOCK_ID`;
-  `cleanup()` снимает lock ТОЛЬКО если сборка не удалась (EXIT/INT/TERM).
-* **Lock lifetime (§4.3):** BUILD FAILED → unlock сразу; BUILD SUCCESS →
-  live ОСТАЁТСЯ LOCKED — lock исчезнет со старым контейнером при cutover
-  или истечёт по TTL (~30 мин), если платформа упала после сборки.
+  `cleanup()` глушит heartbeat и снимает lock ТОЛЬКО если сборка не
+  удалась (EXIT/INT/TERM).
+* **Heartbeat (REV.2, отзыв п.2):** фоновый цикл продлевает lock каждые
+  `LOCK_HEARTBEAT_SEC` (240 c; TTL продления 1800 c) — длинная сборка не
+  «переживёт» TTL. Неудача продления фиксируется маркером; решает
+  контрольная точка [B]/[C] после упаковки артефакта. Механика покрыта
+  тестом `scripts/test-deploy-lock-heartbeat.sh` (9/0).
+* **Post-artifact checkpoint (REV.2, отзыв п.3):** после упаковки tar:
+  [B] live lockId перепроверяется — потерян/истёк/подменён → BUILD FAIL
+  (данные могли выйти из-под защиты, артефакт больше не актуален);
+  [C] финальное продление `LOCK_FINAL_TTL_SEC` (3600 c) — защита обязана
+  пережить окно redeploy/cutover; нет подтверждения → BUILD FAIL. Только
+  после этого `BUILD_SUCCESS=1`.
+* **Lock lifetime (§4.3 + REV.2):** BUILD FAILED → unlock сразу; BUILD
+  SUCCESS → live ОСТАЁТСЯ LOCKED (lock продлён до ≥1 ч) — исчезнет со
+  старым контейнером при cutover или истечёт по TTL, если платформа
+  упала после сборки.
 * **LIVE_BASE_URL (§4.2):** единый config `.zscripts/deploy.env`
   (`https://j1jr777qg2d0-d.space-z.ai`), приоритет env > файл > ничего.
   Не секрет.
@@ -245,7 +265,8 @@ environment; если платформа не поддерживает секр�
 
 **Новый `scripts/test-live-sync-race.sh`** — production-flow в изоляции
 (standalone-сервер + изолированная runtime-зона; production md5-снимок
-до/после — не тронут). **38 PASS / 0 FAIL**:
+до/после — не тронут). **41 PASS / 0 FAIL** (REV.2: было 38 — добавлены
+C8/C9/G4 на renew):
 
 * A. live-фикстура: 26 живых фото + 1 в корзине (40 дней) + токен; манифест
   считает живые (корзина не попадает в photoCount);
@@ -255,13 +276,15 @@ environment; если платформа не поддерживает секр�
 * C. под lock: upload → **423 DEPLOY_LOCKED**, fabric-photo → 423, admin
   POST → 423, admin DELETE → 423; photo count не изменился; новых media
   файлов нет; `GET view=trash` → 200, `autoPurged=0`, trash-фото и файлы
-  физически на месте (§2.4);
+  физически на месте (§2.4); renew СВОИМ lockId → ok, expiresAt ≈ +1800 c,
+  ЧУЖИМ → 409 `LOCK_NOT_RENEWABLE` (REV.2 C8/C9);
 * D. §10.3 FINAL SYNC под lock (`DEPLOY_LOCK_ID`) → маркер привязан
   (`marker.lockId == lockId`), локальная зона = данным live;
 * E/F. §10.3 ARTIFACT BUILD из зоны, синхронизированной под lock
   (`database-runtime-build.sh` c `DEPLOY_LOCK_ID`-guard) + post-build
   `ARTIFACT VERIFY: PASS` + повторный verify;
-* G. unlock СВОИМ lockId → upload снова 200 (uploaded:1);
+* G. unlock СВОИМ lockId → upload снова 200 (uploaded:1); renew после
+  unlock → 409 `LOCK_NOT_RENEWABLE` — нет lock'а, продлить нельзя (REV.2 G4);
 * H. §10.2 marker race: wrong lockId → BLOCK; dbSha mismatch (инсерт
   после sync) → BLOCK; нет маркера → BLOCK; нет БД → BLOCK; битый
   Photo-файл → BLOCK; контроль: валидная зона + верный lockId → PASS;
@@ -284,6 +307,12 @@ sheet не двигается, header не прыгает, body pad 316px, stick
 поведение §14 (старый ассерт «низ sheet = kb-overlay» противоречил новому
 ТЗ): sheet не двигается, pad=316, CTA=300.
 
+**Новый `scripts/test-deploy-lock-heartbeat.sh`** (REV.2) — механика
+heartbeat/renew из РЕАЛЬНЫХ функций `.zscripts/build.sh` (awk-извлечение,
+curl заменён моком) — **9 PASS / 0 FAIL**: renew ok/чужой/сеть;
+маркер неудачи heartbeat; фоновый цикл реально продлевает и глушится
+stop'ом; no-op без lock (bootstrap).
+
 **Регрессия (всё зелёное):**
 
 | Suite | Результат |
@@ -292,7 +321,8 @@ sheet не двигается, header не прыгает, body pad 316px, stick
 | LINT (`eslint .`) | PASS |
 | BUILD (`bun run build` + standalone) | PASS |
 | `verify:data` (deploy-cycle 2 цикла) | 22/0 |
-| `verify:race` (live-sync-race, НОВЫЙ) | 38/0 |
+| `verify:race` (live-sync-race) | 41/0 |
+| `deploy-lock-heartbeat` (REV.2, НОВЫЙ) | 9/0 |
 | `verify:part11` (front-контракты, НОВЫЙ) | 22/0 |
 | nav-search E2E | 110/0 |
 | horizontal-nav E2E | 125/0 |
@@ -316,10 +346,12 @@ snapshot) ещё не проверен.** Владельцу: до любого 
 1. **Первый деплой этого кода (live ещё без deploy-lock API):**
    `FIRST_DEPLOY_LOCK_BOOTSTRAP=1` в окружении сборки + ручной
    maintenance window (не грузить фото ~10–15 минут). Один раз.
-2. **Все последующие:** обычная сборка. Build сам: lock → drain → final
-   sync → verify → build → artifact verify. Если сборка не удалась — lock
+2. **Все последующие:** обычная сборка. Build сам: lock → heartbeat →
+   drain → final sync → verify → build → artifact verify → перепроверка
+   lockId → финальный renew до 1 ч. Если сборка не удалась — lock
    снимется сам; если удалась — live остаётся залоченным до переключения
-   контейнера (TTL 30 мин как предохранитель).
+   контейнера (TTL 1 ч после финального renew — предохранитель, если
+   платформа упала после сборки).
 3. Токен: `SYNC_EXPORT_TOKEN` в platform secret, либо существующий
    `download/runtime/.sync-token` (уже печётся в артефакт). Backup — вне
    Git.
@@ -347,7 +379,36 @@ docs). Никаких `reset --hard` / `clean -fd` / `add .` / `add -A`.
    проверен (см. §12).
 2. Real-device проверки (§14) — чек-лист владельца.
 3. `middleware` deprecation warning от Next (косметика, вне скоупа).
-4. GET `view=trash` под lock возвращает данные без автоочистки —
-   автоочистка догоняет при первом обращении после снятия lock; полное
-   устранение purge из GET — будущее улучшение (ТЗ §2.4), поведение не
-   ломалось.
+4. GET `view=trash` под lock возвращает данные без автоочистки (REV.2:
+   автоочистка теперь под writer-lease — TOCTOU закрыт); полное устранение
+   purge из GET — будущее улучшение (ТЗ §2.4), поведение не ломалось.
+
+---
+
+## 17. REV.2 — ПРАВКИ ПО ОТЗЫВУ ВЛАДЕЛЬЦА (2026-09-19)
+
+Ревью готового hotfix дало 4 правки (все внесены, тесты зелёные):
+
+1. **GET `view=trash` → lease вместо чека** (`7172b59`): `autoPurgeTrash()`
+   проводится через `beginRuntimeWrite("admin:trash-purge")`. Голый
+   `currentDeployLock()`-чек имел TOCTOU-дыру: lock, поставленный МЕЖДУ
+   чеком и началом автоочистки, не знал про уже идущий purge и не ждал
+   его. С lease drain дождётся окончания очистки (§2, §3 таблиц).
+2. **`action:"renew"` + heartbeat сборки** (`adda04f`): `renewDeployLock()`
+   (продление только совпадающим lockId, fail-closed при истечении/потере),
+   route-действие `renew` (409 `LOCK_NOT_RENEWABLE` для чужого/отсутствующего
+   lock), фоновый heartbeat в `build.sh` продлевает lock каждые 240 c всю
+   сборку (§3, §4).
+3. **Post-artifact checkpoint** (`adda04f`): после упаковки артефакта live
+   lockId перепроверяется — потерян/истёк → BUILD FAIL (деплоить артефакт
+   НЕЛЬЗЯ); перед успешным выходом lock продлевается минимум на 3600 c
+   (`LOCK_FINAL_TTL_SEC`), чтобы защита пережила окно redeploy/cutover
+   (§4). Совпадает с MAX_TTL route (3600 c).
+4. **FINAL_HEAD исправлен**: `f7b1198` → `8c0d625` — фактический финал
+   ветки на момент отзыва (документирующий коммит был не учтён). Коммиты
+   REV.2 после `8c0d625`: `7172b59` (trash purge lease), `adda04f` (renew +
+   heartbeat + checkpoint) и документирующий коммит с этим отчётом —
+   фактический FINAL_HEAD см. в финальном ответе задачи / `git log`.
+
+Тесты REV.2: `verify:race` 41/0 (+C8/C9/G4), `deploy-lock-heartbeat`
+9/0; TYPECHECK/LINT/BUILD/`verify:data` 22/0 — без регрессий.
