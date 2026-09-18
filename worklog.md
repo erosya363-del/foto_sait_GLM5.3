@@ -993,3 +993,22 @@ Stage Summary:
 - Локально = origin/main = 7e5e202; runtime-зона восстановлена с живого сайта (26 фото).
 - Готово к редеплою: sync-from-live → правки → verify → redeploy — протокол соблюдён, данные уедут в артефакт.
 - Урок: платформенный откат/снапшот СТИРАЕТ download/runtime — после любого подозрения на откат сразу sync-from-live ДО работы.
+
+---
+Task ID: 43 (Mobile Phase 2.2 — одна линза, фикс «полосы», стеклянное меню, blur-токены)
+Agent: main (Super Z)
+Task: «убрать вторую линзу (не успевает); проверить растяжение бегунка; пустая полоса под панелью при запуске; „⋯" еле видно — стеклянное меню по примеру v5; правило: никакого hardcoded blur в JSX; добавить скилл liquid-glass»
+
+Work Log:
+- ЛИНЗА-ПРИЗРАК УДАЛЕНА (portal.tsx + globals.css): .pill-ghost + его пружина (92/17) + is-live-фейд + reduced-motion блок; осталась ОДНА капля, «тянучка» scaleX (растяжение при разгоне Каталог→Остатки, сужение при оседании) СОХРАНЕНА — по скорости основной пружины.
+- ФИКС «ПОЛОСЫ» (регресс iOS 26 на тяжёлом стекле v5): причина — backdrop-filter-слой панели при холодном старте живёт с неверной геометрией ДО первого касания (известный iOS-глюк, уже лечился в v2.6/v3 «ФИКС ПОЛОСЫ», но серия нуджей кончалась на 3 с). Лечение: (а) постоянный compositor-хинт transform:translateZ(0) на .pill-shell (свой слой с первого кадра); (б) layout.tsx нуджи продлены 120→7600 мс + scale(1.002)-пульс; (в) boot-splash PWA-серия до 6000 мс.
+- «⋯» В VIEWER: DOTS_SVG точки r 0.6→1.4 (22px); .pswp__button--actions = стеклянная капсула v5 (rgba(20,22,24,.5), border white/.16, blur var(--glass-blur) saturate var(--glass-saturation), спекуляр, пружинный :active). Меню действий .viewer-sheet переведено на v5-токены (blur 40/sat 2, bg rgba(30,32,35,.78), спекуляр ::before).
+- BLUR-ТОКЕНЫ В JSX (правило проекта): catalog-view бейдж количества, product-view лупа, search-bar чип — backdrop-blur-md → backdrop-blur-[var(--glass-blur)]. Не тронуты: admin-photobank (Админка на очереди — переделка), upload-view 2px (скрим-затемнение, не стекло).
+- СКИЛЛ .agents/skills/liquid-glass/SKILL.md: токены, 7 железных правил (одна линза, preview≠commit, горизонтальный морф, pinch=зум, нуджи, touch-action), слои, карта файлов, чек-лист.
+- ТЕСТЫ: test-pill.mjs УДАЛЁН (музей мёртвых эпох v6.1: «линзы нет», haptic-switch'и, pill-dim/active — всё противоречит действующему ТЗ; живое покрытие в v31+mobile-суитах). test-v31: ассерты капли под формат translate3d+scaleX(1), search mode = морф (не display:none), guard dev-глобалов (секции 6+ viewer'а пропускаются в production — покрыто test-photo-viewer-mobile; секции 1-5 выполняются). test-mobile-nav-search: порог прозрачности 0.25→0.30 (v5: alpha 0.28 — патч владельца). capture-phases: guard на удалённого призрака. Новые dbg: scripts/dbg-strip.mjs (диагностика «полосы»), scripts/dbg-p22-shots.mjs.
+- ПРОВЕРКИ: verify:static PASS; E2E: v31 21/21 (секции 1-5), nav-search 49/49, horizontal-nav 95/95, photo-viewer-mobile 49/49. Скриншоты tool-results/p22-*.png: панель с одной линзой, «⋯»-стекло, sheet v5.
+
+Stage Summary:
+- Одна линза с «тянучкой»; полоса при старте закрыта тремя уровнями защиты; «⋯» и меню — v5-стекло; JSX чист от hardcoded blur (кроме задокументированных admin/upload).
+- ВАЖНО: реальный iPhone по-прежнему не воспроизводим headless — «полосу» проверять владельцу на холодном старте PWA/Safari (все 3 уровня защиты уже в коде).
+- Коммиты пофайлово; готово к redeploy.
