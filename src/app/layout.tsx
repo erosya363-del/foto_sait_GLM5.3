@@ -148,7 +148,15 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} ${unbounded.variable} antialiased`}>
         <Providers>{children}</Providers>
-        <Toaster position="top-center" richColors closeButton />
+        {/* PHASE 2.4 §3: GLASS TOASTS. richColors УДАЛЕНЫ — solid-заливки
+            («зелёное уведомление») больше не приходят из sonner; материал
+            и статусы — в globals.css (стекло + акцент иконки).
+            Mobile: bottom-center НАД пилюлей (toaster-m, <1024px);
+            Desktop: top-center с safe-area (toaster-d, ≥1024px).
+            Два экземпляра — потому что позиция у sonner статична; лишний
+            скрыт CSS-ом (display:none) и не виден. */}
+        <Toaster position="bottom-center" className="toaster-m" closeButton />
+        <Toaster position="top-center" className="toaster-d" closeButton />
       </body>
     </html>
   );
