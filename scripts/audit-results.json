@@ -1,5 +1,5 @@
 {
-  "startedAt": "2026-09-18T14:18:47.612Z",
+  "startedAt": "2026-09-18T18:04:12.175Z",
   "findings": [],
   "stats": {
     "sections": {
@@ -158,7 +158,7 @@
       "previews": true,
       "status": 200,
       "okScreen": true,
-      "body": "{\"ok\":true,\"variantId\":\"cmu71o6020001q5vhltlymd1n\",\"uploaded\":1,\"rejected\":[]}"
+      "body": "{\"ok\":true,\"variantId\":\"cmu79q1fb0001q5ww8m5mlc0n\",\"uploaded\":1,\"rejected\":[]}"
     },
     "pillStyles": {
       "mobile": {
