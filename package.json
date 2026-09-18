@@ -16,7 +16,9 @@
     "verify": "bun run verify:static && bun run verify:e2e && bun run verify:runtime",
     "db:generate": "prisma generate",
     "db:push": "bash scripts/db-push.sh",
-    "db:migrate": "bash scripts/db-push.sh --migrate"
+    "db:migrate": "bash scripts/db-push.sh --migrate",
+    "verify:race": "bash scripts/test-live-sync-race.sh",
+    "verify:part11": "bash scripts/run-isolated.sh node scripts/test-part11-front.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

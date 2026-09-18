@@ -840,24 +840,28 @@ console.log("── 16. P24: UPLOAD SHEET — guards, dirty, keyboard (§4) ─�
   confirm = await page.evaluate(() => Boolean(document.querySelector("[data-upload-confirm]")));
   ok("16b. «Остаться» — sheet жив", !confirm);
 
-  /* 16c. KEYBOARD (§4.5): --kb-overlay поднимает НИЗ sheet; шапка на месте;
-     доступная высота уменьшилась; скроллится контент, не всё окно */
+  /* 16c. KEYBOARD (PART 1.1 §14 — НОВЫЙ КОНТРАКТ): sheet НЕ двигается
+     целиком (низ остаётся на bottom:0, header не прыгает); тело получает
+     padding-bottom 16+sab+overlay; sticky CTA встаёт НАД клавиатурой. */
   await page.evaluate(() => {
     document.documentElement.style.setProperty("--kb-overlay", "300px");
   });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(450);
   const kb = await page.evaluate(() => {
     const sh = document.querySelector("[data-upload-sheet]");
     const r = sh.getBoundingClientRect();
+    const body = document.querySelector("[data-upload-sheet-body]");
+    const footer = body?.querySelector(".sticky") ?? null;
     return {
       bottomGap: window.innerHeight - r.bottom,
       top: r.top,
-      height: r.height,
-      height: getComputedStyle(sh).height,
+      bodyPad: body ? parseFloat(getComputedStyle(body).paddingBottom) : -1,
+      footerBottom: footer ? getComputedStyle(footer).bottom : null,
     };
   });
-  ok("16c. клавиатура: низ sheet = --kb-overlay (300)", Math.abs(kb.bottomGap - 300) < 4, `gap=${kb.bottomGap}`);
-  ok("16c. клавиатура: sheet не выше видимой зоны", kb.top >= 0, `top=${kb.top.toFixed(0)}`);
+  ok("16c. клавиатура: sheet НЕ двигается (низ на месте, §14.1)", Math.abs(kb.bottomGap) < 2, `gap=${kb.bottomGap}`);
+  ok("16c. клавиатура: body padding-bottom = 16+sab+300 (§14.2)", Math.abs(kb.bodyPad - 316) < 3, `pad=${kb.bodyPad}`);
+  ok("16c. клавиатура: sticky CTA над клавиатурой (bottom=300)", kb.footerBottom === "300px", String(kb.footerBottom));
   await page.evaluate(() => {
     document.documentElement.style.setProperty("--kb-overlay", "0px");
   });
