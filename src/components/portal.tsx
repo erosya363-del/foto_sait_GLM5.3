@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, ArrowUp, Boxes, Images, Search, UploadCloud, ShieldCheck, X } from "lucide-react";
 import {
@@ -17,7 +17,7 @@ import { SearchBar } from "@/components/search-bar";
 import { StockView } from "@/components/stock-view";
 import { CatalogView } from "@/components/catalog-view";
 import { ProductView } from "@/components/product-view";
-import { UploadView } from "@/components/upload-view";
+import { UploadSheet } from "@/components/upload-sheet";
 import { AdminView } from "@/components/admin-view";
 import { PhotoViewer } from "@/components/photo-viewer";
 
@@ -29,13 +29,18 @@ const NAV: Array<{ key: View; label: string; short: string; Icon: typeof Boxes }
 ];
 
 /* PHASE2 ТЗ 3.1: горизонтальная структура разделов — индекс определяет
-   направление перехода (newIndex > oldIndex → forward и т.д.) */
-const VIEW_ORDER: View[] = ["catalog", "stock", "upload", "admin"];
+   направление перехода (newIndex > oldIndex → forward и т.д.).
+   PHASE 2.4 §4.2: «upload» ИЗЪЯТ из разделов — это сценарный sheet
+   (store.uploadOpen); свайп страниц Каталог → Остатки → Админ. */
+const VIEW_ORDER: View[] = ["catalog", "stock", "admin"];
 
 const VIEW_COMPONENTS: Record<View, ComponentType> = {
   catalog: CatalogView,
   stock: StockView,
-  upload: UploadView,
+  /* PHASE 2.4 §4.2: upload больше НЕ раздел — рендерится UploadSheet
+     в Portal; здесь стаб для полноты Record (view:"upload" невалиден и
+     мигрируется в "catalog" в restore/popstate) */
+  upload: () => null,
   admin: AdminView,
 };
 
@@ -82,15 +87,34 @@ function isShown(el: Element | null): el is Element {
 }
 
 /** Заголовок текущего экрана — ТОЛЬКО название вкладки (п.8 ТЗ: никаких
-    «Обухов (склад)»/«Склад онлайн»/приставок — просто Каталог/Остатки/…) */
+    «Обухов (склад)»/«Склад онлайн»/приставок — просто Каталог/Остатки/…)
+    PHASE 2.4: ветки «upload» больше нет — это не раздел. */
 function useHeaderTitle() {
   const view = usePortal((s) => s.view);
   const productId = usePortal((s) => s.productId);
   if (productId) return "Каталог";
   if (view === "stock") return "Остатки";
-  if (view === "upload") return "Загрузка";
   if (view === "admin") return "Админ";
   return "Каталог";
+}
+
+/**
+ * PHASE 2.4 §4.3: открыть upload sheet (action, НЕ переход раздела).
+ * Коисстенция (§5): поиск закрывается корректно, активный жест панели
+ * отменяется ДО открытия; committed view остаётся прежним под sheet.
+ */
+function openUploadSheet() {
+  const s = usePortal.getState();
+
+  if (s.searchOpen) {
+    s.setSearchOpen(false);
+  }
+
+  if (!s.uploadOpen) {
+    s.setUploadOpen(true);
+  }
+
+  playTick("tap");
 }
 
 /**
@@ -278,6 +302,7 @@ export function Portal() {
   const title = useHeaderTitle();
   useWowEffects();
   const keyboardOpen = useKeyboardOpen(); // подписка держит singleton живым; панель прячет класс .pill-hidden + html.kb-open
+  const uploadOpen = usePortal((s) => s.uploadOpen); // PHASE 2.4 §4.2
 
   /* ── Нативная iOS-оболочка (AskonaApp): мост «системный таб-бар ↔ SPA» ──
      В Safari/PWA/Android — no-op (флаг __ASKONA_NATIVE_IOS__ не выставлен).
@@ -325,6 +350,11 @@ export function Portal() {
     bridge: 0,
     bridgeTarget: 0,
 
+    /* PHASE 2.4 §1.1: режим ПРЯМОГО слежения (активный drag по панели):
+       позиция/ширина идут экспоненциальным сглаживанием за пальцем,
+       пружины подключаются на release/settle. */
+    dragging: false,
+
     /* Кэш последней записи в style — пропуск идентичных записей */
     lastW: -1,
     lastP: -1,
@@ -343,6 +373,9 @@ export function Portal() {
     useRef<(x: number, width: number, animate?: boolean) => void>(() => {});
 
   const pressPillRef = useRef<(on: boolean) => void>(() => {});
+
+  /* PHASE 2.4 §1.1: включение/выключение прямого слежения (active drag) */
+  const dragModePillRef = useRef<(on: boolean) => void>(() => {});
 
   const bridgePillRef = useRef<(b: number) => void>(() => {});
 
@@ -454,27 +487,48 @@ export function Portal() {
       a.last = time;
 
       /*
-       * Position spring (k=150, d=23):
-       * более спокойная пружина.
-       * Не должна перескакивать цель.
+       * PHASE 2.4 §1.1 — DIRECT TRACKING при активном drag по панели:
+       * экспоненциальное сглаживание с τ≈33 мс — линза визуально
+       * «привязана» к пальцу (iPhone tab bar feel), без медленного
+       * хвоста пружины k=150 (период ~0.5 c — тот самый «лаг»).
+       * velocity считается по ФАКТИЧЕСКОМУ смещению кадра — тянучка
+       * scaleX (§1.8) работает от реальной скорости, без разрыва.
+       * Упругая физика проявляется на release: dragMode снимается,
+       * пружина подхватывает с текущих x/velocity — без скачка.
        */
-      const mainForce =
-        (a.target - a.x) * 150 -
-        a.velocity * 23;
+      if (a.dragging) {
+        const kx = 1 - Math.exp(-dt * 30);
+        const nx = a.x + (a.target - a.x) * kx;
+        a.velocity = dt > 0 ? (nx - a.x) / dt : 0;
+        a.x = nx;
 
-      a.velocity += mainForce * dt;
-      a.x += a.velocity * dt;
+        const kw = 1 - Math.exp(-dt * 26);
+        const nw = a.w + (a.targetW - a.w) * kw;
+        a.wv = dt > 0 ? (nw - a.w) / dt : 0;
+        a.w = nw;
+      } else {
+        /*
+         * Position spring (k=150, d=23) — settle/release/полёт по тапу.
+         * Не должна перескакивать цель.
+         */
+        const mainForce =
+          (a.target - a.x) * 150 -
+          a.velocity * 23;
 
-      /*
-       * Width spring (k=170, d=25) — PHASE 2.3 §1.12:
-       * single → bridge → single без прямоугольных скачков ширины.
-       */
-      const widthForce =
-        (a.targetW - a.w) * 170 -
-        a.wv * 25;
+        a.velocity += mainForce * dt;
+        a.x += a.velocity * dt;
 
-      a.wv += widthForce * dt;
-      a.w += a.wv * dt;
+        /*
+         * Width spring (k=170, d=25) — PHASE 2.3 §1.12:
+         * single → bridge → single без прямоугольных скачков ширины.
+         */
+        const widthForce =
+          (a.targetW - a.w) * 170 -
+          a.wv * 25;
+
+        a.wv += widthForce * dt;
+        a.w += a.wv * dt;
+      }
 
       /*
        * Press spring (k=220, d=26) — PHASE 2.3 §1.5/D:
@@ -487,12 +541,14 @@ export function Portal() {
       a.pv += pressForce * dt;
       a.p += a.pv * dt;
 
-      /* bridge: геометрия sin(PI·t) уже плавная — досглаживаем смену сегмента */
-      a.bridge += (a.bridgeTarget - a.bridge) * Math.min(1, dt * 20);
+      /* bridge: геометрия sin(PI·t) уже плавная — досглаживаем смену сегмента;
+         при активном drag подстройка мгновеннее (масса обязана поспевать) */
+      a.bridge += (a.bridgeTarget - a.bridge) * Math.min(1, dt * (a.dragging ? 34 : 20));
 
       render();
 
       const settled =
+        !a.dragging &&
         Math.abs(a.target - a.x) < 0.25 &&
         Math.abs(a.velocity) < 2 &&
         Math.abs(a.targetW - a.w) < 0.25 &&
@@ -576,6 +632,18 @@ export function Portal() {
       ensureRaf();
     };
 
+    /* PHASE 2.4 §1.1: прямой режим слежения включается при входе в drag
+       и выключается на release/cancel — пружины подхватывают с текущих
+       x/velocity, скачка геометрии нет. */
+    dragModePillRef.current = (on: boolean) => {
+      a.dragging = on;
+
+      if (!on) return;
+
+      goo.classList.add("is-live");
+      ensureRaf();
+    };
+
     /* PHASE 2.3 §B.3: сила растяжения стекла (sin(PI·t)); подушку ширины
        считает gesture, сюда приходит готовое значение 0..1 — для спекуляра */
     bridgePillRef.current = (b: number) => {
@@ -593,6 +661,7 @@ export function Portal() {
       a.velocity = 0;
       a.wv = 0;
       a.pv = 0;
+      a.dragging = false;
       a.targetP = 0;
       a.p = 0;
       a.lastP = -1;
@@ -818,6 +887,12 @@ export function Portal() {
       pressPillRef.current(false);
     };
 
+    /* PHASE 2.4 §1.1: сборка ВКЛЮЧАЯ прямой режим слежения (пружины
+       подхватывают геометрию на release/cancel) */
+    const endDragMode = () => {
+      dragModePillRef.current(false);
+    };
+
     /* TWO-PHASE EDGE STRETCH (supplement B.1/B.2): физика «тянущейся капли».
        t ∈ [0,1] — позиция пальца между ЦЕНТРАМИ from/to; dir — сторона цели.
        Фаза 1 (t<0.5): ведущая кромка тянется к цели, задняя держит исходную.
@@ -925,6 +1000,9 @@ export function Portal() {
         phase = "dragging";
         dragLeft = shell.getBoundingClientRect().left;
         shell.addEventListener("click", stopDragClick, { capture: true });
+        /* PHASE 2.4 §1.1: активный drag — линза переходит на прямое
+           слежение за пальцем (τ≈33 мс) */
+        dragModePillRef.current(true);
       }
       if (phase !== "dragging") return;
       /* НЕПРЕРЫВНЫЙ preview за РЕАЛЬНЫМ пальцем (PHASE 2.1 сохранён);
@@ -936,6 +1014,7 @@ export function Portal() {
       const wasDragging = phase === "dragging";
       const wasTracking = phase === "tracking";
       phase = "idle";
+      endDragMode();
       /* §4: линза НИКОГДА не остаётся увеличенной/растянутой/над панелью */
       clearGestureVisual();
       unbindClickGuard();
@@ -943,6 +1022,15 @@ export function Portal() {
         const hit = nearestItem(clientX);
         const s = usePortal.getState();
         if (hit && hit.key !== s.view && !s.productId) {
+          /* PHASE 2.4 §4.3: «Загрузка» — ACTION (glass sheet), не раздел:
+             committed view остаётся прежним под sheet; линза возвращается
+             к активной вкладке сама (settleBack), sheet открывается. */
+          if (hit.key === "upload") {
+            usePortal.getState().setUploadOpen(true);
+            playTick("tap");
+            settleBack();
+            return;
+          }
           /* COMMIT: только на отпускании (ТЗ 2.5). Эффект [view] довезёт линзу. */
           usePortal.getState().setView(hit.key);
           playTick("tap"); /* commit haptic (§5.2 C) */
@@ -968,6 +1056,7 @@ export function Portal() {
       const wasActive = phase !== "idle";
       phase = "idle";
       if (wasActive) {
+        endDragMode();
         clearGestureVisual();
         settleBack();
       }
@@ -983,6 +1072,7 @@ export function Portal() {
     cancelPanelGestureRef.current = () => {
       if (phase === "idle") return;
       phase = "idle";
+      endDragMode();
       clearGestureVisual();
       settleBack();
       unbindClickGuard();
@@ -1003,6 +1093,17 @@ export function Portal() {
   useEffect(() => {
     if (searchOpen) cancelPanelGestureRef.current();
   }, [searchOpen]);
+
+  /* PHASE 2.4 §5: коисстенция upload sheet — открытие закрывает поиск,
+     сбрасывает жест панели; под sheet свайп страниц и drag панели
+     заблокированы backdrop'ом + гейтами свайпа. */
+  useEffect(() => {
+    if (!uploadOpen) return;
+    cancelPanelGestureRef.current();
+    if (usePortal.getState().searchOpen) {
+      usePortal.getState().setSearchOpen(false);
+    }
+  }, [uploadOpen]);
 
   /* ── PHASE2 B3: горизонтальная навигация по вкладкам ──
    Направление переходов — по индексам VIEW_ORDER (3.1). Интерактивный
@@ -1030,6 +1131,22 @@ export function Portal() {
     edge: boolean;
   };
   const swipeRef = useRef<SwipeGesture | null>(null);
+
+  /* PHASE 2.4 §2: отложенная очистка inline-transform/WAAPI после КОММИТА
+     смены view. Раньше done() сбрасывал transform ДО React-коммита — старый
+     view вспыхивал на 1–3 кадра («повторное появление»). Теперь финальные
+     кадры держит fill:"forwards", а сброс делает useLayoutEffect ниже. */
+  const swipeClearRef = useRef<(() => void) | null>(null);
+
+  /* PHASE 2.4 §2: очистка геометрии свайпа — строго ПОСЛЕ коммита render'а,
+     в котором новый view смонтирован instant, а соседний overlay снят:
+     один атомарный paint, без кадра с возвратом старого view. */
+  useLayoutEffect(() => {
+    const cleanup = swipeClearRef.current;
+    if (!cleanup) return;
+    swipeClearRef.current = null;
+    cleanup();
+  }, [view, productId]);
 
   /* Направление ТАП-перехода — вычисляется В РЕНДЕРЕ (ref-корректировка,
      разрешённый паттерн), чтобы enter-вариант нового кадра знал сторону. */
@@ -1063,7 +1180,7 @@ export function Portal() {
 
     const gatesClosed = () => {
       const st = usePortal.getState();
-      return st.viewerOpen || st.searchOpen || st.filtersOpen || Boolean(st.productId);
+      return st.viewerOpen || st.searchOpen || st.filtersOpen || st.uploadOpen || Boolean(st.productId);
     };
 
     const isExcluded = (target: Element | null): boolean => {
@@ -1110,7 +1227,7 @@ export function Portal() {
          Касание, которое только что закрыло поиск тапом мимо, тоже
          не продолжается свайпом (pointerdown сработал раньше touchstart). */
       const stNow = usePortal.getState();
-      if (stNow.viewerOpen || stNow.searchOpen || stNow.filtersOpen || Boolean(stNow.productId)) return;
+      if (stNow.viewerOpen || stNow.searchOpen || stNow.filtersOpen || stNow.uploadOpen || Boolean(stNow.productId)) return;
       if (performance.now() - searchClosedAtRef.current < 600) return;
       if (isExcluded(e.target as Element | null)) return;
       const t0 = e.touches[0];
@@ -1236,21 +1353,44 @@ export function Portal() {
          затем мгновенная смена view (3.8: через официальный setView). */
       busyRef.current = true;
       instantRef.current = true;
+
+      /* ── PHASE 2.4 §2: ПОЧЕМУ fill:"forwards" ──
+         Раньше done() сбрасывал inline transform ДО React-коммита:
+         между WAAPI-finish и коммитом старый view оставался смонтирован
+         без смещения → кадры-два вспышки «старого экрана» («повторное
+         появление»). Теперь финальные кадры ДЕРЖАТ обе анимации
+         (контент за экраном, сосед на 0) до самого коммита; сброс
+         выполняет useLayoutEffect [view] после монтажа нового view. */
+      const anims: Animation[] = [];
       const done = () => {
-        if (contentRef.current) contentRef.current.style.transform = "";
         /* ОДИН batched-рендер: overlay снят, старый view мгновенно ушёл
-           (exit.instant), новый встал на 0 (enter.instant) — без кадра-разрыва */
+           (exit.instant), новый встал на 0 (enter.instant) — без кадра-разрыва.
+           inline transform здесь НЕ трогаем — его чистит useLayoutEffect. */
         usePortal.getState().setView(g.target);
         setSwipe(null);
         playTick("tap");
         busyRef.current = false;
       };
       if (c) {
-        const a = c.animate([{ transform: c.style.transform || "translate3d(0,0,0)" }, { transform: `translate3d(${-g.dir * g.w}px,0,0)` }], { duration: 170, easing: EASE });
+        const a = c.animate([{ transform: c.style.transform || "translate3d(0,0,0)" }, { transform: `translate3d(${-g.dir * g.w}px,0,0)` }], { duration: 170, easing: EASE, fill: "forwards" });
         a.onfinish = done;
         a.oncancel = done;
+        anims.push(a);
       } else done();
-      if (nb) nb.animate([{ transform: nb.style.transform || `translate3d(${g.dir * g.w}px,0,0)` }, { transform: "translate3d(0px,0,0)" }], { duration: 170, easing: EASE });
+      if (nb) {
+        const b = nb.animate([{ transform: nb.style.transform || `translate3d(${g.dir * g.w}px,0,0)` }, { transform: "translate3d(0px,0,0)" }], { duration: 170, easing: EASE, fill: "forwards" });
+        anims.push(b);
+      }
+      swipeClearRef.current = () => {
+        for (const an of anims) {
+          try {
+            an.cancel();
+          } catch {
+            /* уже завершена */
+          }
+        }
+        if (contentRef.current) contentRef.current.style.transform = "";
+      };
     };
 
     const onTe = (e: TouchEvent) => {
@@ -1541,7 +1681,8 @@ export function Portal() {
         viewerOpen: viewerOk,
         viewerIndex: viewerOk ? s.viewerIndex : 0,
         productId: st?.productId ?? null,
-        view: st?.view ?? "catalog",
+        /* PHASE 2.4: легаси view:"upload" из истории — больше не раздел */
+        view: st?.view === "upload" ? "catalog" : (st?.view ?? "catalog"),
         searchQuery: st ? st.searchQuery : null,
         catCategory: st ? st.catCategory : null,
         catModel: st ? st.catModel : null,
@@ -1592,6 +1733,13 @@ export function Portal() {
       // bubble-фазы viewerOpen уже false, и без этой проверки портал сделал бы
       // ВТОРОЙ back (закрыл и товар). Пока корень pswp в DOM — Esc не наш.
       if (document.querySelector(".pswp")) return;
+      /* PHASE 2.4 §4.7: upload sheet — верхний слой: закрывается guard'ом
+         (discard/abort), sheet слушает portal:upload-close */
+      if (s.uploadOpen) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("portal:upload-close"));
+        return;
+      }
       if (searchOpen) {
         e.preventDefault();
         closeSearchPop();
@@ -1654,7 +1802,13 @@ export function Portal() {
               <button
                 key={key}
                 type="button"
-                onClick={(e) => (key === "catalog" ? goCatalog(e.currentTarget) : usePortal.getState().setView(key))}
+                onClick={(e) =>
+                  key === "catalog"
+                    ? goCatalog(e.currentTarget)
+                    : key === "upload"
+                      ? openUploadSheet() /* PHASE 2.4 §4.3: sheet, не раздел */
+                      : usePortal.getState().setView(key)
+                }
                 className={cn("side-link", view === key && !productId && "is-on")}
               >
                 <Icon size={18} strokeWidth={2.1} />
@@ -1901,6 +2055,13 @@ export function Portal() {
                         return;
                       }
 
+                      /* PHASE 2.4 §4.3: «Загрузка» — action-opener glass sheet:
+                         committed view НЕ меняется, page swipe не ломается */
+                      if (key === "upload") {
+                        openUploadSheet();
+                        return;
+                      }
+
                       usePortal
                         .getState()
                         .setView(key);
@@ -1993,6 +2154,10 @@ export function Portal() {
       </div>
 
       <PhotoViewer />
+
+      {/* PHASE 2.4 §4: Upload — glass sheet (mobile) / dialog (desktop).
+          Сам гейтится store.uploadOpen; live-цикл внутри компонента. */}
+      <UploadSheet />
     </div>
   );
 
