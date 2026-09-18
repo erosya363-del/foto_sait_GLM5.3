@@ -301,13 +301,34 @@ export function Portal() {
   const bubbleRef = useRef<HTMLSpanElement | null>(null);
   const itemRefs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
 
-  /* Состояние пружины (refs, НЕ setState — ноль ререндеров в кадре):
-     x/velocity — единственная линза; target — куда едет. */
+  /* Состояние пружин (refs, НЕ setState — ноль ререндеров в кадре).
+     PHASE 2.3: ТРИ пружины в ОДНОМ rAF (§1.11/1.12 — не хаотично, а
+     разделённые) + bridge-фактор:
+       position (k=150, d=23) — полёт линзы;
+       width    (k=170, d=25) — ширина: single ↔ bridge без скачков;
+       press    (k=220, d=26) — вспухание 0..1 (высота выше панели, спекуляр);
+       bridge   0..1 — «сила растяжения» sin(PI·t) — спекуляр/стекло. */
   const dropAnim = useRef({
     x: 0,
     velocity: 0,
 
     target: 0,
+
+    w: 0,
+    wv: 0,
+    targetW: 0,
+
+    p: 0,
+    pv: 0,
+    targetP: 0,
+
+    bridge: 0,
+    bridgeTarget: 0,
+
+    /* Кэш последней записи в style — пропуск идентичных записей */
+    lastW: -1,
+    lastP: -1,
+    lastBridge: -1,
 
     raf: 0,
     last: 0,
@@ -315,12 +336,20 @@ export function Portal() {
     initialized: false,
   });
 
-  /* Точки управления линзой для эффектов: drive — установить цель/ширину,
+  /* Точки управления линзой для эффектов: drive — цель/ширина,
+     press — вспухание (pointerdown/up), bridge — сила растяжения,
      hide — погасить (открыт товар). Заполняются контроллером. */
   const drivePillRef =
     useRef<(x: number, width: number, animate?: boolean) => void>(() => {});
 
+  const pressPillRef = useRef<(on: boolean) => void>(() => {});
+
+  const bridgePillRef = useRef<(b: number) => void>(() => {});
+
   const hidePillRef = useRef<() => void>(() => {});
+
+  /* PHASE 2.3 §12: отмена активного жеста панели (например, открылся поиск) */
+  const cancelPanelGestureRef = useRef<() => void>(() => {});
 
   const reducedMotion = useRef(false);
 
@@ -356,19 +385,41 @@ export function Portal() {
       }
     };
 
+    /* PHASE 2.3: ЕДИНСТВЕННОЕ место записи геометрии линзы (supplement F:
+       никакого wrapper-слоя — translate3d + scaleX + scaleY объединены).
+       scaleX = 1 + velocity stretch (коэфф. 0.0012, потолок 0.14 — supplement C);
+       scaleY = rest 0.90 (54px внутри панели 64px) → press 1.20 (72px — линза
+       выпирает выше/ниже панели, §1.3/D), объём сохраняется от velocity. */
     const render = () => {
       const stretch = Math.min(
-        Math.abs(a.velocity) * 0.0009,
-        0.12
+        Math.abs(a.velocity) * 0.0012,
+        0.14
       );
 
       const scaleX = 1 + stretch;
-      const scaleY = 1 - stretch * 0.24;
+      const scaleY = (0.9 + 0.3 * a.p) * (1 - stretch * 0.24);
 
       bubble.style.transform =
         `translate3d(${a.x.toFixed(2)}px,0,0) ` +
         `scaleX(${scaleX.toFixed(4)}) ` +
         `scaleY(${scaleY.toFixed(4)})`;
+
+      /* width-пружина: пишем только при изменении (layout — только у линзы) */
+      if (Math.abs(a.w - a.lastW) > 0.05) {
+        a.lastW = a.w;
+        bubble.style.width = `${a.w.toFixed(2)}px`;
+      }
+
+      /* Спекуляр линзы реагирует на давление (supplement H):
+         rest 0.55 → press +0.18 → bridge-центр +0.06 — см. .pill-bubble::after */
+      if (Math.abs(a.p - a.lastP) > 0.004) {
+        a.lastP = a.p;
+        bubble.style.setProperty("--lens-press", a.p.toFixed(3));
+      }
+      if (Math.abs(a.bridge - a.lastBridge) > 0.004) {
+        a.lastBridge = a.bridge;
+        bubble.style.setProperty("--lens-bridge", a.bridge.toFixed(3));
+      }
     };
 
     const settle = (x: number) => {
@@ -377,6 +428,14 @@ export function Portal() {
       a.x = x;
       a.target = x;
       a.velocity = 0;
+
+      a.w = a.targetW;
+      a.wv = 0;
+
+      a.p = a.targetP;
+      a.pv = 0;
+
+      a.bridge = a.bridgeTarget;
 
       a.last = 0;
 
@@ -395,7 +454,7 @@ export function Portal() {
       a.last = time;
 
       /*
-       * Main lens:
+       * Position spring (k=150, d=23):
        * более спокойная пружина.
        * Не должна перескакивать цель.
        */
@@ -406,11 +465,40 @@ export function Portal() {
       a.velocity += mainForce * dt;
       a.x += a.velocity * dt;
 
+      /*
+       * Width spring (k=170, d=25) — PHASE 2.3 §1.12:
+       * single → bridge → single без прямоугольных скачков ширины.
+       */
+      const widthForce =
+        (a.targetW - a.w) * 170 -
+        a.wv * 25;
+
+      a.wv += widthForce * dt;
+      a.w += a.wv * dt;
+
+      /*
+       * Press spring (k=220, d=26) — PHASE 2.3 §1.5/D:
+       * вспухание на pointerdown, пружинный сбор на release.
+       */
+      const pressForce =
+        (a.targetP - a.p) * 220 -
+        a.pv * 26;
+
+      a.pv += pressForce * dt;
+      a.p += a.pv * dt;
+
+      /* bridge: геометрия sin(PI·t) уже плавная — досглаживаем смену сегмента */
+      a.bridge += (a.bridgeTarget - a.bridge) * Math.min(1, dt * 20);
+
       render();
 
       const settled =
         Math.abs(a.target - a.x) < 0.25 &&
-        Math.abs(a.velocity) < 2;
+        Math.abs(a.velocity) < 2 &&
+        Math.abs(a.targetW - a.w) < 0.25 &&
+        Math.abs(a.wv) < 2 &&
+        Math.abs(a.targetP - a.p) < 0.005 &&
+        Math.abs(a.pv) < 0.4;
 
       if (settled) {
         settle(a.target);
@@ -420,17 +508,29 @@ export function Portal() {
       a.raf = requestAnimationFrame(step);
     };
 
+    const ensureRaf = () => {
+      if (!a.raf) {
+        a.last = 0;
+        a.raf = requestAnimationFrame(step);
+      }
+    };
+
     drivePillRef.current = (
       x: number,
       width: number,
       animate = true
     ) => {
-      bubble.style.width = `${width}px`;
+      /* PHASE 2.3: ширина идёт через ПРУЖИНУ (targetW), а не мгновенной
+         записью — переходы single ↔ bridge пружинные (§1.12). */
+      a.targetW = width;
 
       bubble.style.opacity = "1";
 
       if (!a.initialized) {
         a.initialized = true;
+        a.w = width;
+        a.lastW = width;
+        bubble.style.width = `${width.toFixed(2)}px`;
         settle(x);
         return;
       }
@@ -461,10 +561,27 @@ export function Portal() {
 
       goo.classList.add("is-live");
 
-      if (!a.raf) {
-        a.last = 0;
-        a.raf = requestAnimationFrame(step);
-      }
+      ensureRaf();
+    };
+
+    /* PHASE 2.3 §1.5/D: вспухание линзы (press). При reduce-motion
+       геометрия не анимируется — остаётся только отклик контента. */
+    pressPillRef.current = (on: boolean) => {
+      if (reducedMotion.current) return;
+
+      a.targetP = on ? 1 : 0;
+
+      if (on) goo.classList.add("is-live");
+
+      ensureRaf();
+    };
+
+    /* PHASE 2.3 §B.3: сила растяжения стекла (sin(PI·t)); подушку ширины
+       считает gesture, сюда приходит готовое значение 0..1 — для спекуляра */
+    bridgePillRef.current = (b: number) => {
+      a.bridgeTarget = b;
+
+      ensureRaf();
     };
 
     hidePillRef.current = () => {
@@ -474,6 +591,14 @@ export function Portal() {
       goo.classList.remove("is-live");
 
       a.velocity = 0;
+      a.wv = 0;
+      a.pv = 0;
+      a.targetP = 0;
+      a.p = 0;
+      a.lastP = -1;
+      a.bridgeTarget = 0;
+      a.bridge = 0;
+      a.lastBridge = -1;
       a.last = 0;
     };
 
@@ -578,29 +703,69 @@ export function Portal() {
     window.history.replaceState(snapshot(), "");
   }, []);
 
-  /* ── PHASE2 B2: gesture на панели — «живая линза» следует за пальцем ──
-     ТЗ 2.4/2.5/2.6: VISUAL PREVIEW (линза едет за пальцем на пружине)
-     отделён от COMMITTED VIEW (раздел меняется ТОЛЬКО на pointerup).
-     Тап (|dx| ≤ 8px) не перехватывается — обычный click кнопки.
-     При drag click соседних кнопок гасится capture-листенером на фазе
-     захвата (React-делегат корня срабатывает позже — на bubble).
-     PHASE 2.1: PREVIEW следует за РЕАЛЬНЫМ fingerX НЕПРЕРЫВНО (линза
-     центрируется под пальцем, без квантования по вкладкам); nearestItem
-     вызывается ТОЛЬКО на pointerup для commit. Ширина линзы на время
-     жеста зафиксирована (без дребезга ширины между вкладками). */
+  /* ── PHASE2 B2 + PHASE 2.3: gesture панели — ЕДИНАЯ физическая линза ──
+     ТЗ 2.4–2.6: VISUAL PREVIEW (линза следует за пальцем) отделён от
+     COMMITTED VIEW (раздел меняется ТОЛЬКО на pointerup); тап (|dx| ≤ 8px)
+     не перехватывается. PHASE 2.3 добавляет физику стекла:
+       PRESS     — pointerdown: линза вспухает (height 54→72px, width ×1.10),
+                   content сжимается, мягкий haptic ОДНОВРЕМЕННО с визуалом;
+       DRAG      — линза непрерывно следует за реальным clientX;
+       BRIDGE    — между соседними вкладками ОДНА масса накрывает ОБЕ:
+                   TWO-PHASE EDGE STRETCH (supplement B) — ведущая кромка
+                   тянется к цели, задняя догоняет после середины сегмента;
+                   bridge = sin(PI·t) — подушка ширины + спекуляр;
+       SETTLE    — release: commit/settleBack, сбор к одной вкладке;
+                   cancel/pointercancel — полный возврат без изменений.
+     is-lens-covered = вкладки, чьи центры накрыты целевой массой стекла
+     (обновляется только при СМЕНЕ пары); is-on НЕ меняется до commit.
+     Пересечение центра вкладки = смена anchor + ОДИН playStep (§5.2 B).
+     Ноль React-state в кадре: только refs/классы/пружины (§2.4). */
   useEffect(() => {
     const shell = shellRef.current;
     if (!shell) return;
 
     type Hit = { key: View; el: HTMLButtonElement; dist: number };
+    type TabGeo = { key: View; left: number; width: number; right: number; center: number };
+
     let phase: "idle" | "tracking" | "dragging" = "idle";
     let startX = 0;
     let pointerId = -1;
-    /* Снимок жеста: ширина линзы (ширина активной вкладки) и левая кромка
-       shell в viewport-координатах — считываются ОДИН раз при входе в drag,
-       не на каждый pointermove (никаких layout-чтений в цикле жеста). */
-    let dragW = 56;
+    /* Левая кромка shell в viewport-координатах — ОДИН layout-чтение
+       при входе в drag, дальше только математика (§15/2.4). */
     let dragLeft = 0;
+
+    /* Снимок геометрии вкладок — ОДИН раз на pointerdown; без layout-чтений
+       в цикле жеста. */
+    let geo: TabGeo[] = [];
+    let anchorIdx = 0;            // вкладка, к которой «прикреплена» линза
+    let coveredKeys: View[] = []; // текущие is-lens-covered
+
+    const snapshotGeo = (): TabGeo[] => {
+      const list: TabGeo[] = [];
+      for (const [key, el] of Object.entries(itemRefs.current) as Array<[View, HTMLButtonElement | null]>) {
+        if (!el) continue;
+        const left = el.offsetLeft;
+        const width = el.offsetWidth;
+        list.push({ key, left, width, right: left + width, center: left + width / 2 });
+      }
+      list.sort((m, n) => m.left - n.left);
+      return list;
+    };
+
+    /* Зона вкладки = область ближе к её центру (границы — середины между
+       центрами) — та же квантизация, что у commit через nearestItem. */
+    const zoneAt = (fx: number): number => {
+      let best = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < geo.length; i++) {
+        const d = Math.abs(fx - geo[i].center);
+        if (d < bestDist) {
+          bestDist = d;
+          best = i;
+        }
+      }
+      return best;
+    };
 
     const nearestItem = (clientX: number): Hit | null => {
       let best: Hit | null = null;
@@ -613,10 +778,29 @@ export function Portal() {
       return best;
     };
 
+    /* Обновление is-lens-covered ТОЛЬКО при реальной смене пары (§2.4) */
+    const setCovered = (keys: View[]) => {
+      const same =
+        keys.length === coveredKeys.length &&
+        keys.every((k) => coveredKeys.includes(k));
+      if (same) return;
+      for (const [key, el] of Object.entries(itemRefs.current) as Array<[View, HTMLButtonElement | null]>) {
+        if (!el) continue;
+        const was = coveredKeys.includes(key);
+        const now = keys.includes(key);
+        if (was !== now) el.classList.toggle("is-lens-covered", now);
+      }
+      coveredKeys = keys;
+    };
+
     const stopDragClick = (e: MouseEvent) => {
       if (phase !== "dragging") return;
       e.preventDefault();
       e.stopImmediatePropagation();
+    };
+
+    const unbindClickGuard = () => {
+      shell.removeEventListener("click", stopDragClick, { capture: true });
     };
 
     const settleBack = () => {
@@ -627,12 +811,111 @@ export function Portal() {
       }
     };
 
+    /* Полная сборка стекла после release/cancel (§4/K-16: ничего «залипшего») */
+    const clearGestureVisual = () => {
+      setCovered([]);
+      bridgePillRef.current(0);
+      pressPillRef.current(false);
+    };
+
+    /* TWO-PHASE EDGE STRETCH (supplement B.1/B.2): физика «тянущейся капли».
+       t ∈ [0,1] — позиция пальца между ЦЕНТРАМИ from/to; dir — сторона цели.
+       Фаза 1 (t<0.5): ведущая кромка тянется к цели, задняя держит исходную.
+       Фаза 2 (t≥0.5): задняя кромка догоняет, масса собирается вокруг цели.
+       ease — easeOutCubic; bridge = sin(PI·t) — подушка ширины (6px) и спекуляр.
+       Ширина: lerp(компактная × press 1.10, полная масса моста, bridge). */
+    const applySegment = (fromIdx: number, toIdx: number, dir: 1 | -1, fx: number) => {
+      const from = geo[fromIdx];
+      const to = geo[toIdx];
+      const span = Math.abs(to.center - from.center);
+      const raw = span > 1 ? Math.abs(fx - from.center) / span : 0;
+      const t = Math.min(1, Math.max(0, raw));
+      const ease = (x: number) => 1 - Math.pow(1 - x, 3);
+
+      let targetLeft: number;
+      let targetRight: number;
+      if (dir === 1) {
+        if (t < 0.5) {
+          targetLeft = from.left;
+          targetRight = from.right + (to.right - from.right) * ease(t * 2);
+        } else {
+          targetLeft = from.left + (to.left - from.left) * ease((t - 0.5) * 2);
+          targetRight = to.right;
+        }
+      } else {
+        if (t < 0.5) {
+          targetLeft = from.left + (to.left - from.left) * ease(t * 2);
+          targetRight = from.right;
+        } else {
+          targetLeft = to.left;
+          targetRight = from.right + (to.right - from.right) * ease((t - 0.5) * 2);
+        }
+      }
+
+      const bridgeS = Math.sin(Math.PI * t);
+      const pad = 6 * bridgeS; /* bridgePadding, ТЗ §1.8: 4–10px */
+      targetLeft -= pad / 2;
+      targetRight += pad / 2;
+
+      const baseW = from.width + (to.width - from.width) * t;
+      const pressW = baseW * 1.1; /* press width scale, ТЗ §1.5: ×1.08–1.14 */
+      const fullBridge =
+        Math.max(from.right, to.right) - Math.min(from.left, to.left) + 6;
+      const targetW = pressW + (fullBridge - pressW) * bridgeS;
+
+      drivePillRef.current(targetLeft, targetW, true);
+      bridgePillRef.current(bridgeS);
+
+      /* Накрыты вкладки, чьи ЦЕНТРЫ внутри целевой массы стекла (G.1:
+         «стекло физически прошло поверх объектов»); is-on не трогаем. */
+      const cov: View[] = [];
+      for (const tab of geo) {
+        if (tab.center >= targetLeft && tab.center <= targetRight) cov.push(tab.key);
+      }
+      if (cov.length === 0) cov.push(geo[zoneAt(fx)].key);
+      setCovered(cov);
+    };
+
+    const updateLens = (fx: number) => {
+      if (!geo.length) return;
+      /* Пересечение центра вкладки = смена anchor = ОДИН playStep (§5.2 B) */
+      const z = zoneAt(fx);
+      if (z !== anchorIdx) {
+        anchorIdx = z;
+        playStep();
+      }
+      const a0 = geo[anchorIdx];
+      if (fx > a0.center + 1 && anchorIdx < geo.length - 1) {
+        applySegment(anchorIdx, anchorIdx + 1, 1, fx);
+      } else if (fx < a0.center - 1 && anchorIdx > 0) {
+        applySegment(anchorIdx, anchorIdx - 1, -1, fx);
+      } else {
+        /* В «ядре» вкладки — компактная линза с press-инфляцией */
+        drivePillRef.current(a0.left, a0.width * 1.1, true);
+        bridgePillRef.current(0);
+        setCovered([a0.key]);
+      }
+    };
+
     const onDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       if (usePortal.getState().productId) return; /* товар открыт — линза скрыта */
+      /* Кнопка поиска — свой отклик: press/drag линзы на ней не начинаем */
+      if ((e.target as Element | null)?.closest?.(".pill-search")) return;
       phase = "tracking";
       startX = e.clientX;
       pointerId = e.pointerId;
+      geo = snapshotGeo();
+      anchorIdx = zoneAt(e.clientX - shell.getBoundingClientRect().left);
+      coveredKeys = [];
+      /* PRESS: визуал + хаптика ОДНОВРЕМЕННО (§1.5/I) */
+      pressPillRef.current(true);
+      playTick("press");
+      const tab = geo[anchorIdx];
+      if (tab) {
+        drivePillRef.current(tab.left, tab.width * 1.1, true);
+        setCovered([tab.key]);
+      }
     };
 
     const onMove = (e: PointerEvent) => {
@@ -640,41 +923,40 @@ export function Portal() {
       const dx = e.clientX - startX;
       if (phase === "tracking" && Math.abs(dx) > 8) {
         phase = "dragging";
-        dragW = itemRefs.current[usePortal.getState().view]?.offsetWidth || 56;
         dragLeft = shell.getBoundingClientRect().left;
         shell.addEventListener("click", stopDragClick, { capture: true });
       }
       if (phase !== "dragging") return;
-      /* PHASE 2.1: НЕПРЕРЫВНЫЙ preview — цель пружины = РЕАЛЬНЫЙ палец
-         (линза центрируется под clientX), НЕ ближайшая вкладка. nearestItem
-         НЕ вызывается здесь вовсе — только в finish() на pointerup. */
-      const x = Math.min(
-        Math.max(e.clientX - dragLeft - dragW / 2, 0),
-        Math.max(0, shell.clientWidth - dragW)
-      );
-      drivePillRef.current(x, dragW, true);
+      /* НЕПРЕРЫВНЫЙ preview за РЕАЛЬНЫМ пальцем (PHASE 2.1 сохранён);
+         nearestItem вызывается ТОЛЬКО в finish() на pointerup. */
+      updateLens(e.clientX - dragLeft);
     };
 
     const finish = (clientX: number) => {
       const wasDragging = phase === "dragging";
+      const wasTracking = phase === "tracking";
       phase = "idle";
-      if (!wasDragging) return;
-      const hit = nearestItem(clientX);
-      const s = usePortal.getState();
-      if (hit && hit.key !== s.view && !s.productId) {
-        /* COMMIT: только на отпускании (ТЗ 2.5). Эффект [view] довезёт линзу. */
-        usePortal.getState().setView(hit.key);
-        playTick("tap");
-        window.setTimeout(() => {
-          shell.removeEventListener("click", stopDragClick, { capture: true });
-        }, 0);
+      /* §4: линза НИКОГДА не остаётся увеличенной/растянутой/над панелью */
+      clearGestureVisual();
+      unbindClickGuard();
+      if (wasDragging) {
+        const hit = nearestItem(clientX);
+        const s = usePortal.getState();
+        if (hit && hit.key !== s.view && !s.productId) {
+          /* COMMIT: только на отпускании (ТЗ 2.5). Эффект [view] довезёт линзу. */
+          usePortal.getState().setView(hit.key);
+          playTick("tap"); /* commit haptic (§5.2 C) */
+          return;
+        }
+        /* Отпустил между вкладками / на текущей — плавный settle к активной */
+        settleBack();
         return;
       }
-      /* Отпустил между вкладками / на текущей — линза плавно settle к ближайшей */
-      settleBack();
-      window.setTimeout(() => {
-        shell.removeEventListener("click", stopDragClick, { capture: true });
-      }, 0);
+      if (wasTracking) {
+        /* Простой тап: press соберётся пружиной; коммит сделает click
+           кнопки (он НЕ подавлен) — двойного отклика нет (§5.3). */
+        settleBack();
+      }
     };
 
     const onUp = (e: PointerEvent) => {
@@ -683,24 +965,44 @@ export function Portal() {
     };
     const onCancel = (e: PointerEvent) => {
       if (e.pointerId !== pointerId && pointerId !== -1) return;
-      const wasDragging = phase === "dragging";
+      const wasActive = phase !== "idle";
       phase = "idle";
-      if (wasDragging) settleBack();
-      shell.removeEventListener("click", stopDragClick, { capture: true });
+      if (wasActive) {
+        clearGestureVisual();
+        settleBack();
+      }
+      unbindClickGuard();
     };
 
     shell.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove, { passive: true });
     window.addEventListener("pointerup", onUp, { passive: true });
     window.addEventListener("pointercancel", onCancel, { passive: true });
+
+    /* PHASE 2.3 §12: отмена активного жеста извне (открылся поиск и т.п.) */
+    cancelPanelGestureRef.current = () => {
+      if (phase === "idle") return;
+      phase = "idle";
+      clearGestureVisual();
+      settleBack();
+      unbindClickGuard();
+    };
+
     return () => {
       shell.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
-      shell.removeEventListener("click", stopDragClick, { capture: true });
+      unbindClickGuard();
     };
   }, []);
+
+  /* PHASE 2.3 §12: если поиск открывается ВО ВРЕМЯ press/drag панели
+     (второй палец, «/» на десктопе) — жест корректно отменяется ДО морфа:
+     под исчезающей панелью не остаётся вспухшей линзы и covered-классов. */
+  useEffect(() => {
+    if (searchOpen) cancelPanelGestureRef.current();
+  }, [searchOpen]);
 
   /* ── PHASE2 B3: горизонтальная навигация по вкладкам ──
    Направление переходов — по индексам VIEW_ORDER (3.1). Интерактивный
@@ -1475,7 +1777,9 @@ export function Portal() {
           #pill-uneven (feTurbulence + feDisplacementMap) УДАЛЁН: панель не
           должна собирать ЧЕТЫРЕ стеклянных механизма одновременно
           (backdrop + displacement + goo + градиенты). Фильтр НЕ в backdrop —
-          расслоения стекла на Android нет (урок P0.2). */}
+          расслоения стекла на Android нет (урок P0.2).
+          PHASE 2.3: область фильтра РАСШИРЕНА (y -45% / h 190%) — вспухшая
+          линза (выше/ниже панели) не клипается канвой фильтра. */}
       <svg
         aria-hidden="true"
         focusable="false"
@@ -1486,10 +1790,10 @@ export function Portal() {
         <defs>
           <filter
             id="pill-goo"
-            x="-8%"
-            y="-18%"
-            width="116%"
-            height="136%"
+            x="-12%"
+            y="-45%"
+            width="124%"
+            height="190%"
             colorInterpolationFilters="sRGB"
           >
             <feGaussianBlur
@@ -1515,9 +1819,11 @@ export function Portal() {
       </svg>
 
       {/* Нижняя навигация — плавающая «пилюля» Liquid Glass. ОДИН shell:
-          GLASS SHELL → CAUSTICS → LIQUID LENS (goo, ПОД кнопками) → RIM →
-          ICONS+LABELS. Линза живёт ВНУТРИ панели (6px от кромки, не выпирает),
-          кнопки ВСЕГДА выше неё. Search Mode (searchOpen) и клавиатура
+          GEOMETRY SHELL (overflow: visible) → GLASS SURFACE (клип стекла) →
+          CAUSTICS → LIQUID LENS (goo, ПОД кнопками; при press МОЖЕТ выходить
+          за 64px панели — PHASE 2.3 §1.4/E) → RIM → ICONS+LABELS.
+          В покое линза внутри панели, при касании — вспухает.
+          Кнопки ВСЕГДА выше неё. Search Mode (searchOpen) и клавиатура
           (html.kb-open) → панель скрыта display:none, без анимаций.
           Скрытых form-controls (.pill-haptic) в панели НЕТ и НЕ возвращать. */}
       <nav
@@ -1537,11 +1843,16 @@ export function Portal() {
             ref={shellRef}
             className="pill-shell"
           >
-            {/* Фоновая оптика: статичные каустики (без SVG displacement) */}
-            <span
-              className="pill-caustic"
-              aria-hidden="true"
-            />
+            {/* PHASE 2.3 §1.4/E: РЕАЛЬНОЕ стекло переехало в .pill-surface —
+                единственный слой с overflow:hidden (клип стекла); сам shell
+                НЕ клипит линзу — она может выходить выше/ниже панели */}
+            <div className="pill-surface">
+              {/* Фоновая оптика: статичные каустики (без SVG displacement) */}
+              <span
+                className="pill-caustic"
+                aria-hidden="true"
+              />
+            </div>
 
             {/* Жидкая линза ПОД кнопками: ОДНА капля (PHASE 2.2: призрак
                 удалён — не успевал за основной линзой).
@@ -1597,13 +1908,18 @@ export function Portal() {
                       playTick("tap");
                     }}
                   >
-                    <Icon
-                      size={21}
-                      strokeWidth={2.05}
-                    />
+                    {/* PHASE 2.3 §2/G: сжимается КОНТЕНТ под давлением стекла
+                        (is-lens-covered), не сама кнопка — hit-area 44px целая,
+                        transform кнопки не конфликтует с nav-pulse/жестом */}
+                    <span className="pill-item-content">
+                      <Icon
+                        size={21}
+                        strokeWidth={2.05}
+                      />
 
-                    <span className="pill-label">
-                      {short}
+                      <span className="pill-label">
+                        {short}
+                      </span>
                     </span>
                   </button>
                 );
