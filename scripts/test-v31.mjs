@@ -107,10 +107,12 @@ const y1 = await pillY();
 await page.locator(".pill-shell .pill-item").nth(1).click();
 await page.waitForTimeout(650);
 const y2 = await pillY();
-await page.locator(".pill-shell .pill-item").nth(2).click();
+/* PHASE 2.4: nth(2) = «Загрузка» — action-sheet (не раздел); для проверки
+   координаты переключаем на nth(3) = Админ */
+await page.locator(".pill-shell .pill-item").nth(3).click();
 await page.waitForTimeout(650);
 const y3 = await pillY();
-ok("Y панели неизменен при Каталог→Остатки→Загрузка", y1 === y2 && y2 === y3, `${y1}/${y2}/${y3}`);
+ok("Y панели неизменен при Каталог→Остатки→Админ", y1 === y2 && y2 === y3, `${y1}/${y2}/${y3}`);
 const boxes = await page.evaluate(() =>
   [...document.querySelectorAll(".pill-shell .pill-item")].map((el) => {
     const r = el.getBoundingClientRect();

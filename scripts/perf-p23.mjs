@@ -173,10 +173,11 @@ console.log("\n── B. PANEL DRAG (press + два моста + release), по 
       }, { x, y: cy });
       await page.waitForTimeout(55);
     }
-    // release
+    // release (PHASE 2.4: НЕ на «Загрузке» — теперь это sheet; отпускаем
+    // чуть после Остатков → settle назад, мосты отыграны полностью)
     await page.evaluate(({ x, y }) => {
       window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: x, clientY: y, buttons: 0 }));
-    }, { x: upload.cx, y: cy });
+    }, { x: stock.cx + (upload.cx - stock.cx) * 0.22, y: cy });
     await page.waitForTimeout(450);
   };
 

@@ -126,17 +126,23 @@ const results = { sections: {}, viewports: {}, back: {}, offline: null, upload: 
   const splashGone = await page.evaluate(() => !document.querySelector(".boot-bg"));
   if (!splashGone) add("P1", "Сплэш", "сплэш не исчез за 2.2 c", "зависли таймеры", "блокирует контент", "проверить setDone", "средний");
 
-  // переходы между разделами — сплэш не должен появляться
+  // переходы между разделами — сплэш не должен появляться.
+  // PHASE 2.4: «Загрузка» открывает sheet — закрываем его сразу (чистое состояние),
+  // чтобы не блокировать следующие клики.
   const sections = [
-    ["catalog", 'nav.pill-nav button:has-text("Каталог")'],
-    ["stock", 'nav.pill-nav button:has-text("Остатки")'],
-    ["upload", 'nav.pill-nav button:has-text("Загрузка")'],
-    ["admin", 'nav.pill-nav button:has-text("Админ")'],
+    ["catalog", 'nav.pill-nav button:has-text("Каталог")', false],
+    ["stock", 'nav.pill-nav button:has-text("Остатки")', false],
+    ["upload", 'nav.pill-nav button:has-text("Загрузка")', true],
+    ["admin", 'nav.pill-nav button:has-text("Админ")', false],
   ];
   let splashReappear = false;
-  for (const [name, sel] of sections) {
+  for (const [name, sel, isSheet] of sections) {
     await page.click(sel);
     await page.waitForTimeout(650);
+    if (isSheet) {
+      await page.click('[aria-label="Закрыть загрузку"]').catch(() => {});
+      await page.waitForTimeout(500);
+    }
     const s = await page.evaluate(() => !!document.querySelector(".boot-bg"));
     if (s) splashReappear = true;
   }
@@ -151,6 +157,8 @@ const results = { sections: {}, viewports: {}, back: {}, offline: null, upload: 
 
   console.log("\n══ PASS B: разделы (390 mobile) ══");
   for (const [name, sel] of sections) {
+    /* PHASE 2.4: upload — не раздел, а sheet; его UI проверен в PASS H */
+    if (name === "upload") { console.log("  (i) upload: пропущен — glass sheet (см. PASS H)"); continue; }
     await page.click(sel);
     await page.waitForTimeout(900);
     // админ: открыть все табы
@@ -173,6 +181,7 @@ const results = { sections: {}, viewports: {}, back: {}, offline: null, upload: 
   console.log("\n══ PASS E: пилюля на всех разделах ══");
   const pillBySection = {};
   for (const [name, sel] of sections) {
+    if (name === "upload") continue; /* PHASE 2.4: sheet — пилюля не меняется */
     await page.click(sel);
     await page.waitForTimeout(600);
     pillBySection[name] = await page.evaluate(PILL);
@@ -212,45 +221,49 @@ const results = { sections: {}, viewports: {}, back: {}, offline: null, upload: 
   else console.log(`  (i) offline: bodyLen=${off.bodyLen}, splash=${off.hasSplash}`);
   await ctx.setOffline(false);
 
-  console.log("\n══ PASS H: upload 2 фото ══");
+  console.log("\n══ PASS H: upload 2 фото (PHASE 2.4: glass sheet, 3 шага) ══");
   try {
     await page.goto(BASE, { waitUntil: "networkidle" }).catch(() => {});
     await page.waitForTimeout(1400);
     await page.click('nav.pill-nav button:has-text("Загрузка")');
-    await page.waitForTimeout(800);
-    // реальный JPEG с диска — sharp его примет
-    const realImg = "public/catalog/cover-1.jpg";
-    await page.setInputFiles('input[type="file"]', [
-      { name: "audit-a.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(realImg) },
-      { name: "audit-b.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(realImg) },
-    ]);
-    await page.waitForTimeout(400);
-    const previews = await page.locator("text=Выбрано 2 из 10").count();
-    // выбрать категорию/модель
-    const cats = page.locator("select.field").first();
+    await page.waitForTimeout(900);
+    /* Шаг 1: категория + модель → Далее */
+    const cats = page.locator("[data-upload-sheet] select.field").first();
     const catOptions = await cats.locator("option").allTextContents();
     if (catOptions.length > 1) {
       await cats.selectOption({ index: 1 });
       await page.waitForTimeout(300);
-      const modelSel = page.locator("select.field").nth(1);
+      const modelSel = page.locator("[data-upload-sheet] select.field").nth(1);
       const modelOptions = await modelSel.locator("option").count();
       if (modelOptions > 1) {
         await modelSel.selectOption({ index: 1 });
         await page.waitForTimeout(200);
-        const submitBtn = page.locator('button:has-text("Загрузить 2 фото")');
+        await page.click('[data-upload-sheet] button:has-text("Далее")'); // шаг 2
+        await page.waitForTimeout(400);
+        await page.click('[data-upload-sheet] button:has-text("Далее")'); // шаг 3 (файлы)
+        await page.waitForTimeout(400);
+        // реальный JPEG с диска — sharp его примет
+        const realImg = "public/catalog/cover-1.jpg";
+        await page.setInputFiles('[data-upload-sheet] input[type="file"]', [
+          { name: "audit-a.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(realImg) },
+          { name: "audit-b.jpg", mimeType: "image/jpeg", buffer: fs.readFileSync(realImg) },
+        ]);
+        await page.waitForTimeout(400);
+        const previews = await page.locator("text=Выбрано 2 из 10").count();
+        const submitBtn = page.locator('[data-upload-sheet] button:has-text("Загрузить 2 фото")');
         if (await submitBtn.count()) {
           const [resp] = await Promise.all([
             page.waitForResponse((r) => r.url().includes("/api/upload"), { timeout: 20000 }).catch(() => null),
             submitBtn.click(),
           ]);
           await page.waitForTimeout(2500);
-          const okScreen = await page.locator('h2:has-text("фото загружено")').count();
+          const okScreen = await page.locator('[data-upload-sheet] h2:has-text("фото загружено")').count();
           results.upload = { previews: previews > 0, status: resp?.status() ?? null, okScreen: okScreen > 0, body: resp ? await resp.text().catch(() => "") : "" };
           if (resp && resp.status() >= 400) add("P0", "Upload", `POST /api/upload → ${resp.status()}`, "серверная ошибка", "фото не загружаются", "смотреть ответ/логи", "средний");
           else if (okScreen > 0) console.log("  ✓ upload: превью 2/10, ответ 2xx, экран успеха");
           else add("P1", "Upload", "после успешного POST нет экрана результата", "ответ не распознан", "пользователь не видит результат", "проверить обработку ответа", "низкий");
           // двойной тап по submit (кнопка задизейблена?)
-          const submitDisabled = await page.locator('button:has-text("Загружаем")').count();
+          const submitDisabled = await page.locator('[data-upload-sheet] button:has-text("Загружаем")').count();
           console.log(`  (i) состояние после: busyBtn=${submitDisabled}`);
         } else add("P1", "Upload", "кнопка «Загрузить 2 фото» не найдена/задизейблена", "валидация не прошла", "нельзя загрузить", "проверить select-ы", "низкий");
       } else add("P1", "Upload", "у выбранной категории нет моделей", "справочники пусты", "загрузка невозможна", "сид справочников", "низкий");

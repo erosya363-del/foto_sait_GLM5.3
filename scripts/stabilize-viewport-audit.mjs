@@ -66,6 +66,16 @@ async function gotoSection(page, name, vp, hasTouch) {
       }
     }
     await page.waitForTimeout(700);
+    /* PHASE 2.4: «Загрузка» — glass sheet, а не раздел: шапка не меняется,
+       sheet закрываем сразу (чистое состояние), чтобы не блокировать
+       следующие секции. */
+    const sheetOpen = await page.evaluate(() => Boolean(document.querySelector("[data-upload-sheet]")));
+    if (sheetOpen) {
+      const title2 = await page.evaluate(() => (document.querySelector("header")?.textContent || "").trim().slice(0, 30));
+      await page.click('[aria-label="Закрыть загрузку"]').catch(() => {});
+      await page.waitForTimeout(500);
+      return Boolean(title2);
+    }
     const title = await page.evaluate(() => (document.querySelector("header")?.textContent || "").trim().slice(0, 30));
     if (title.includes(name)) return true;
   }

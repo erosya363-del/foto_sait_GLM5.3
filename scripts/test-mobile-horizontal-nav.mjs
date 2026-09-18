@@ -117,13 +117,27 @@ async function runSuite(width, height, { video = false, compact = false } = {}) 
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForTimeout(900);
 
-  /* 1. Тап-переходы по порядку (3.1) */
+  /* 1. Тап-переходы по порядку (3.1).
+     PHASE 2.4: «Загрузка» — БОЛЬШЕ НЕ раздел: тап открывает glass sheet,
+     committed view не меняется. Порядок разделов: Каталог → Остатки → Админ. */
   await clickTab(page, "Остатки");
-  await clickTab(page, "Загрузка");
   await clickTab(page, "Админ");
   {
     const s = await stateOf(page);
-    ok("тап: Каталог→Остатки→Загрузка→Админ", s.view === "Админ", s.view);
+    ok("тап: Каталог→Остатки→Админ (upload исключён)", s.view === "Админ", s.view);
+  }
+  {
+    /* PHASE 2.4 §4.3: тап «Загрузка» открывает sheet, раздел не сбрасывается */
+    await page.locator('nav.pill-nav button:has-text("Загрузка")').click();
+    await page.waitForTimeout(600);
+    const s = await stateOf(page);
+    const sheet = await page.evaluate(() => Boolean(document.querySelector("[data-upload-sheet]")));
+    ok("тап Загрузка: sheet открыт", sheet);
+    ok("тап Загрузка: раздел остался Админ", s.view === "Админ", s.view);
+    await page.locator('[aria-label="Закрыть загрузку"]').click();
+    await page.waitForTimeout(500);
+    const closed = await page.evaluate(() => !document.querySelector("[data-upload-sheet]"));
+    ok("тап Загрузка: чистый sheet закрылся крестиком", closed);
   }
   await clickTab(page, "Каталог"); // backward (3.1: направление по индексам)
   {
@@ -147,14 +161,53 @@ async function runSuite(width, height, { video = false, compact = false } = {}) 
     ok("свайп: контент следует за пальцем (transform применён)", mid.contentTransform.includes("translate3d") && mid.contentTransform !== "translate3d(0px, 0, 0)" && mid.contentTransform !== "", mid.contentTransform);
     ok("свайп: раздел НЕ меняется до отпускания", mid.view === "Каталог", mid.view);
     ok("свайп: линза ушла от Каталога (общий progress, 3.9)", mid.bubbleCx !== null && mid.onCx !== null && mid.bubbleCx > mid.onCx + 15, `dbx=${mid.bubbleCx !== null && mid.onCx !== null ? (mid.bubbleCx - mid.onCx).toFixed(0) : "?"}`);
-    // доводим за порог 25% и отпускаем
+    // доводим за порог 25% и отпускаем — с rAF-детектором «повторного появления»
     for (let i = 1; i <= 6; i++) {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: Math.round(width * 0.25 - (width * 0.25) * (i / 6) * 0.6), y, id: 1 }] });
       await page.waitForTimeout(24);
     }
+    /* PHASE 2.4 §2: rAF-сэмплер на 1400 мс — ловим кадр, где inline transform
+       контента уже пуст, а старый view ещё смонтирован (та самая «вспышка
+       повторного появления»). fill:"forwards" держит кадры до коммита —
+       образца быть НЕ должно. */
+    const sampling = page
+      .evaluate(
+        () =>
+          new Promise((resolve) => {
+            const samples = [];
+            const t0 = performance.now();
+            const tick = () => {
+              const c = document.querySelector("[data-tab-swipe-content]");
+              const on = document.querySelector(".pill-item.is-on");
+              samples.push({
+                tr: c ? c.style.transform || "" : "gone",
+                view: on?.textContent?.trim() ?? null,
+                nb: document.querySelectorAll("[data-tab-swipe-neighbor]").length,
+              });
+              if (performance.now() - t0 < 1400) requestAnimationFrame(tick);
+              else resolve(samples);
+            };
+            requestAnimationFrame(tick);
+          })
+      )
+      .then((r) => {
+        globalThis.__swipeSamples = r;
+      });
+    await page.waitForTimeout(30); // сэмплер гарантированно стартовал
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await cdp.detach();
-    await page.waitForTimeout(650);
+    await page.waitForTimeout(1550);
+    await sampling;
+    const samples = globalThis.__swipeSamples || [];
+    const sawNew = samples.findIndex((s) => s.view === "Остатки");
+    const flashOld = sawNew >= 0 ? samples.slice(0, sawNew).some((s) => s.view === "Каталог" && s.tr === "") : false;
+    const flashEmpty = sawNew >= 0 ? samples.slice(0, sawNew).some((s) => s.view === "Каталог" && s.tr === "" && s.nb === 0) : false;
+    ok("нет кадра «пустой transform + старый view» (повторное появление)", !flashOld, `samples=${samples.length} flash=${flashOld}`);
+    ok("нет кадра «пустой экран» до коммита (блик-пауза)", !flashEmpty, `flashEmpty=${flashEmpty}`);
+    const targetIdx = samples.findIndex((s) => s.view === "Остатки");
+    const stableAfter = targetIdx >= 0 && samples.slice(targetIdx).every((s) => s.view === "Остатки");
+    ok("после коммита вид стабилен (без второго входа)", stableAfter);
+    globalThis.__swipeSamples = null;
     const s = await stateOf(page);
     ok("commit свайпа: раздел = Остатки", s.view === "Остатки", s.view);
     ok("после commit neighbor снят", s.neighbor === 0, `n=${s.neighbor}`);
@@ -238,9 +291,9 @@ async function runSuite(width, height, { video = false, compact = false } = {}) 
     }
   }
 
-  /* 10. Rapid taps ×6 */
+  /* 10. Rapid taps ×6 (PHASE 2.4: без «Загрузки» — это sheet) */
   if (!compact) {
-    const seq = ["Остатки", "Загрузка", "Каталог", "Админ", "Остатки", "Каталог"];
+    const seq = ["Остатки", "Админ", "Каталог", "Остатки", "Админ", "Каталог"];
     for (const l of seq) {
       await page.locator(`nav.pill-nav button:has-text("${l}")`).click({ delay: 10 });
       await page.waitForTimeout(95);

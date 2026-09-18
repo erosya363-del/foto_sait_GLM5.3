@@ -179,13 +179,11 @@ console.log("── 2. Линза внутри панели, под активн
   ok("ширина линзы = ширине пункта", Math.abs(g.bubble.width - g.active.width) < 3, `${g.bubble.width} vs ${g.active.width}`);
 }
 
-console.log("── 3. Быстрые переключения ×10 (ТЗ п.27) ──");
+console.log("── 3. Быстрые переключения ×10 (ТЗ п.27; PHASE 2.4: без «Загрузки») ──");
 {
   let teleportFree = true;
   for (let cycle = 1; cycle <= 10; cycle++) {
     await clickTabFast("Остатки");
-    await page.waitForTimeout(85);
-    await clickTabFast("Загрузка");
     await page.waitForTimeout(85);
     await clickTabFast("Админ");
     await page.waitForTimeout(85);
@@ -220,13 +218,26 @@ console.log("── 3. Быстрые переключения ×10 (ТЗ п.27)
   ok("requestfailed: 0", requestFailed.length === 0, JSON.stringify(requestFailed.slice(0, 3)));
 }
 
-console.log("── 4. Промежуточные вкладки + скриншоты (п.32) ──");
+console.log("── 4. Промежуточные вкладки + скриншоты (п.32; PHASE 2.4: sheet) ──");
 await clickTab("Остатки");
 await page.waitForTimeout(750);
 await page.screenshot({ path: join(SHOTS, "02-stock.png") });
+/* PHASE 2.4: тап «Загрузка» открывает glass sheet — раздел не меняется */
 await clickTab("Загрузка");
 await page.waitForTimeout(750);
-await page.screenshot({ path: join(SHOTS, "03-upload.png") });
+await page.screenshot({ path: join(SHOTS, "03-upload-sheet.png") });
+{
+  const s = await page.evaluate(() => ({
+    sheet: Boolean(document.querySelector("[data-upload-sheet]")),
+    on: document.querySelector(".pill-item.is-on")?.textContent?.trim() ?? null,
+  }));
+  ok("тап Загрузка: sheet открыт, раздел Остатки", s.sheet && s.on === "Остатки", JSON.stringify(s));
+  /* чистый sheet закрывается крестиком без подтверждения (§4.7) */
+  await page.locator('[aria-label="Закрыть загрузку"]').click();
+  await page.waitForTimeout(500);
+  const closed = await page.evaluate(() => !document.querySelector("[data-upload-sheet]"));
+  ok("чистый sheet закрылся сразу (без discard-confirm)", closed);
+}
 await clickTab("Админ");
 await page.waitForTimeout(750);
 await page.screenshot({ path: join(SHOTS, "04-admin.png") });
@@ -383,7 +394,7 @@ console.log("── 8. PH2-1: Listener churn (ТЗ 2.13) — 10 рендеров
       };
     }
   });
-  for (const label of ["Остатки", "Загрузка", "Админ", "Каталог", "Остатки", "Каталог"]) {
+  for (const label of ["Остатки", "Админ", "Каталог", "Остатки", "Админ", "Каталог"]) {
     await clickTabFast(label);
     await page.waitForTimeout(90);
   }
@@ -431,28 +442,29 @@ console.log("── 9. PH2-2: Gesture панели — preview за пальце
     ok("preview: линза отошла от Каталога за пальцем", mid.bCx > catalog.cx + 25, `dcx=${(mid.bCx - catalog.cx).toFixed(0)}`);
     ok("preview: раздел НЕ изменился в середине жеста", mid.on === "Каталог", mid.on);
   }
-  /* 9b. Дотянул до Загрузки и отпустил → commit */
-  await pillMove(upload.cx, box.cy);
-  await pillUp(upload.cx, box.cy);
+  /* 9b. Дотянул до Остатков и отпустил → commit (PHASE 2.4: вместо
+     commit-на-Загрузку — она теперь sheet; см. 9e) */
+  await pillMove(stock.cx, box.cy);
+  await pillUp(stock.cx, box.cy);
   await page.waitForTimeout(550);
   {
     const g = await settleLens();
-    ok("commit на release: раздел = Загрузка", g.active.label === "Загрузка", g.active.label);
-    ok("линза под Загрузкой после commit", Math.abs(g.bubble.cx - upload.cx) < 6, `dx=${Math.abs(g.bubble.cx - upload.cx).toFixed(1)}`);
+    ok("commit на release: раздел = Остатки", g.active.label === "Остатки", g.active.label);
+    ok("линза под Остатками после commit", Math.abs(g.bubble.cx - stock.cx) < 6, `dx=${Math.abs(g.bubble.cx - stock.cx).toFixed(1)}`);
   }
   /* 9c. Отпустил НЕ дотянув до соседней вкладки (ближайшая — текущая) →
          settle обратно, раздел не меняется */
-  await pillDown(upload.cx, box.cy);
-  await pillMove(upload.cx + 30, box.cy);
-  await pillUp(upload.cx + 30, box.cy);
+  await pillDown(stock.cx, box.cy);
+  await pillMove(stock.cx + 30, box.cy);
+  await pillUp(stock.cx + 30, box.cy);
   await page.waitForTimeout(550);
   {
     const g = await settleLens();
-    ok("release не дотянув: раздел остался Загрузка", g.active.label === "Загрузка", g.active.label);
-    ok("линза вернулась к активной вкладке", Math.abs(g.bubble.cx - upload.cx) < 6, `dx=${Math.abs(g.bubble.cx - upload.cx).toFixed(1)}`);
+    ok("release не дотянув: раздел остался Остатки", g.active.label === "Остатки", g.active.label);
+    ok("линза вернулась к активной вкладке", Math.abs(g.bubble.cx - stock.cx) < 6, `dx=${Math.abs(g.bubble.cx - stock.cx).toFixed(1)}`);
   }
   /* 9d. pointercancel → возврат */
-  await pillDown(upload.cx, box.cy);
+  await pillDown(stock.cx, box.cy);
   await pillMove(admin.cx, box.cy);
   await page.evaluate(() => {
     window.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch", isPrimary: true, clientX: 0, clientY: 0, buttons: 1 }));
@@ -460,9 +472,29 @@ console.log("── 9. PH2-2: Gesture панели — preview за пальце
   await page.waitForTimeout(550);
   {
     const g = await settleLens();
-    ok("pointercancel: раздел не изменился", g.active.label === "Загрузка", g.active.label);
+    ok("pointercancel: раздел не изменился", g.active.label === "Остатки", g.active.label);
   }
-  /* 9e. Обычный тап после жестов жив (Playwright click = настоящий click) */
+  /* 9e. PHASE 2.4 §4.3: DRAG-RELEASE на «Загрузке» = ACTION: sheet
+     открывается, committed view НЕ меняется, линза собирается обратно */
+  await pillDown(stock.cx, box.cy);
+  await pillMove(upload.cx, box.cy);
+  await pillUp(upload.cx, box.cy);
+  await page.waitForTimeout(600);
+  {
+    const s = await page.evaluate(() => ({
+      sheet: Boolean(document.querySelector("[data-upload-sheet]")),
+      on: document.querySelector(".pill-item.is-on")?.textContent?.trim() ?? null,
+    }));
+    ok("release на Загрузке: sheet открыт", s.sheet);
+    ok("release на Загрузке: раздел остался Остатки", s.on === "Остатки", s.on);
+  }
+  {
+    const g = await settleLens();
+    ok("release на Загрузке: линза вернулась к Остаткам", Math.abs(g.bubble.cx - stock.cx) < 6, `dx=${Math.abs(g.bubble.cx - stock.cx).toFixed(1)}`);
+  }
+  await page.locator('[aria-label="Закрыть загрузку"]').click();
+  await page.waitForTimeout(500);
+  /* 9f. Обычный тап после жестов жив (Playwright click = настоящий click) */
   await clickTab("Каталог");
   await page.waitForTimeout(650);
   {
@@ -683,7 +715,7 @@ console.log("── 14. P23-J: rapid press→drag→release ×10 — без за
 {
   const panel = await pillPanel();
   const byLabel = (l) => panel.items.find((i) => i.label === l);
-  const route = ["Остатки", "Каталог", "Загрузка", "Остатки", "Каталог", "Админ", "Каталог", "Остатки", "Загрузка", "Каталог"];
+  const route = ["Остатки", "Каталог", "Админ", "Остатки", "Каталог", "Админ", "Каталог", "Остатки", "Админ", "Каталог"];
   for (let i = 0; i < route.length; i++) {
     const from = byLabel(i % 2 === 0 ? "Каталог" : route[i - 1] ?? "Каталог");
     const to = byLabel(route[i]);
@@ -739,6 +771,151 @@ console.log("── 15. P23-H: HAPTICS — press/step/commit маршрут (§1
 
   await clickTab("Каталог");
   await page.waitForTimeout(500);
+}
+
+console.log("── 16. P24: UPLOAD SHEET — guards, dirty, keyboard (§4) ──");
+{
+  /* 16a. Открытие тапом; committed view не сбрасывается */
+  await clickTab("Остатки");
+  await page.waitForTimeout(650);
+  await clickTab("Загрузка");
+  await page.waitForTimeout(700);
+  let sheetState = await page.evaluate(() => {
+    const sh = document.querySelector("[data-upload-sheet]");
+    const r = sh?.getBoundingClientRect();
+    return {
+      open: Boolean(sh),
+      bottom: r ? window.innerHeight - r.bottom : -1,
+      headerVisible: sh ? sh.querySelector("h2")?.textContent?.includes("Загрузка") : false,
+      on: document.querySelector(".pill-item.is-on")?.textContent?.trim() ?? null,
+    };
+  });
+  ok("16a. sheet открыт тапом", sheetState.open);
+  ok("16a. sheet якорится внизу (bottom = kb-overlay ≈ 0)", sheetState.bottom >= -2 && sheetState.bottom < 8, `bottomGap=${sheetState.bottom}`);
+  ok("16a. committed view не сброшен (Остатки)", sheetState.on === "Остатки", sheetState.on);
+
+  /* 16b. DIRTY: выбрали категорию+модель → backdrop больше не закрывает
+     сразу, показывает discard-confirm (§4.7) */
+  await page.locator('[data-upload-sheet] select').first().selectOption({ index: 1 });
+  await page.waitForTimeout(250);
+  const modelSel = page.locator('[data-upload-sheet] select').nth(1);
+  await modelSel.selectOption({ index: 1 }).catch(() => {});
+  await page.waitForTimeout(250);
+  await page.mouse.click(195, 200); // тап по backdrop (верх экрана)
+  await page.waitForTimeout(400);
+  let confirm = await page.evaluate(() => Boolean(document.querySelector("[data-upload-confirm]")));
+  ok("16b. dirty sheet: backdrop показывает discard-confirm", confirm);
+  await page.locator('[data-upload-confirm] button:has-text("Остаться")').click();
+  await page.waitForTimeout(350);
+  confirm = await page.evaluate(() => Boolean(document.querySelector("[data-upload-confirm]")));
+  ok("16b. «Остаться» — sheet жив", !confirm);
+
+  /* 16c. KEYBOARD (§4.5): --kb-overlay поднимает НИЗ sheet; шапка на месте;
+     доступная высота уменьшилась; скроллится контент, не всё окно */
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--kb-overlay", "300px");
+  });
+  await page.waitForTimeout(400);
+  const kb = await page.evaluate(() => {
+    const sh = document.querySelector("[data-upload-sheet]");
+    const r = sh.getBoundingClientRect();
+    return {
+      bottomGap: window.innerHeight - r.bottom,
+      top: r.top,
+      height: r.height,
+      maxHeight: getComputedStyle(sh).maxHeight,
+    };
+  });
+  ok("16c. клавиатура: низ sheet = --kb-overlay (300)", Math.abs(kb.bottomGap - 300) < 4, `gap=${kb.bottomGap}`);
+  ok("16c. клавиатура: sheet не выше видимой зоны", kb.top >= 0, `top=${kb.top.toFixed(0)}`);
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--kb-overlay", "0px");
+  });
+  await page.waitForTimeout(300);
+
+  /* 16d. Discard: крестик → «Закрыть» → sheet закрыт, раздел на месте */
+  await page.locator('[aria-label="Закрыть загрузку"]').click();
+  await page.waitForTimeout(350);
+  confirm = await page.evaluate(() => Boolean(document.querySelector("[data-upload-confirm]")));
+  ok("16d. dirty sheet: крестик показывает confirm", confirm);
+  await page.locator('[data-upload-confirm] button:has-text("Закрыть")').click();
+  await page.waitForTimeout(500);
+  sheetState = await page.evaluate(() => ({
+    open: Boolean(document.querySelector("[data-upload-sheet]")),
+    on: document.querySelector(".pill-item.is-on")?.textContent?.trim() ?? null,
+  }));
+  ok("16d. discard подтверждён — sheet закрыт", !sheetState.open);
+  ok("16d. раздел после закрытия — Остатки", sheetState.on === "Остатки", sheetState.on);
+}
+
+console.log("── 17. P24: GLASS TOASTS — позиция над пилюлей, материал (§3) ──");
+{
+  /* Реальный путь: invalid file в upload sheet → toast.error */
+  await clickTab("Каталог");
+  await page.waitForTimeout(500);
+  await clickTab("Загрузка");
+  await page.waitForTimeout(700);
+  /* Шаг 1: категория+модель (валидные из справочника) */
+  await page.locator('[data-upload-sheet] select').first().selectOption({ index: 1 });
+  await page.waitForTimeout(250);
+  await page.locator('[data-upload-sheet] select').nth(1).selectOption({ index: 1 }).catch(() => {});
+  await page.waitForTimeout(200);
+  await page.locator('[data-upload-sheet] button:has-text("Далее")').click();
+  await page.waitForTimeout(300);
+  await page.locator('[data-upload-sheet] button:has-text("Далее")').click();
+  await page.waitForTimeout(300);
+  /* Инвалиd-файл (.txt) → toast.error */
+  await page.locator('[data-upload-sheet] input[type="file"]').setInputFiles([
+    { name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("не фото") },
+  ]);
+  await page.waitForTimeout(700);
+  const toast = await page.evaluate(() => {
+    const t = document.querySelector('.toaster-m [data-sonner-toast][data-styled="true"]');
+    if (!t) return null;
+    const st = getComputedStyle(t);
+    const r = t.getBoundingClientRect();
+    const pill = document.querySelector(".pill-shell")?.getBoundingClientRect();
+    const alpha = (() => {
+      const m = st.backgroundColor.match(/rgba?\(([^)]+)\)/);
+      const parts = m ? m[1].split(",").map((s) => parseFloat(s)) : [];
+      return parts.length === 4 ? parts[3] : 1;
+    })();
+    return {
+      type: t.getAttribute("data-type"),
+      visible: r.width > 0 && r.height > 0,
+      bottom: r.bottom,
+      pillTop: pill ? pill.top : null,
+      bgAlpha: alpha,
+      blur: st.backdropFilter || st.webkitBackdropFilter || "none",
+      greenFill: /rgb\((\d+), (\d+), (\d+)\)/.exec(st.backgroundColor)?.slice(1, 4).map(Number) ?? null,
+      title: t.querySelector("[data-title]")?.textContent ?? "",
+    };
+  });
+  ok("17. toast.error появился на mobile-тостере", Boolean(toast?.visible), JSON.stringify(toast));
+  ok("17. toast стоит НАД пилюлей (bottom < pill.top)", toast && toast.pillTop !== null && toast.bottom <= toast.pillTop + 2, `toast.bottom=${toast?.bottom?.toFixed(0)} pill.top=${toast?.pillTop?.toFixed(0)}`);
+  ok("17. toast стекло: bg полупрозрачный (alpha < 0.95)", toast && toast.bgAlpha < 0.95, `alpha=${toast?.bgAlpha}`);
+  ok("17. toast стекло: backdrop-filter включён", toast && toast.blur !== "none" && toast.blur !== "", toast?.blur);
+  const greenSolid = toast?.greenFill && toast.greenFill[1] > toast.greenFill[0] + 40 && toast.bgAlpha > 0.9;
+  ok("17. toast НЕ solid-зелёный (§3.3)", !greenSolid, `bg=${toast?.greenFill} alpha=${toast?.bgAlpha}`);
+  await page.screenshot({ path: join(SHOTS, "18-toast-glass.png") });
+
+  /* Второй тостер скрыт на мобиле (дублей нет) */
+  const dup = await page.evaluate(() => {
+    const d = document.querySelector(".toaster-d [data-sonner-toast]");
+    return d ? d.getBoundingClientRect().height : 0;
+  });
+  ok("17. desktop-тостер скрыт на мобиле", dup === 0, `h=${dup}`);
+
+  /* очистка: dirty sheet — discard */
+  await page.locator('[aria-label="Закрыть загрузку"]').click();
+  await page.waitForTimeout(350);
+  const hasConfirm = await page.evaluate(() => Boolean(document.querySelector("[data-upload-confirm]")));
+  if (hasConfirm) {
+    await page.locator('[data-upload-confirm] button:has-text("Закрыть")').click();
+    await page.waitForTimeout(450);
+  }
+  await clickTab("Каталог");
+  await page.waitForTimeout(400);
 }
 
 await page.close();
