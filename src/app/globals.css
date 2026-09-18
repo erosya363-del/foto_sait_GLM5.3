@@ -485,6 +485,22 @@ html.boot-skip .boot-bg { display: none !important; }
 }
 .pill-wrap { position: relative; width: 100%; max-width: 500px; margin: 0 auto; }
 .pill-nav.pill-hidden, html.kb-open .pill-nav { display: none; }
+
+/* ═══ PART 1.1 §13.4 — БРАУЗЕРНАЯ КОМПЕНСАЦИЯ ТУЛБАРА ═══
+   position:fixed панель может визуально прыгать, когда browser chrome
+   меняет layout/visual viewport (iOS Safari: collapse/expand тулбара при
+   скролле). Переменная --browser-bottom-inset пишется ТОЛЬКО JS
+   (src/lib/use-visual-viewport.ts): rAF-batching, epsilon 1.5px, clamp 160px,
+   ТОЛЬКО html.is-browser и НЕ в kb-open (клавиатура — другая схема, ТЗ v4
+   п.20) и НЕ в standalone PWA.
+   ⚠ REAL DEVICE REQUIRED (ТЗ §13.4): если на реальном Safari fixed уже
+   привязан к visual viewport и офсет ЗАДВАИВАЕТСЯ — заменить сложение на
+   counter-transform. Метрики: ?viewportDebug=1 (поля --browser-bottom-inset
+   и visualBottomInset), документирование в отчёте. НЕ объявлять PASS
+   только по headless. */
+html.is-browser:not(.kb-open) .pill-nav {
+  bottom: calc(max(10px, var(--sab)) + var(--browser-bottom-inset, 0px));
+}
 .pill-nav.pill-morph-out {
   opacity: 0; transform: scale(0.42, 0.85); visibility: hidden; pointer-events: none;
   transition: opacity 260ms cubic-bezier(0.22, 0.61, 0.36, 1), transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0s linear 260ms;
@@ -522,14 +538,18 @@ html.boot-skip .boot-bg { display: none !important; }
   transform: translateZ(0);
   pointer-events: none;
 }
-/* PATCH v5: opacity .90 → PHASE 2.4 §1.5: .55 — верхний sheen панели на
-   тёмном фоне/фото читался как «лишнее отражение» (жалоба владельца).
-   Светлая тема не меняется (там sheen работает). */
+/* PATCH v5: opacity .90 → PHASE 2.4 §1.5: .55 → PART 1.1 §12.2: .10.
+   Верхний sheen панели на тёмном фоне/фото читался как «лишнее отражение».
+   MOBILE ≤ .12 (ТЗ §12.2) — панель остаётся читаемой кромкой и контентом;
+   на desktop (≥1024px, нет жалобы на фото-фон) чуть заметнее, но сдержанно. */
 .pill-surface::before {
   content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none;
   background: radial-gradient(110% 80% at 18% -15%, rgba(255,255,255,.18), rgba(255,255,255,.045) 46%, transparent 70%);
   mix-blend-mode: screen;
-  opacity: .55;
+  opacity: .10;
+}
+@media (min-width: 1024px) {
+  .pill-surface::before { opacity: .30; }
 }
 .pill-caustic {
   position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
@@ -538,9 +558,10 @@ html.boot-skip .boot-bg { display: none !important; }
     radial-gradient(35% 56% at 87% 14%, var(--caust-2), transparent 70%),
     radial-gradient(44% 55% at 66% 100%, var(--caust-3), transparent 72%);
   mix-blend-mode: screen;
-  /* PHASE 2.4 §1.5: .34 → .22 — цветная подсветка на фото давала
-     «грязный свет» вокруг стекла; кромки/спекуляр линзы остаются главными */
-  opacity: .22;
+  /* PHASE 2.4 §1.5: .34 → .22 → PART 1.1 §12.2: .14 — МАКСИМАЛЬНО сдержанные
+     каустики: цветная подсветка на фото давала «грязный свет» вокруг стекла;
+     кромки/контент линзы остаются главными */
+  opacity: .14;
 }
 .pill-goo { position: absolute; inset: 0; z-index: 1; pointer-events: none; filter: url(#pill-goo); }
 
@@ -552,42 +573,28 @@ html.boot-skip .boot-bg { display: none !important; }
    SVG-область фильтра расширена. */
 .pill-bubble { position: absolute; top: 2px; bottom: 2px; left: 0; width: 0; border-radius: 999px; will-change: transform; transform-origin: center; }
 
-/* PATCH v5 → PHASE 2.4 §1.5/§1.6: ТЁМНАЯ ЛИНЗА БЕЗ ДЕШЁВЫХ БЛИКОВ.
-   Было: белый radial 0.55 сверху + ring 0.30 + screen-спекуляр до 0.43 —
-   на тёмном фоне/фото давало «ореол/грязный glow», а после release линза
-   читалась заливкой. Теперь стекло читается:
-     — мягким светлым top-edge (узкая полоска 0.32) — CRISP кромка;
-     — тонким rim 1px (0.12) и слабой глубиной низа;
-     — ОЧЕНЬ сдержанной заливкой (0.03–0.12) — стекло остаётся прозрачным;
-   внешний box-shadow ОТСУТСТВУЕТ — нечему создавать ореол.
-   REST = компактная стеклянная линза (не «selected-pill fill»),
-   PRESS/BRIDGE добавляют specular через ::after (см. ниже). */
+/* PATCH v5 → PHASE 2.4 §1.5/§1.6 → PART 1.1 §12.1: ПОЧТИ ПРОЗРАЧНАЯ ЛИНЗА.
+   Требование владельца: НИКАКОЙ «лампы сверху». Прежние варианты всё ещё
+   держали белый top-edge (inset 1px 0.32) + белый radial ::after — на тёмном
+   фоне/фото это читалось прожектором.
+   НОВЫЙ МАТЕРИАЛ (ТЗ §12.1): линза читается ТОЛЬКО
+     — лёгкой границей 1px (brand-tinted),
+     — небольшим преломлением/разницей материала (едва заметный тинт),
+     — turquoise-контентом внутри;
+   БЕЗ внешних теней (ореол на фото невозможен) и БЕЗ белых radial-бликов.
+   --lens-press больше НЕ влияет на материал: press-фидбек остаётся
+   геометрическим (spring scaleY) + covered-контент scale. */
 .pill-bubble {
   z-index: 1; opacity: 0;
-  /* CRITICAL STABILITY 4.9: верхний «прожектор» УБРАН — radial сверху
-     практически обнулён (0.20 → 0.06), белые стопы linear снижены;
-     «сверху на стекло светит лампа» больше не читается, материал —
-     спокойное прозрачное стекло (4.10: читается прозрачностью/кромкой/контентом) */
-  background:
-    radial-gradient(120% 75% at 30% 0%, rgba(255,255,255,0.06), transparent 55%),
-    linear-gradient(165deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04) 58%, rgba(255,255,255,0.02));
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.32),
-    inset 0 -1px 0 rgba(255,255,255,0.07),
-    inset 0 0 0 1px rgba(255,255,255,0.12);
+  background: rgba(var(--brand-rgb), 0.035);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.16);
   transition: opacity 140ms ease;
 }
 
-/* PHASE 2.3 supplement H → CRITICAL STABILITY 4.9: press-спекуляр
-   ПРАКТИЧЕСКИ ОБНУЛЁН: rest 0.06 (было 0.30), press +0.14 (было +0.30),
-   bridge-мост больше не существует (капсула) — +0.03 остаточный.
-   Эффект «лампы сверху» отсутствует; стекло читается кромкой/контентом. */
-.pill-bubble::after {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: radial-gradient(115% 55% at 50% -10%, rgba(255,255,255,0.40), rgba(255,255,255,0.06) 52%, transparent 78%);
-  mix-blend-mode: screen;
-  opacity: calc(0.06 + 0.14 * var(--lens-press, 0) + 0.03 * var(--lens-bridge, 0));
-}
+/* PART 1.1 §12.1: белый radial-спекуляр ::after ПОЛНОСТЬЮ ОТКЛЮЧЁН.
+   (--lens-press/--lens-bridge по-прежнему ставятся gesture-контроллером —
+   переменные остаются для будущих эффектов без белых бликов.) */
+.pill-bubble::after { display: none; }
 
 .pill-rim {
   position: absolute; inset: 0; z-index: 3; border-radius: inherit; padding: 1px; pointer-events: none;
@@ -646,7 +653,8 @@ html.boot-skip .boot-bg { display: none !important; }
 .pill-search:active { transform: scale(.98); }
 .pill-svg-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
 
-/* PATCH v5: light theme highlight 0.92 */
+/* PATCH v5: light theme PANEL highlight 0.92 (кромка ПАНЕЛИ, не линзы —
+   PART 1.1 §12 трогает только .pill-bubble; панель остаётся прежней). */
 .light .pill-surface {
   box-shadow:
     0 16px 40px -16px rgba(23, 42, 51, 0.35),
@@ -654,23 +662,13 @@ html.boot-skip .boot-bg { display: none !important; }
     inset 0 -1px 0 rgba(23, 42, 51, 0.06);
 }
 
-/* PHASE 2.3 supplement A: на светлом фоне линза видна НЕ цветной заливкой, а
-   КРОМКОЙ/СПЕКУЛЯРОМ/ГЛУБИНОЙ (rim + edge contrast). Базовая .pill-bubble —
-   dark/default; .light — переопределение. Подобрано по кадрам 06–08:
-   стартовый вариант из ТЗ (ring .065) на белой панели исчезал. Решение:
-   нейтральная тёплая глубина в НИЗЕ материала (не цветная заливка, альфы
-   .22–.42 — стекло остаётся прозрачным), тёмная контурная кромка 1px и
-   светлый ореол снаружи — глаз читает ПОВЕРХНОСТЬ стекла, не серый овал. */
+/* PATCH v5 → PART 1.1 §12.1: светлая тема — ТОТ ЖЕ материал «почти прозрачная
+   линза»: лёгкий brand-тинт + 1px внутренняя граница. БЕЛЫЙ radial 0.72,
+   белый top-edge 0.95, наружная тень 0 4px 14px и белый гало-ring 2.5px
+   УДАЛЕНЫ (ТЗ §12.1: «НЕ делать» — именно они давали «лампу/ореол»). */
 .light .pill-bubble {
-  background:
-    radial-gradient(100% 80% at 30% 0%, rgba(255,255,255,0.72), transparent 56%),
-    linear-gradient(165deg, rgba(255,255,255,0.42), rgba(236,232,225,0.34) 58%, rgba(146,138,128,0.22));
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.95),
-    inset 0 -1px 0 rgba(0,0,0,.09),
-    0 4px 14px rgba(23,42,51,.18),
-    0 0 0 1px rgba(23,42,51,.28),
-    0 0 0 2.5px rgba(255,255,255,.45);
+  background: rgba(var(--brand-rgb), 0.025);
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-rgb), 0.14);
 }
 
 .nav-pulse { animation: nav-pulse 0.62s cubic-bezier(0.34, 1.56, 0.64, 1); }
