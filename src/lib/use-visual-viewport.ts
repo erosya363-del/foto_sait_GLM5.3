@@ -38,6 +38,10 @@ export type ViewportState = {
   keyboardOpen: boolean;
   /** Расчётная высота клавиатуры, px (0 если закрыта) */
   keyboardHeight: number;
+  /** PART 1.1 §13.1: НИЖНЯЯ инсет visual viewport относительно layout
+   *  (браузерный тулбар/zoom — НЕ keyboardOverlay!).
+   *  innerHeight − (vv.offsetTop + vv.height) ≥ 0. */
+  visualBottomInset: number;
 };
 
 const CLOSED: ViewportState = {
@@ -47,6 +51,7 @@ const CLOSED: ViewportState = {
   scale: 1,
   keyboardOpen: false,
   keyboardHeight: 0,
+  visualBottomInset: 0,
 };
 
 let state: ViewportState = CLOSED;
@@ -63,7 +68,8 @@ function setState(next: ViewportState) {
     state.offsetTop === next.offsetTop &&
     state.scale === next.scale &&
     state.keyboardOpen === next.keyboardOpen &&
-    state.keyboardHeight === next.keyboardHeight
+    state.keyboardHeight === next.keyboardHeight &&
+    state.visualBottomInset === next.visualBottomInset
   ) {
     return;
   }
@@ -76,6 +82,45 @@ function isTextField() {
   return Boolean(
     el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)
   );
+}
+
+/* ═══ PART 1.1 §13 — BROWSER BOTTOM INSET (компенсация тулбара) ═══
+   Отдельная метрика visualBottomInset = innerHeight − (vv.offsetTop +
+   vv.height): НИЖНЯЯ часть layout viewport, невидимая браузерным chrome
+   (тулбар) в данный момент. ЭТО НЕ keyboardOverlay: обновляется только при
+   ЗАКРЫТОЙ клавиатуре, в html.is-browser и НЕ в standalone PWA.
+   Панель (.pill-nav) добавляет её к bottom — визуальное положение перестаёт
+   зависеть от collapse/expand тулбара (см. globals.css §13.4; вопрос
+   двойного офсета на реальном Safari — REAL DEVICE REQUIRED). */
+const BROWSER_INSET_EPSILON = 1.5; // §13.3: не дёргаться на каждый пиксель
+const BROWSER_INSET_CLAMP = 160;   // разумный диапазон тулбаров
+let insetRaf = 0;
+let writtenInset = -1;
+
+function writeBrowserInset(target: number) {
+  if (Math.abs(target - writtenInset) < BROWSER_INSET_EPSILON) return;
+  writtenInset = target;
+  document.documentElement.style.setProperty("--browser-bottom-inset", `${Math.round(target)}px`);
+}
+
+/** rAF-батчинг: CSS-переменная пишется НЕ в каждом событии resize/scroll,
+ *  а один раз на кадр. React setState на пиксельные resize НЕТ (§13.3). */
+function scheduleBrowserInset(target: number) {
+  if (insetRaf) return;
+  insetRaf = requestAnimationFrame(() => {
+    insetRaf = 0;
+    writeBrowserInset(target);
+  });
+}
+
+/** Обновляет --browser-bottom-inset по правилам §13.2: browser-only,
+ *  не-PWA, НЕ kb-open. Возвращает true, если условие применимо. */
+function updateBrowserBottomInset(kbOpen: boolean, inset: number): boolean {
+  const docEl = document.documentElement;
+  if (docEl.classList.contains("is-standalone")) return false; // §13.2: не в PWA
+  if (!docEl.classList.contains("is-browser") || kbOpen) return false;
+  scheduleBrowserInset(Math.min(BROWSER_INSET_CLAMP, Math.max(0, inset)));
+  return true;
 }
 
 function measure() {
@@ -94,6 +139,10 @@ function measure() {
   const overlayInset = vv
     ? Math.max(0, window.innerHeight - (vv.offsetTop + vv.height))
     : 0;
+
+  /* PART 1.1 §13.1: та же арифметика — но как САМОСТОЯТЕЛЬНАЯ метрика
+     браузерного тулбара (не клавиатуры). Живёт независимо от kb-open. */
+  const visualBottomInset = overlayInset;
 
   let keyboardHeight = overlayInset;
 
@@ -126,6 +175,11 @@ function measure() {
    */
   docEl.style.setProperty("--kb-overlay", open ? `${Math.round(overlayInset)}px` : "0px");
 
+  /* PART 1.1 §13.2: браузерная компенсация — ТОЛЬКО browser (не PWA) и
+     НЕ при открытой клавиатуре (kb-open = другая схема позиционирования).
+     Пишется напрямую в CSS variable (rAF-батчинг) — без React setState. */
+  updateBrowserBottomInset(open, visualBottomInset);
+
   // baseline помним только БЕЗ клавиатуры и при неизменной ширине (не поворот)
   if (!open && (baseW === 0 || Math.abs(window.innerWidth - baseW) < 2)) {
     baseH = Math.max(baseH, docEl.clientHeight);
@@ -139,6 +193,7 @@ function measure() {
     scale: vv?.scale ?? 1,
     keyboardOpen: open,
     keyboardHeight: open ? Math.round(keyboardHeight) : 0,
+    visualBottomInset: Math.round(visualBottomInset),
   });
 }
 
@@ -179,6 +234,11 @@ function install() {
 function uninstall() {
   if (!installed) return;
   installed = false;
+  if (insetRaf) {
+    cancelAnimationFrame(insetRaf);
+    insetRaf = 0;
+  }
+  writtenInset = -1;
   const vv = window.visualViewport;
   vv?.removeEventListener("resize", measure);
   vv?.removeEventListener("scroll", measure);
@@ -191,6 +251,7 @@ function uninstall() {
   document.documentElement.classList.remove("kb-open");
   document.documentElement.style.removeProperty("--kb-h");
   document.documentElement.style.removeProperty("--kb-overlay");
+  document.documentElement.style.removeProperty("--browser-bottom-inset");
 }
 
 function subscribe(cb: () => void) {

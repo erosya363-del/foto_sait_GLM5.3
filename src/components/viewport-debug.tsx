@@ -46,6 +46,7 @@ function readMetrics() {
     sab: css.getPropertyValue("--sab").trim() || "0px",
     kbOverlay: css.getPropertyValue("--kb-overlay").trim() || "0px",
     kbH: css.getPropertyValue("--kb-h").trim() || "0px",
+    browserInset: css.getPropertyValue("--browser-bottom-inset").trim() || "0px",
     pillBottom: pillRect ? Math.round(pillRect.bottom) : null,
     pillTop: pillRect ? Math.round(pillRect.top) : null,
     popBottom: popRect ? Math.round(popRect.bottom) : null,
@@ -154,6 +155,12 @@ export function ViewportDebug() {
       <Row k="--sab" v={m.sab} />
       <Row k="--kb-overlay" v={m.kbOverlay} warn={!m.kbOpen && m.kbOverlay !== "0px"} />
       <Row k="--kb-h" v={m.kbH} />
+      {/* PART 1.1 §13.4: метрики браузерной компенсации тулбара.
+          visualBottomInset = ih − (vo + vh): нижняя невидимая часть layout
+          viewport (тулбар). warn: переменная не 0 при закрытом поле —
+          кандидат на источник прыжка панели. */}
+      <Row k="visualBottomInset" v={Math.max(0, m.ih - (m.vo + m.vh))} warn={!m.kbOpen && m.ih - (m.vo + m.vh) > 2} />
+      <Row k="--browser-bottom-inset" v={m.browserInset} warn={!m.kbOpen && m.mode === "browser" && m.browserInset !== "0px" && m.vo === 0 && m.vh !== 0 && m.ih - (m.vo + m.vh) <= 0} />
       <Row k="pill.top" v={m.pillTop} />
       <Row k="pill.bottom" v={m.pillBottom} warn={m.pillBottom != null && m.pillBottom > m.ih} />
       <Row k="gap под панелью" v={gapBottom} warn={gapBottom != null && gapBottom > 24} />
