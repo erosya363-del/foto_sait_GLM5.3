@@ -31,6 +31,9 @@ import { RUNTIME_ROOT } from "@/lib/runtime";
  *       6. finally удаляет lease.
  *   → deploy-lock endpoint дожидается (drain) всех УЖЕ НАЧАТЫХ мутаций,
  *     прежде чем разрешить final sync.
+ *   • Renew (REV.2): действующий lock продлевается heartbeat'ом сборки
+ *     (action:"renew" → renewDeployLock, только владелец lockId); потерянный/
+ *     истёкший lock продлить НЕЛЬЗЯ — сборка падает fail-closed.
  *
  * ФАЙЛЫ LOCK/LEASE НЕ ПОПАДАЮТ В АРТЕФАКТ: database-runtime-build.sh кладёт
  * в артефакт только db/, uploads/ и .sync-token — корневые служебные файлы
@@ -214,6 +217,45 @@ export async function releaseDeployLock(lockId: string): Promise<boolean> {
     if ((e as NodeJS.ErrnoException | null)?.code === "ENOENT") return true;
     throw e;
   }
+}
+
+/**
+ * REV.2 (отзыв владельца п.2): продлевает ДЕЙСТВУЮЩИЙ deploy-lock —
+ * heartbeat сборки вызывает это каждые LOCK_HEARTBEAT_SEC, чтобы длинная
+ * сборка не «пережила» TTL lock'а.
+ *
+ * FAIL-CLOSED: продлить можно ТОЛЬКО lock с совпадающим id. Истёкший
+ * (readDeployLockSync уже удалил stale-файл), снятый или чужой lock → null —
+ * вызывающая сторона (route → build.sh) обязана интерпретировать это как
+ * «защита потеряна» и остановить сборку, а не продолжать с «полу-live» lock'ом.
+ *
+ * Атомарность продления: tmp-файл + rename() — читатели (readDeployLockSync)
+ * в любой момент видят либо старый, либо новый валидный lock, никогда
+ * пустой/полузаписанный файл.
+ */
+export async function renewDeployLock(
+  lockId: string,
+  ttlMs: number = DEFAULT_LOCK_TTL_MS
+): Promise<DeployWriteLock | null> {
+  const current = readDeployLockSync();
+  if (!current || current.id !== lockId) return null;
+  const ttl = Math.max(1000, ttlMs);
+  const renewed: DeployWriteLock = {
+    ...current,
+    expiresAt: new Date(Date.now() + ttl).toISOString(),
+  };
+  const tmp = `${DEPLOY_LOCK_FILE}.tmp-${randomUUID()}`;
+  fs.writeFileSync(tmp, JSON.stringify(renewed, null, 2) + "\n");
+  try {
+    fs.renameSync(tmp, DEPLOY_LOCK_FILE); // атомарная подмена (POSIX)
+  } finally {
+    try {
+      fs.unlinkSync(tmp); // после успешного rename файла уже нет — ENOENT, ок
+    } catch {
+      /* уже забран rename'ом */
+    }
+  }
+  return renewed;
 }
 
 /** Список активных (не-стейл) writer-lease. Stale физически удаляется. */

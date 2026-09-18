@@ -43,13 +43,19 @@ export NEXT_TELEMETRY_DISABLED=1
 # Пока идёт snapshot/build, live НЕ принимает новые мутации (423 DEPLOY_LOCKED)
 # — фото, загруженное сотрудником во время сборки, больше не может исчезнуть.
 #
-# ВРЕМЯ ЖИЗНИ LOCK (ТЗ 4.3 — ВАЖНО):
+# HEARTBEAT (REV.2 п.2): пока идёт сборка, фоновый цикл каждые
+# LOCK_HEARTBEAT_SEC продлевает lock (action:"renew") — длинная сборка не
+# «переживёт» TTL 30 мин и не останется без защиты на середине.
+#
+# ВРЕМЯ ЖИЗНИ LOCK (ТЗ 4.3 + REV.2 п.3 — ВАЖНО):
 #   BUILD FAILED  → unlock СРАЗУ (trap cleanup);
-#   BUILD SUCCESS → живой контейнер ОСТАЁТСЯ LOCKED: lock исчезнет вместе со
-#                   старым контейнером при cutover ИЛИ сам истечёт по TTL
-#                   (~30 мин), если платформа упала после успешной сборки.
-#                   НЕ СНИМАТЬ руками — иначе окно «deploy → новый lock» пропустит
-#                   мутации во время переключения контейнера.
+#   BUILD SUCCESS → контрольная точка ПОСЛЕ упаковки артефакта: live lockId
+#                   перепроверяется (потерян/истёк → BUILD FAIL), затем lock
+#                   продлевается минимум на LOCK_FINAL_TTL_SEC (3600 c) —
+#                   переживёт окно redeploy/cutover — и ЖИВОЙ КОНТЕЙНЕР
+#                   ОСТАЁТСЯ LOCKED до переключения. НЕ СНИМАТЬ руками —
+#                   иначе окно «deploy → новый lock» пропустит мутации во
+#                   время переключения контейнера.
 #
 # ПЕРВЫЙ ROLLOUT (ТЗ §11): текущий live ещё НЕ имеет deploy-lock API.
 # ОДНОРАЗОВЫЙ переход: FIRST_DEPLOY_LOCK_BOOTSTRAP=1 — сборка предупреждает
@@ -77,6 +83,13 @@ LOCK_ACQUIRED=0
 BUILD_SUCCESS=0
 LOCK_ID=""
 
+# REV.2 (пп.2–3 отзыва): параметры heartbeat и финального продления lock.
+LOCK_HEARTBEAT_SEC="${LOCK_HEARTBEAT_SEC:-240}"   # период продления во время сборки
+LOCK_RENEW_TTL_SEC="${LOCK_RENEW_TTL_SEC:-1800}"  # TTL, который ставит heartbeat
+LOCK_FINAL_TTL_SEC="${LOCK_FINAL_TTL_SEC:-3600}"  # финальное продление (≥3600 c)
+HEARTBEAT_PID=""
+HEARTBEAT_STATE=""
+
 live_lock_api() {
     # $1 = action-JSON; печатает тело ответа; пусто при любой ошибке сети/404
     curl -sS --max-time 30 "${AUTH_ARGS[@]}" -H 'Content-Type: application/json' \
@@ -99,7 +112,59 @@ unlock_live() {
     live_lock_api "{\"action\":\"unlock\",\"lockId\":\"$LOCK_ID\"}" > /dev/null || true
 }
 
+renew_live() {
+    # REV.2 п.2: $1 = lockId, $2 = ttlSec; код 0 — сервер ПОДТВЕРДИЛ продление.
+    # Пустой ответ/сеть/404/чужой или истёкший lock (409) → не 0:
+    # вызывающий обязан трактовать это как «защита потеряна» (fail-closed).
+    [ -n "$1" ] || return 1
+    local resp ok
+    resp="$(live_lock_api "{\"action\":\"renew\",\"lockId\":\"$1\",\"ttlSec\":$2}")"
+    [ -n "$resp" ] || return 1
+    ok="$(json_field "$resp" ok)"
+    [ "$ok" = "true" ]
+}
+
+heartbeat_loop() {
+    # REV.2 п.2: продлевает lock каждые LOCK_HEARTBEAT_SEC, чтобы длинная
+    # сборка не пережила TTL. Неудача продления → маркер в fail-файл;
+    # решение принимает контрольная точка после упаковки артефакта.
+    while :; do
+        sleep "$LOCK_HEARTBEAT_SEC"
+        if ! renew_live "$LOCK_ID" "$LOCK_RENEW_TTL_SEC"; then
+            echo "💓✗ heartbeat: продление deploy-lock НЕ подтверждено сервером" >&2
+            : > "$HEARTBEAT_STATE/failed" 2>/dev/null || true
+            return 1
+        fi
+    done
+}
+
+start_heartbeat() {
+    # Без lock'а (bootstrap без endpoint) heartbeat не нужен.
+    [ -n "$LOCK_ID" ] || return 0
+    HEARTBEAT_STATE="$(mktemp -d 2>/dev/null || true)"
+    if [ -z "$HEARTBEAT_STATE" ]; then
+        echo "⚠ mktemp недоступен — heartbeat отключён (контрольная точка в конце всё равно перепроверит lock)" >&2
+        return 0
+    fi
+    heartbeat_loop & HEARTBEAT_PID=$!
+    echo "💓 heartbeat deploy-lock: продление каждые ${LOCK_HEARTBEAT_SEC}s (TTL ${LOCK_RENEW_TTL_SEC}s)"
+}
+
+stop_heartbeat() {
+    if [ -n "$HEARTBEAT_PID" ]; then
+        kill "$HEARTBEAT_PID" 2>/dev/null || true
+        wait "$HEARTBEAT_PID" 2>/dev/null || true
+        HEARTBEAT_PID=""
+    fi
+}
+
 cleanup() {
+    # REV.2: глушим heartbeat — фоновый цикл не должен пережить скрипт.
+    stop_heartbeat
+    if [ -n "$HEARTBEAT_STATE" ]; then
+        rm -rf "$HEARTBEAT_STATE" 2>/dev/null || true
+        HEARTBEAT_STATE=""
+    fi
     # ТЗ 4.4: снимаем lock ТОЛЬКО если сборка НЕ удалась. При успехе live
     # остаётся залоченным до cutover/TTL (защита окна переключения контейнера).
     if [ "$LOCK_ACQUIRED" = "1" ] && [ "$BUILD_SUCCESS" != "1" ]; then
@@ -164,6 +229,11 @@ else
         LOCK_ACQUIRED=1
         echo "   lock: $LOCK_ID ($(json_field "$LOCK_RESP" expiresAt)), activeWriters=$(json_field "$LOCK_RESP" activeWriters)"
     fi
+
+    # ── HEARTBEAT (REV.2 п.2): держим lock живым ВСЮ сборку (sync + build +
+    # упаковка) — продление каждые LOCK_HEARTBEAT_SEC, чтобы длинная сборка
+    # не пережила TTL 1800 c. Без lock'а (bootstrap) — просто не стартует. ──
+    start_heartbeat
 
     # ── FINAL SYNC: максимально поздний, ПОД lock (live заморожен) ──
     echo "⟳  [2/4] FINAL SYNC FROM LOCKED LIVE…"
@@ -357,15 +427,55 @@ tar -czf "$PACKAGE_FILE" .
 cd - > /dev/null || exit 1
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CRITICAL STABILITY PART 1.1 §4.3: сборка УСПЕШНА — live ОСТАЁТСЯ LOCKED.
-# НЕ СНИМАТЬ lock: он исчезнет вместе со старым контейнером после cutover
-# (или истечёт по TTL ~30 мин, если платформа упала после сборки). Снятие
-# открыло бы окно, в котором сотрудник грузит фото в СТАРЫЙ контейнер во
-# время переключения — ровно тот сценарий потери данных, который мы закрыли.
+# CRITICAL STABILITY PART 1.1 §4.3 (REV.2 пп.2–3): КОНТРОЛЬНАЯ ТОЧКА ПЕРЕД
+# УСПЕШНЫМ ВЫХОДОМ. Артефакт упакован; его данные соответствуют live НА
+# МОМЕНТ final sync ПОД lock $LOCK_ID. Прежде чем объявить успех:
+#   [A] остановить heartbeat (он продлевал lock всю сборку — REV.2 п.2);
+#   [B] ЕЩЁ РАЗ проверить live lockId ПОСЛЕ упаковки артефакта: lock
+#       потерян/истёк/подменён → BUILD FAIL (fail-closed — после потери
+#       защиты данные могли мутировать, артефакт устарел);
+#   [C] продлить lock минимум на LOCK_FINAL_TTL_SEC (3600 c по умолчанию):
+#       защита обязана пережить окно redeploy/cutover; нет подтверждения →
+#       BUILD FAIL.
+# При успехе lock НЕ снимается (§4.3): он исчезнет вместе со старым
+# контейнером после cutover. Снятие открыло бы окно, в котором сотрудник
+# грузит фото в СТАРЫЙ контейнер во время переключения — ровно тот сценарий
+# потери данных, который мы закрыли.
 # ═════════════════════════════════════════════════════════════════════════════
+if [ "$LOCK_ACQUIRED" = "1" ]; then
+    stop_heartbeat
+    if [ -n "$HEARTBEAT_STATE" ] && [ -f "$HEARTBEAT_STATE/failed" ]; then
+        echo "⚠  heartbeat не смог продлить lock во время сборки — решит перепроверка/продление ниже"
+    fi
+
+    echo "🛡  POST-ARTIFACT [B]: перепроверка live lockId после упаковки артефакта…"
+    STATUS=$(curl -sS --max-time 30 "${AUTH_ARGS[@]}" "$LIVE_BASE_URL/api/admin/deploy-lock" 2>/dev/null || true)
+    CUR_ID="$(printf '%s' "$STATUS" | bun -e "
+      let s=''; process.stdin.on('data',(d)=>s+=d).on('end',()=>{
+        try { const j=JSON.parse(s); console.log(j.locked === true && j.lock && j.lock.id ? String(j.lock.id) : ''); }
+        catch { console.log(''); }
+      });")"
+    if [ "$CUR_ID" != "$LOCK_ID" ]; then
+        echo "❌ deploy-lock ПОТЕРЯН/ИСТЁК/ПОДМЕНЁН после упаковки артефакта ($CUR_ID ≠ $LOCK_ID) — BUILD FAIL." >&2
+        echo "   После потери защиты live мог мутировать → артефакт БОЛЬШЕ НЕ АКТУАЛЕН (деплоить НЕЛЬЗЯ)." >&2
+        echo "   Повторите сборку: она поставит свежий lock и сделает новый final sync." >&2
+        echo "   (Пустой CUR_ID может также означать 401/сеть — проверьте SYNC_EXPORT_TOKEN.)" >&2
+        exit 1
+    fi
+    echo "   lock подтверждён после упаковки: $CUR_ID"
+
+    echo "💓 POST-ARTIFACT [C]: финальное продление deploy-lock до ${LOCK_FINAL_TTL_SEC}s…"
+    if ! renew_live "$LOCK_ID" "$LOCK_FINAL_TTL_SEC"; then
+        echo "❌ Финальное продление deploy-lock НЕ подтверждено сервером — BUILD FAIL (fail-closed)." >&2
+        echo "   Live остался бы без защиты в момент cutover — повторите сборку." >&2
+        exit 1
+    fi
+    echo "   lock $LOCK_ID продлён (TTL ${LOCK_FINAL_TTL_SEC}s) — переживёт окно redeploy/cutover"
+fi
+
 BUILD_SUCCESS=1
 if [ "$LOCK_ACQUIRED" = "1" ]; then
-    echo "🔒 Сборка успешна — deploy-lock $LOCK_ID ОСТАЁТСЯ на live (до cutover/TTL; НЕ снимаем)"
+    echo "🔒 Сборка успешна — deploy-lock $LOCK_ID ОСТАЁТСЯ на live (продлён до ~+${LOCK_FINAL_TTL_SEC}s; НЕ снимаем)"
 fi
 
 # # 清理临时目录

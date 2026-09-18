@@ -3,6 +3,7 @@ import { isSyncAuthorized } from "@/lib/sync-auth";
 import {
   acquireDeployLock,
   releaseDeployLock,
+  renewDeployLock,
   currentDeployLock,
   waitForRuntimeWriters,
   activeWriters,
@@ -35,6 +36,12 @@ export const dynamic = "force-dynamic";
  *
  * POST { "action": "unlock", "lockId": "..." }
  *   Снять можно ТОЛЬКО lock с совпадающим id (чужой/старый id → 409).
+ *
+ * POST { "action": "renew", "lockId": "...", "ttlSec": 1800 }   (REV.2 п.2)
+ *   Продлить ДЕЙСТВУЮЩИЙ lock (heartbeat сборки продлевает его во время
+ *   сборки, чтобы длинная сборка не пережила TTL). Только владелец lockId:
+ *   lock истёк/снят/чужой → 409 LOCK_NOT_RENEWABLE (fail-closed — build.sh
+ *   обязан упасть, а не продолжать без защиты).
  *
  * GET → статус: { locked, lock, activeWriters } (тоже token-protected).
  *
@@ -77,7 +84,7 @@ export async function POST(req: NextRequest) {
     | null;
   if (!body || typeof body.action !== "string") {
     return NextResponse.json(
-      { error: "Ожидается JSON { action: 'lock'|'unlock', … }" },
+      { error: "Ожидается JSON { action: 'lock'|'unlock'|'renew', … }" },
       { status: 400, headers: noStore }
     );
   }
@@ -127,6 +134,35 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  /* ── RENEW: продлить действующий lock (heartbeat сборки, REV.2 п.2) ── */
+  if (body.action === "renew") {
+    const lockId = typeof body.lockId === "string" ? body.lockId : "";
+    if (!lockId) {
+      return NextResponse.json(
+        { error: "Нужен lockId действующего deploy-lock.", code: "LOCK_ID_REQUIRED" },
+        { status: 400, headers: noStore }
+      );
+    }
+    const reqTtl = Number(body.ttlSec);
+    const ttlSec = Number.isFinite(reqTtl) && reqTtl > 0 ? reqTtl : DEFAULT_LOCK_TTL_MS / 1000;
+    const ttlMs = Math.min(MAX_TTL_MS, Math.max(MIN_TTL_MS, ttlSec * 1000));
+    const renewed = await renewDeployLock(lockId, ttlMs);
+    if (!renewed) {
+      // lock истёк/снят/чужой → продлить НЕЛЬЗЯ (fail-closed, REV.2 п.2)
+      return NextResponse.json(
+        {
+          error: "Deploy-lock отсутствует (истёк/снят) или lockId не совпадает — продлить нельзя.",
+          code: "LOCK_NOT_RENEWABLE",
+        },
+        { status: 409, headers: noStore }
+      );
+    }
+    return NextResponse.json(
+      { ok: true, lockId: renewed.id, expiresAt: renewed.expiresAt },
+      { headers: noStore }
+    );
+  }
+
   /* ── UNLOCK: только владелец lockId ── */
   if (body.action === "unlock") {
     const lockId = typeof body.lockId === "string" ? body.lockId : "";
@@ -147,7 +183,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { error: "Неизвестное действие. Ожидалось action: 'lock' | 'unlock'." },
+    { error: "Неизвестное действие. Ожидалось action: 'lock' | 'unlock' | 'renew'." },
     { status: 400, headers: noStore }
   );
 }

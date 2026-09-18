@@ -10,11 +10,13 @@
 #      освобождён → lock отвечает ok, activeWriters = 0
 #   C. ПОД LOCK: upload/fabric-photo/admin POST/admin DELETE → 423
 #      DEPLOY_LOCKED; счётчики и файлы НЕ изменились;
-#      GET view=trash — 200, autoPurged=0, физического удаления НЕТ (§2.4)
+#      GET view=trash — 200, autoPurged=0, физического удаления НЕТ (§2.4);
+#      renew СВОИМ lockId → ok (REV.2 п.2), ЧУЖИМ → 409 LOCK_NOT_RENEWABLE
 #   D. FINAL SYNC под lock (DEPLOY_LOCK_ID) → маркер с lockId
 #   E. ARTIFACT BUILD (database-runtime-build.sh) + post-build verify
 #   F. явный verify-runtime-artifact
-#   G. UNLOCK → upload снова работает (200)
+#   G. UNLOCK → upload снова работает (200); renew после unlock → 409
+#      LOCK_NOT_RENEWABLE (нет lock — продлить нельзя, REV.2 п.2)
 #   H. MARKER RACE (§10.2): wrong lockId / dbSha mismatch / нет маркера /
 #      нет БД / битый файл → DEPLOY BLOCKED; валидная зона → PASS
 #   I. MANIFEST A/B (§7): «live изменился во время синка» → sync FAIL,
@@ -209,6 +211,18 @@ TRASH_N="$(TRASH_JSON="$TRASH" bun -e "const t=JSON.parse(process.env.TRASH_JSON
 [ "$AUTO" = "0" ] && [ "$TRASH_N" = "1" ]; check $? "C6. GET trash под lock: autoPurged=0, фото в корзине на месте ($TRASH_N)" "autoPurged=$AUTO items=$TRASH_N"
 [ -s "$FIXTURE/uploads/optimized/seed-trash.jpg" ]; check $? "C7. файл trash-фото физически существует (не удалён)"
 
+# ── C8/C9. REV.2 п.2: action:"renew" — продление действующего lock ──
+RN=$(curl -sS "${AUTH[@]}" -H 'Content-Type: application/json' -X POST "$BASE/api/admin/deploy-lock" \
+  -d "{\"action\":\"renew\",\"lockId\":\"$LOCK_ID\",\"ttlSec\":1800}")
+RN_OK="$(RENEW_JSON="$RN" bun -e "try{const j=JSON.parse(process.env.RENEW_JSON);console.log(String(j.ok==='true'||j.ok===true))}catch{console.log('false')}")"
+RN_TTL="$(RENEW_JSON="$RN" bun -e "try{const j=JSON.parse(process.env.RENEW_JSON);const t=(Date.parse(j.expiresAt)-Date.now())/1000;console.log(t>1500&&t<2100?'ok':'bad:'+t)}catch(e){console.log('err')}")"
+[ "$RN_OK" = "true" ] && [ "$RN_TTL" = "ok" ]; check $? "C8. renew СВОИМ lockId → ok:true, expiresAt ≈ +1800c" "resp=$RN ttl=$RN_TTL"
+
+RN_BAD_CODE=$(curl -s -o /tmp/race-rnbad.json -w "%{http_code}" "${AUTH[@]}" -H 'Content-Type: application/json' \
+  -X POST "$BASE/api/admin/deploy-lock" -d '{"action":"renew","lockId":"wrong-id","ttlSec":1800}')
+grep -q 'LOCK_NOT_RENEWABLE' /tmp/race-rnbad.json; RNB=$?
+[ "$RN_BAD_CODE" = "409" ] && [ $RNB = 0 ]; check $? "C9. renew ЧУЖИМ lockId → 409 LOCK_NOT_RENEWABLE (fail-closed)" "HTTP=$RN_BAD_CODE $(cat /tmp/race-rnbad.json)"
+
 # ═══════════ D. FINAL SYNC ПОД LOCK ═══════════
 echo "── [D] §10.3 FINAL SYNC под lock (production flow)"
 # В production build.sh токен берётся из существующей $RUNTIME_ZONE/.sync-token;
@@ -243,6 +257,12 @@ UP2=$(curl -s -X POST "$BASE/api/upload" -F "categoryId=racecat" -F "modelId=rac
 echo "$UP2" | grep -q '"uploaded":1'; check $? "G2. upload после unlock → 200 (uploaded:1)" "$UP2"
 CNT2=$(PHOTOS_NOW "$FIXTURE/database/custom.db")
 [ "$CNT2" = "27" ]; check $? "G3. live теперь 27 живых фото" "got $CNT2"
+
+# ── G4. REV.2 п.2: renew ПОСЛЕ unlock — продлить нечего (fail-closed) ──
+RN2_CODE=$(curl -s -o /tmp/race-rn2.json -w "%{http_code}" "${AUTH[@]}" -H 'Content-Type: application/json' \
+  -X POST "$BASE/api/admin/deploy-lock" -d "{\"action\":\"renew\",\"lockId\":\"$LOCK_ID\",\"ttlSec\":1800}")
+grep -q 'LOCK_NOT_RENEWABLE' /tmp/race-rn2.json; RN2=$?
+[ "$RN2_CODE" = "409" ] && [ $RN2 = 0 ]; check $? "G4. renew после unlock → 409 LOCK_NOT_RENEWABLE (нет lock — продлить нельзя)" "HTTP=$RN2_CODE"
 
 # ═══════════ H. §10.2 MARKER RACE — build БЛОКИРУЕТСЯ ═══════════
 echo "── [H] §10.2 marker race: каждое нарушение → DEPLOY BLOCKED"
