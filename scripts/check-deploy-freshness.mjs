@@ -11,12 +11,17 @@
  * Проверки (fail-closed, любое нарушение → EXIT 1):
  *   1. runtime-БД существует;
  *   2. маркер download/runtime/.live-sync.json существует;
- *   3. маркер достаточно свежий (FRESH_SYNC_MAX_HOURS, по умолчанию 72);
+ *   3. маркер достаточно свежий (FRESH_SYNC_MAX_HOURS, по умолчанию 72) —
+ *      ПРИ ЗАДАННОМ DEPLOY_LOCK_ID это только ДИАГНОСТИКА (ТЗ PART 1.1 §5.2:
+ *      production truth = привязка маркера к ТЕКУЩЕМУ deploy-lock);
  *   4. photoCount маркера == фактическое число живых Photo в БД;
  *   5. optimizedCount/thumbCount маркера == фактические файлы на диске;
- *   6. dbSha256 маркера == sha256 текущего файла БД (зона не подменена
- *      после синка посторонней копией);
- *   7. все Photo-ссылки целы (verify-runtime-artifact.mjs).
+ *   6. dbSha256 маркера == sha256 текущего файла БД — РАСХОЖДЕНИЕ БЛОКИРУЕТ
+ *      деплой (PART 1.1 §6: раньше был warning, теперь FAIL — runtime
+ *      изменился ПОСЛЕ final sync → нужен повторный sync под deploy-lock);
+ *   7. все Photo-ссылки целы (verify-runtime-artifact.mjs);
+ *   8. lockId маркера == process.env.DEPLOY_LOCK_ID, если тот задан
+ *      (PART 1.1 §5.1: маркер от прошлого build/чужого lock → BLOCK).
  *
  * Escape hatch: RUNTIME_BOOTSTRAP_EMPTY=1 — явный флаг чистой установки
  * (согласован с src/lib/runtime.ts): guard предупреждает и пропускает данные.
@@ -78,16 +83,46 @@ if (missing.length) {
   fail(`в маркере нет полей: ${missing.join(", ")}`, "Маркер старого формата — перезапустите scripts/sync-from-live.sh");
 }
 
-/* 3. Свежесть */
+/* ═══ PART 1.1 §5.1: ПРИВЯЗКА МАРКЕРА К ТЕКУЩЕМУ DEPLOY LOCK ═══
+   production-пайплайн задаёт DEPLOY_LOCK_ID (build.sh экспортирует id живого
+   lock'а). Маркер БЕЗ lockId или С ДРУГИМ lockId = синк от прошлого build —
+   деплой БЛОКИРУЕТСЯ независимо от возраста маркера. */
+const wantLockId = process.env.DEPLOY_LOCK_ID || "";
+if (wantLockId) {
+  if (!marker.lockId) {
+    fail(
+      "в маркере нет lockId — синк выполнен БЕЗ deploy-lock (старый формат)",
+      "Повторите final sync под deploy-lock (сборка делает это автоматически)."
+    );
+  }
+  if (marker.lockId !== wantLockId) {
+    fail(
+      `lockId маркера (${String(marker.lockId).slice(0, 12)}…) ≠ текущему deploy-lock (${wantLockId.slice(0, 12)}…)`,
+      "Маркер от прошлого build или другого lock. Повторите final sync под ТЕКУЩИМ deploy-lock."
+    );
+  }
+}
+
+/* 3. Свежесть. При заданном DEPLOY_LOCK_ID — только ДИАГНОСТИКА (ТЗ §5.2:
+   истинная защита — привязка к текущему lock'у); в ручном режиме (без lock
+   инфраструктуры) остаётся fail-closed. */
 const syncedAt = Date.parse(marker.syncedAt);
 if (!Number.isFinite(syncedAt)) fail(`некорректная дата syncedAt: ${marker.syncedAt}`);
 const ageH = (Date.now() - syncedAt) / 3600000;
 if (ageH > MAX_HOURS) {
-  fail(
-    `sync-маркер устарел: ${marker.syncedAt} (${ageH.toFixed(1)} ч назад > ${MAX_HOURS} ч)`,
-    "Фото, загруженные на живой сайт после синка, НЕ в локальной зоне. Перед деплоем:\n" +
-      "    bash scripts/sync-from-live.sh " + (marker.source || "https://<site>.space-z.ai") + " --yes"
-  );
+  const msg = `sync-маркер устарел: ${marker.syncedAt} (${ageH.toFixed(1)} ч назад > ${MAX_HOURS} ч)`;
+  if (wantLockId) {
+    console.warn(
+      `⚠ DEPLOY GUARD (диагностика): ${msg}\n` +
+        "  Свежесть гарантирует привязка lockId к ТЕКУЩЕМУ deploy-lock (PART 1.1 §5.2); возраст — справочно."
+    );
+  } else {
+    fail(
+      msg,
+      "Фото, загруженные на живой сайт после синка, НЕ в локальной зоне. Перед деплоем:\n" +
+        "    bash scripts/sync-from-live.sh " + (marker.source || "https://<site>.space-z.ai") + " --yes"
+    );
+  }
 }
 
 /* 4. photoCount */
@@ -121,7 +156,9 @@ function countFiles(dir) {
   try {
     return fs.readdirSync(dir).filter((n) => {
       try {
-        return fs.statSync(path.join(dir, n)).isFile();
+        /* PART 1.1 §9: lstat — symlink НЕ считается обычным media-файлом */
+        const st = fs.lstatSync(path.join(dir, n));
+        return st.isFile() && !st.isSymbolicLink();
       } catch {
         return false;
       }
@@ -139,13 +176,15 @@ if (Number(marker.optimizedCount) !== opt || Number(marker.thumbCount) !== thm) 
   );
 }
 
-/* 6. dbSha256 */
+/* 6. dbSha256 — РАСХОЖДЕНИЕ БЛОКИРУЕТ ДЕПЛОЙ (PART 1.1 §6).
+   Прежний console.warn допускал деплой зоны, изменившейся ПОСЛЕ final sync —
+   ровно та дыра, через которую артефакт «немного отставал» от live. */
 const dbSha = crypto.createHash("sha256").update(fs.readFileSync(DB_FILE)).digest("hex");
 if (marker.dbSha256 && marker.dbSha256 !== dbSha) {
-  console.warn(
-    `⚠ DEPLOY GUARD: sha256 БД отличается от синхронизированного (sync=${marker.dbSha256.slice(0, 10)}…, сейчас=${dbSha.slice(0, 10)}…).\n` +
-      "  Это допустимо только для локальных тестовых правок (dev-сервер открыл БД).\n" +
-      "  Если живой сайт НЕ получит эти правки — данные локальных правок будут потеряны при деплое."
+  fail(
+    "runtime DB изменилась после final sync",
+    "Повторите final sync под deploy-lock (сборка делает это автоматически).\n" +
+      `  sync=${String(marker.dbSha256).slice(0, 10)}…, сейчас=${dbSha.slice(0, 10)}…`
   );
 }
 
@@ -161,5 +200,6 @@ if (verify.exitCode !== 0) {
 }
 
 console.log(
-  `✅ DEPLOY GUARD: PASS — sync ${marker.syncedAt} (${ageH.toFixed(1)} ч назад), photos=${livePhotos}, opt=${opt}, thm=${thm}, источник ${marker.source}`
+  `✅ DEPLOY GUARD: PASS — sync ${marker.syncedAt} (${ageH.toFixed(1)} ч назад), photos=${livePhotos}, opt=${opt}, thm=${thm}, источник ${marker.source}` +
+    (wantLockId ? `, lock ${String(marker.lockId).slice(0, 12)}… (текущий ✓)` : "")
 );
