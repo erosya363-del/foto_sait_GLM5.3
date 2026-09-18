@@ -711,14 +711,9 @@ html.glass-fallback.light .pill-bubble {
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   CRITICAL STABILITY 6.5 — PAGE ZOOM/DOUBLE-TAP: touch-action:manipulation на
-   интерактивных элементах убирает double-tap-zoom/задержку на кнопках;
-   pinch страницы не ломается (touch-action на body остаётся pan-x pan-y),
-   zoom PhotoViewer не тронут (photoswipe ставит свои inline touch-action). */
-button, [role="button"], a[href], select, summary, label {
-  touch-action: manipulation;
-}
+/* CRITICAL STABILITY 6.5: touch-action:manipulation + input ≥16px УЖЕ есть
+   глобально в конце файла (кластер v2.7, правила ниже по файлу) — здесь
+   дубликат не нужен; zoom PhotoViewer не тронут. */
 
 header.glass { transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, backdrop-filter 0.3s ease; }
 .header-collapsed header.glass { background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -726,6 +721,11 @@ header.glass { transition: background 0.3s ease, border-color 0.3s ease, box-sha
 .header-collapsed .header-fade { opacity: 0; transform: translateY(-6px) scale(0.98); pointer-events: none; }
 
 [data-slot="alert-dialog-content"], [data-slot="dialog-content"] { top: calc((100dvh - var(--kb-h, 0px)) / 2); }
+
+/* CRITICAL STABILITY 7.4: фон заблокирован, пока открыт upload sheet
+   (body дополнительно фиксируется позиционно из компонента — iOS Safari
+   игнорирует один overflow:hidden) */
+html.sheet-scroll-locked, html.sheet-scroll-locked body { overflow: hidden; overscroll-behavior: none; }
 
 .search-pop {
   position: fixed; top: auto; left: 12px; right: 12px;
@@ -827,18 +827,21 @@ html.kb-open .search-chip { opacity: 0; pointer-events: none; }
   box-shadow: 0 0 14px rgba(var(--brand-rgb), 0.8);
 }
 
+/* CRITICAL STABILITY 7.6: поля формы — touch-высота 48–52px и шрифт ≥16px
+   на мобильных (iOS не зумит страницу при фокусе в поле <16px). На десктопе 14px. */
 .field {
   width: 100%; background: var(--secondary);
   border: 1px solid var(--border); border-radius: 14px;
-  padding: 11px 14px; font-size: 14px; color: var(--foreground);
+  padding: 12px 14px; font-size: max(16px, 1em); color: var(--foreground);
   outline: none;
   -webkit-backdrop-filter: blur(10px) saturate(1.4);
   backdrop-filter: blur(10px) saturate(1.4);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
 }
+@media (min-width: 640px) { .field { font-size: 14px; } }
 .field::placeholder { color: var(--muted-foreground); }
 .field:focus { border-color: var(--border-strong); box-shadow: inset 0 1px 0 var(--glass-spec); background: transparent; }
-@media (max-width: 639px) { .field { padding: 9px 12px; border-radius: 12px; } }
+@media (max-width: 639px) { .field { border-radius: 12px; } } /* padding НЕ ужимаем: touch-высота 48–52px (ТЗ 7.6) */
 
 .btn-brand {
   background: linear-gradient(135deg, #2dd4bf, #14b8a6);

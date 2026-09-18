@@ -122,6 +122,51 @@ export function UploadSheet() {
     return () => window.removeEventListener("beforeunload", guard);
   }, [busy]);
 
+  /* CRITICAL STABILITY 7.4 — SCROLL LOCK (надёжная modal-стратегия):
+     основной фон НЕ скроллится под sheet. Обычного overflow:hidden на body
+     в iOS Safari недостаточно (страница скроллится инерцией/резиновым тягой),
+     поэтому позиционная фиксация: body фиксируется на -scrollY, после
+     закрытия позиция возвращается ТОЧНО. Очистка — при любом снятии open. */
+  useEffect(() => {
+    if (!open) return;
+    const y = window.scrollY;
+    const html = document.documentElement;
+    const body = document.body;
+    html.classList.add("sheet-scroll-locked");
+    body.style.position = "fixed";
+    body.style.top = `-${y}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    return () => {
+      html.classList.remove("sheet-scroll-locked");
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      window.scrollTo({ top: y, behavior: "instant" as ScrollBehavior });
+    };
+  }, [open]);
+
+  /* CRITICAL STABILITY 7.3: фокус в поле → поле подводится scrollIntoView
+   ВНУТРИ sheet-body (клавиатура НЕ поднимает весь sheet — она сжимает
+   доступную высоту, подъём делает только anchor bottom + height-clamp).
+   Задержка 320 мс: iOS сначала поднимает клавиатуру, потом скроллит. */
+  const onBodyFocusCapture = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
+    const t = e.target as HTMLElement;
+    if (!(t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+    const scroller = bodyRef.current;
+    if (!scroller) return;
+    window.setTimeout(() => {
+      try {
+        t.scrollIntoView({ block: "center", behavior: "smooth" });
+      } catch {
+        t.scrollIntoView();
+      }
+    }, 320);
+  }, []);
+
   const { data: d } = useQuery<Dictionaries>({
     queryKey: ["dictionaries"],
     queryFn: async () => {
@@ -448,9 +493,9 @@ export function UploadSheet() {
               value={modelId}
               onChange={(e) => setModelId(e.target.value)}
               disabled={!categoryId}
-              className="field cursor-pointer disabled:opacity-45"
+              className="field cursor-pointer disabled:opacity-60"
             >
-              <option value="">Выберите…</option>
+              <option value="">{categoryId ? "Выберите…" : "Сначала выберите категорию"}</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -458,17 +503,21 @@ export function UploadSheet() {
               ))}
             </select>
           </label>
-          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            Выбирайте только из готовых справочников — пункты создаёт администратор.
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Доступны значения из справочника. Новые пункты добавляет администратор.
           </p>
-          <button
-            type="button"
-            disabled={!categoryId || !modelId}
-            onClick={() => setStep(2)}
-            className="btn-brand mt-1 flex items-center justify-center gap-2 py-3 text-[14px] disabled:opacity-50"
-          >
-            Далее
-          </button>
+          {/* CRITICAL STABILITY 7.3: CTA в sticky footer — доступен при клавиатуре,
+              как на шаге 3 (единый паттерн sticky-подвала во всех шагах) */}
+          <div className="sticky bottom-0 -mx-5 mt-1 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
+            <button
+              type="button"
+              disabled={!categoryId || !modelId}
+              onClick={() => setStep(2)}
+              className="btn-brand flex w-full items-center justify-center gap-2 py-3 text-[14px] disabled:opacity-50"
+            >
+              Далее
+            </button>
+          </div>
         </div>
       )}
 
@@ -536,7 +585,13 @@ export function UploadSheet() {
               maxLength={200}
             />
           </label>
-          <div className="mt-1 flex gap-2">
+        </div>
+      )}
+
+      {/* sticky-подвал шага 2 (CRITICAL STABILITY 7.3) */}
+      {step === 2 && !done && (
+        <div className="sticky bottom-0 -mx-5 border-t border-border bg-[var(--sheet-footer-bg)] px-5 pb-[max(12px,var(--sab))] pt-3 backdrop-blur-[var(--glass-blur)]">
+          <div className="flex gap-2">
             <button type="button" onClick={() => setStep(1)} className="btn-ghost px-4 py-3 text-[13px]">
               Назад
             </button>
@@ -844,10 +899,14 @@ export function UploadSheet() {
               </motion.div>
             </motion.div>
           ) : (
-            /* ── MOBILE: bottom sheet, spring снизу (§4.4) ──
+            /* ── MOBILE: bottom sheet, spring снизу —
                Якорь низа = var(--kb-overlay) — фактическое перекрытие
-               клавиатурой (iOS>0, Android≈0): подъём плавный (220 мс),
-               высота подстраивается, скроллится только контент (§4.5) */
+               клавиатурой (iOS>0, Android≈0): подъём плавный (220 мс).
+               CRITICAL STABILITY 7.1/7.2: ЯВНАЯ высота 86dvh (не только
+               maxHeight!): sheet больше НЕ сжимается по контенту до ~40%
+               экрана; при клавиатуре height-clamp ограничивает доступной
+               областью (sheet НЕ превращается в маленькую карточку:
+               при kb 40% это ~55dvh, скроллится только внутренний контент). */
             <motion.div
               key="sheet"
               role="dialog"
@@ -858,7 +917,7 @@ export function UploadSheet() {
               className="fixed inset-x-0 z-[var(--z-sheet)] flex flex-col rounded-t-[28px] border-t border-x border-border bg-[var(--sheet-bg)] shadow-[0_-18px_50px_-18px_rgba(0,0,0,0.55)] backdrop-blur-[var(--glass-blur)] backdrop-saturate-[var(--glass-saturation)]"
               style={{
                 bottom: "var(--kb-overlay, 0px)",
-                maxHeight: "calc(100dvh - max(18px, var(--sat)) - var(--kb-overlay, 0px) - 10px)",
+                height: "min(86dvh, calc(100dvh - max(18px, var(--sat)) - var(--kb-overlay, 0px) - 10px))",
                 transition: "bottom 220ms cubic-bezier(0.22, 0.61, 0.36, 1)",
               }}
               initial={{ y: "100%" }}
@@ -889,6 +948,7 @@ export function UploadSheet() {
               <div
                 ref={bodyRef}
                 data-upload-sheet-body=""
+                onFocusCapture={onBodyFocusCapture}
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-3 pt-3"
               >
                 {form}
@@ -901,7 +961,9 @@ export function UploadSheet() {
   );
 }
 
-/** Шапка sheet: заголовок шага + точки прогресса + крестик (§4.7 guard) */
+/** Шапка sheet: заголовок шага + точки прогресса + крестик (§4.7 guard).
+ *  CRITICAL STABILITY 7.5: читаемость степпера — active чёткий (широкая
+ *  капсула + яркий текст), completed мягкий, future вторичный. */
 function SheetHeader({
   step,
   title,
@@ -919,28 +981,32 @@ function SheetHeader({
     <div className="flex shrink-0 items-center gap-3 px-5 pb-1 pt-2">
       <div className="min-w-0 flex-1">
         <h2 className="truncate font-display text-[15px] font-bold leading-tight">Загрузка фото</h2>
-        <div className="mt-1 flex items-center gap-1.5">
+        <div className="mt-1 flex items-center gap-2">
           {!isDone &&
-            STEPS.map((label, i) => (
-              <span key={label} className="flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-200",
-                    i + 1 === step ? "w-4 bg-[var(--brand)]" : i + 1 < step ? "w-1.5 bg-[var(--brand)]/60" : "w-1.5 bg-[var(--border-strong)]"
-                  )}
-                />
-                <span
-                  className={cn(
-                    "text-[10.5px] font-semibold uppercase tracking-wide",
-                    i + 1 === step ? "text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {label}
+            STEPS.map((label, i) => {
+              const isActive = i + 1 === step;
+              const isDone2 = i + 1 < step;
+              return (
+                <span key={label} className="flex items-center gap-1" aria-current={isActive ? "step" : undefined}>
+                  <span
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-200",
+                      isActive ? "w-5 bg-[var(--brand)]" : isDone2 ? "w-1.5 bg-[var(--brand)]/45" : "w-1.5 bg-[var(--border-strong)]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-[11px] font-bold uppercase tracking-wide transition-colors",
+                      isActive ? "text-foreground" : isDone2 ? "text-muted-foreground/80" : "text-muted-foreground"
+                    )}
+                  >
+                    {label}
+                  </span>
                 </span>
-              </span>
-            ))}
+              );
+            })}
           {isDone && (
-            <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--brand)]">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--brand)]">
               <CheckCircle2 size={12} strokeWidth={2.4} />
               {title}
             </span>
